@@ -1,0 +1,472 @@
+package main
+
+// Party session: relay connection, clock sync, host broadcast and guest follow logic.
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"math"
+	"net/url"
+	"sync"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+)
+
+// Feed state as sent by the host. At = relay-clock milliseconds of the moment Time was read.
+type FeedState struct {
+	T         string  `json:"t"`
+	None      bool    `json:"none,omitempty"`
+	ContentID string  `json:"contentId,omitempty"`
+	Title     string  `json:"title,omitempty"`
+	Live      bool    `json:"live,omitempty"`
+	Paused    bool    `json:"paused,omitempty"`
+	Time      float64 `json:"time,omitempty"`
+	At        float64 `json:"at,omitempty"`
+}
+
+type Member struct {
+	Role   string   `json:"role"`
+	Name   string   `json:"name"`
+	Drift  *float64 `json:"drift,omitempty"`
+	Status string   `json:"status,omitempty"`
+}
+
+type Status struct {
+	Mode       string    `json:"mode"` // idle | host | guest
+	Code       string    `json:"code,omitempty"`
+	Name       string    `json:"name"`
+	Connected  bool      `json:"connected"`
+	HostOnline bool      `json:"hostOnline"`
+	Members    []Member  `json:"members"`
+	Status     string    `json:"status"`
+	Drift      *float64  `json:"drift,omitempty"`
+	MVOnline   bool      `json:"mvOnline"`
+	Feed       *FeedInfo `json:"feed,omitempty"`
+	Version    string    `json:"version"`
+}
+
+type FeedInfo struct {
+	Title  string  `json:"title"`
+	Time   float64 `json:"time"`
+	Paused bool    `json:"paused"`
+	Live   bool    `json:"live"`
+}
+
+type Party struct {
+	mu     sync.Mutex
+	st     Status
+	cancel context.CancelFunc
+	conn   *websocket.Conn
+
+	// clock: relay time ≈ local time + offset (ms); best sample = lowest round trip
+	offset   float64
+	clockRTT float64
+	samples  []clockSample
+
+	host     *FeedState // guest: latest state from the host
+	hostWhen time.Time
+}
+
+type clockSample struct{ offset, rtt float64 }
+
+func nowMs() float64 { return float64(time.Now().UnixNano()) / 1e6 }
+
+func NewParty(name string) *Party {
+	return &Party{st: Status{Mode: "idle", Name: name, Version: version}}
+}
+
+func (p *Party) Snapshot() Status {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s := p.st
+	s.Members = append([]Member(nil), p.st.Members...)
+	return s
+}
+
+func (p *Party) set(f func(s *Status)) { p.mu.Lock(); f(&p.st); p.mu.Unlock() }
+
+func (p *Party) Start(mode, code, name string) {
+	p.Leave()
+	ctx, cancel := context.WithCancel(context.Background())
+	p.mu.Lock()
+	p.cancel = cancel
+	p.st = Status{Mode: mode, Code: code, Name: name, Status: "Connecting…", Version: version}
+	p.samples, p.host = nil, nil
+	p.mu.Unlock()
+	go p.connLoop(ctx, mode, code, name)
+	if mode == "host" {
+		go p.hostLoop(ctx)
+	} else {
+		go p.guestLoop(ctx)
+	}
+}
+
+func (p *Party) Leave() {
+	p.mu.Lock()
+	if p.cancel != nil {
+		p.cancel()
+		p.cancel = nil
+	}
+	name := p.st.Name
+	p.st = Status{Mode: "idle", Name: name, Version: version}
+	p.mu.Unlock()
+}
+
+// ---------------------------------------------------------------- relay connection
+
+func (p *Party) connLoop(ctx context.Context, mode, code, name string) {
+	backoff := time.Second
+	for ctx.Err() == nil {
+		u := relayURL + "?" + url.Values{"room": {code}, "role": {mode}, "name": {name}}.Encode()
+		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
+		c, _, err := websocket.Dial(dctx, u, nil)
+		dcancel()
+		if err != nil {
+			p.set(func(s *Status) { s.Connected = false; s.Status = "Can't reach the party server, retrying…" })
+			log.Printf("relay dial: %v", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			backoff = min(backoff*2, 15*time.Second)
+			continue
+		}
+		backoff = time.Second
+		c.SetReadLimit(1 << 16)
+		p.mu.Lock()
+		p.conn = c
+		p.st.Connected = true
+		p.mu.Unlock()
+		p.readLoop(ctx, c)
+		p.mu.Lock()
+		p.conn = nil
+		p.st.Connected = false
+		p.mu.Unlock()
+		c.CloseNow()
+	}
+}
+
+func (p *Party) send(v any) {
+	p.mu.Lock()
+	c := p.conn
+	p.mu.Unlock()
+	if c == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_ = wsjson.Write(ctx, c, v)
+}
+
+func (p *Party) readLoop(ctx context.Context, c *websocket.Conn) {
+	pctx, pcancel := context.WithCancel(ctx)
+	defer pcancel()
+	go func() { // clock pings: fast at first, then every 5 s
+		for i := 0; pctx.Err() == nil; i++ {
+			p.send(map[string]any{"t": "ping", "c": nowMs()})
+			d := 5 * time.Second
+			if i < 6 {
+				d = 300 * time.Millisecond
+			}
+			select {
+			case <-pctx.Done():
+				return
+			case <-time.After(d):
+			}
+		}
+	}()
+	for {
+		_, data, err := c.Read(ctx)
+		if err != nil {
+			if websocket.CloseStatus(err) == 4001 {
+				p.set(func(s *Status) { s.Status = "This party was opened as host somewhere else" })
+			}
+			return
+		}
+		var head struct {
+			T string `json:"t"`
+		}
+		if json.Unmarshal(data, &head) != nil {
+			continue
+		}
+		switch head.T {
+		case "pong":
+			var m struct{ C, S float64 }
+			if json.Unmarshal(data, &m) == nil {
+				p.addClockSample(m.C, m.S, nowMs())
+			}
+		case "state":
+			var fs FeedState
+			if json.Unmarshal(data, &fs) == nil {
+				p.mu.Lock()
+				p.host, p.hostWhen = &fs, time.Now()
+				p.mu.Unlock()
+			}
+		case "host":
+			var m struct{ Online bool }
+			if json.Unmarshal(data, &m) == nil {
+				p.set(func(s *Status) { s.HostOnline = m.Online })
+			}
+		case "members":
+			var m struct{ Members []Member }
+			if json.Unmarshal(data, &m) == nil {
+				p.set(func(s *Status) {
+					s.Members = m.Members
+					if s.Mode == "host" {
+						s.HostOnline = true
+					}
+				})
+			}
+		case "error":
+			var m struct{ Message string }
+			if json.Unmarshal(data, &m) == nil {
+				p.set(func(s *Status) { s.Status = m.Message })
+			}
+		}
+	}
+}
+
+func (p *Party) addClockSample(sent, server, recv float64) {
+	rtt := recv - sent
+	if rtt < 0 || rtt > 5000 {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.samples = append(p.samples, clockSample{offset: server - (sent + rtt/2), rtt: rtt})
+	if len(p.samples) > 12 {
+		p.samples = p.samples[len(p.samples)-12:]
+	}
+	best := p.samples[0]
+	for _, s := range p.samples {
+		if s.rtt < best.rtt {
+			best = s
+		}
+	}
+	p.offset, p.clockRTT = best.offset, best.rtt
+}
+
+func (p *Party) relayNow() (float64, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return nowMs() + p.offset, len(p.samples) > 0
+}
+
+// ---------------------------------------------------------------- host
+
+func (p *Party) hostLoop(ctx context.Context) {
+	var lastSent FeedState
+	var lastSentAt time.Time
+	t := time.NewTicker(250 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		ps, err := players()
+		at, clockOK := p.relayNow()
+		if err != nil {
+			p.set(func(s *Status) { s.MVOnline = false; s.Feed = nil; s.Status = err.Error() })
+			continue
+		}
+		feed := mainFeed(ps, "")
+		fs := FeedState{T: "state", None: true}
+		if feed != nil {
+			tm, _ := feed.Time()
+			fs = FeedState{T: "state", ContentID: feed.StreamData.ContentID, Title: feed.StreamData.Title,
+				Live: feed.State != nil && feed.State.Live, Paused: feed.State != nil && feed.State.Paused, Time: tm, At: at}
+		}
+		p.set(func(s *Status) {
+			s.MVOnline = true
+			if feed == nil {
+				s.Feed = nil
+				s.Status = "Open the world feed (International) in MultiViewer"
+			} else {
+				s.Feed = &FeedInfo{Title: fs.Title, Time: fs.Time, Paused: fs.Paused, Live: fs.Live}
+				if s.Connected {
+					s.Status = "Hosting: guests follow your world feed"
+				}
+			}
+		})
+		if !clockOK {
+			continue
+		}
+		// send on any discontinuity (pause/play, seek, new stream) right away, otherwise once a second
+		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title
+		if !changed && !fs.None && !fs.Paused && lastSent.At > 0 {
+			expected := lastSent.Time + (fs.At-lastSent.At)/1000
+			changed = math.Abs(fs.Time-expected) > 0.5
+		}
+		if changed || time.Since(lastSentAt) >= time.Second {
+			p.send(fs)
+			lastSent, lastSentAt = fs, time.Now()
+		}
+	}
+}
+
+// ---------------------------------------------------------------- guest
+
+const (
+	tolerance   = 0.30 // seconds of drift we accept before correcting (replays)
+	liveAhead   = 0.60 // live: pause when this far ahead of the host
+	seekSettle  = 2500 * time.Millisecond
+	createRetry = 8 * time.Second
+)
+
+func (p *Party) guestLoop(ctx context.Context) {
+	var (
+		lead        = 0.20 // seconds added to seek targets to cover the stream's seek/rebuffer time
+		settleUntil time.Time
+		pendingSync bool
+		measureLead bool
+		creatingAt  time.Time
+		resumeAt    time.Time
+		lastReport  time.Time
+	)
+	t := time.NewTicker(250 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		status := ""
+		var drift *float64
+		report := func() {
+			p.set(func(s *Status) { s.Status = status; s.Drift = drift })
+			if time.Since(lastReport) > 2*time.Second {
+				p.send(map[string]any{"t": "report", "drift": drift, "status": status})
+				lastReport = time.Now()
+			}
+		}
+
+		ps, err := players()
+		if err != nil {
+			p.set(func(s *Status) { s.MVOnline = false; s.Feed = nil })
+			status = err.Error()
+			report()
+			continue
+		}
+		p.set(func(s *Status) { s.MVOnline = true })
+
+		p.mu.Lock()
+		host, hostWhen, online, connected := p.host, p.hostWhen, p.st.HostOnline, p.st.Connected
+		p.mu.Unlock()
+		now, clockOK := p.relayNow()
+		switch {
+		case !connected:
+			status = "Connecting to the party…"
+		case !online:
+			status = "Waiting for the host"
+		case host == nil || !clockOK || time.Since(hostWhen) > 10*time.Second:
+			status = "Waiting for the host's stream"
+		case host.None:
+			status = "The host has no world feed open"
+		}
+		if status != "" {
+			feed := mainFeed(ps, "")
+			p.set(func(s *Status) { s.Feed = feedInfo(feed) })
+			report()
+			continue
+		}
+
+		feed := mainFeed(ps, host.ContentID)
+		p.set(func(s *Status) { s.Feed = feedInfo(feed) })
+		if feed == nil {
+			status = "Opening the host's session…"
+			if time.Since(creatingAt) > createRetry {
+				creatingAt = time.Now()
+				title := host.Title
+				if title == "" {
+					title = "INTERNATIONAL"
+				}
+				if _, err := playerCreate(host.ContentID, title); err != nil {
+					status = "Can't open the host's session: " + err.Error()
+				}
+			}
+			report()
+			continue
+		}
+
+		local, ok := feed.Time()
+		if !ok || feed.State == nil {
+			status = "Loading stream…"
+			report()
+			continue
+		}
+		target := host.Time
+		if !host.Paused {
+			target += (now - host.At) / 1000
+		}
+		d := local - target
+		drift = &d
+
+		// mirror pause / play (not while a live hold is pausing us on purpose)
+		if resumeAt.IsZero() && feed.State.Paused != host.Paused {
+			_ = playerPause(feed.ID, host.Paused)
+		}
+
+		switch {
+		case time.Now().Before(settleUntil):
+			status = "Syncing…"
+		case pendingSync:
+			// first steady reading after a seek: let the onboards follow, then learn the seek delay
+			pendingSync = false
+			_ = playerSync(feed.ID)
+			if measureLead && !host.Paused {
+				lead = math.Max(0, math.Min(2, lead-d*0.7))
+			}
+			measureLead = false
+			status = "In sync"
+		case host.Live || feed.State.Live:
+			// live streams can't be seeked: wait out a lead by pausing; a lag can't be fixed from here
+			switch {
+			case !resumeAt.IsZero() && time.Now().Before(resumeAt):
+				status = "Waiting for the host…"
+			case !resumeAt.IsZero():
+				resumeAt = time.Time{}
+				_ = playerPause(feed.ID, false)
+				settleUntil, pendingSync = time.Now().Add(seekSettle), true
+				status = "Syncing…"
+			case d > liveAhead && !host.Paused:
+				_ = playerPause(feed.ID, true)
+				resumeAt = time.Now().Add(time.Duration(d * float64(time.Second)))
+				status = fmt.Sprintf("Ahead of the host by %.1f s, waiting", d)
+			case d < -2:
+				status = fmt.Sprintf("Behind the host by %.1f s (live can't skip ahead)", -d)
+			default:
+				status = "In sync (live)"
+			}
+		case math.Abs(d) > tolerance:
+			seekTo := target
+			if !host.Paused {
+				seekTo += lead
+			}
+			if err := playerSeek(feed.ID, math.Max(0, seekTo)); err != nil {
+				status = "Seek failed: " + err.Error()
+			} else {
+				settleUntil, pendingSync, measureLead = time.Now().Add(seekSettle), true, true
+				status = "Syncing…"
+			}
+		default:
+			status = "In sync"
+		}
+		report()
+	}
+}
+
+func feedInfo(f *Player) *FeedInfo {
+	if f == nil || f.State == nil || f.StreamData == nil {
+		return nil
+	}
+	tm, _ := f.Time()
+	return &FeedInfo{Title: f.StreamData.Title, Time: tm, Paused: f.State.Paused, Live: f.State.Live}
+}
