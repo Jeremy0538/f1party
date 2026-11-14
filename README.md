@@ -1,12 +1,12 @@
 # F1 Party
 
-Watch [MultiViewer](https://multiviewer.app) in sync with friends — Windows, macOS and Linux.
+Watch [MultiViewer](https://multiviewer.app) in sync with friends on Windows, macOS and Linux.
 
 ## Download
 | Your computer | File |
 |---|---|
 | Windows | [F1Party-windows.exe](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-windows.exe) |
-| Mac (M1/M2/M3/M4…) | [F1Party-macos-apple-silicon](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-macos-apple-silicon) |
+| Mac (Apple Silicon, M1 or newer) | [F1Party-macos-apple-silicon](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-macos-apple-silicon) |
 | Mac (Intel) | [F1Party-macos-intel](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-macos-intel) |
 | Linux | [F1Party-linux](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-linux) |
 
@@ -18,9 +18,9 @@ Watch [MultiViewer](https://multiviewer.app) in sync with friends — Windows, m
    host's play/pause/seek. Onboards you open yourself follow along.
 
 First launch warnings (the app isn't signed):
-- **Windows:** "Windows protected your PC" → **More info** → **Run anyway**.
+- **Windows:** "Windows protected your PC", then **More info**, then **Run anyway**.
 - **macOS:** open Terminal and run `chmod +x ~/Downloads/F1Party-macos-*; xattr -d com.apple.quarantine ~/Downloads/F1Party-macos-*`,
-  then right-click the file → **Open**.
+  then right-click the file and choose **Open**.
 - **Linux:** `chmod +x F1Party-linux && ./F1Party-linux`
 
 Keep the F1 Party window open while watching. Live sessions: a guest who is ahead waits for the host;
@@ -28,10 +28,10 @@ one who is behind can't be pulled forward (live streams can't skip ahead).
 
 ## Developer notes
 
-- `app/` — Go program. One file per platform, no install. It opens a local page (http://127.0.0.1:47821)
+- `app/`: Go program. One file per platform, no install. It opens a local page (http://127.0.0.1:47821)
   with **Host a party** / **Join**, and talks to the MultiViewer on the same computer through its local
   API (`http://localhost:10101/api/graphql`).
-- `relay/` — Cloudflare Worker + Durable Object (one per party code) at `wss://jeremyklootwijk.nl/f1party/ws`.
+- `relay/`: Cloudflare Worker + Durable Object (one per party code) at `wss://jeremyklootwijk.nl/f1party/ws`.
   Relays the host's world-feed position and answers clock pings.
 
 ## How sync works
@@ -44,7 +44,7 @@ pulls the onboards along. Live streams can't be seeked: a guest ahead pauses unt
 behind is only reported (UNTESTED with a real live session as of 2026-11-14).
 
 ## Build
-    ./build.sh            # → dist/F1Party-{windows.exe,macos-apple-silicon,macos-intel,linux}
+    ./build.sh            # builds dist/F1Party-{windows.exe,macos-apple-silicon,macos-intel,linux}
 
 ## Test locally
     cd relay && npx wrangler dev --port 8787 --local
