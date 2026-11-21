@@ -5,7 +5,8 @@ Watch [MultiViewer](https://multiviewer.app) in sync with friends on Windows, ma
 ## Download
 | Your computer | File |
 |---|---|
-| Windows | [F1Party-windows.exe](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-windows.exe) |
+| Windows (installer, adds F1 Party to the Start menu) | [F1Party-windows-setup.exe](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-windows-setup.exe) |
+| Windows (single file, no install) | [F1Party-windows.exe](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-windows.exe) |
 | Mac (Apple Silicon and Intel) | [F1Party-macos.zip](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-macos.zip) |
 | Linux | [F1Party-linux](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-linux) |
 
@@ -77,6 +78,10 @@ Needs Go and the Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v
 
 All platforms: GitHub Actions (`.github/workflows/build.yml`). Run it by hand from the Actions tab, or push a
 tag like `v0.2.0` to also publish a release with `F1Party-windows.exe`, `F1Party-macos.zip` and `F1Party-linux`.
+
+Install your own build on this PC (Start menu entry, can be pinned to the taskbar):
+
+    powershell -ExecutionPolicy Bypass -File app\install-windows.ps1     # -Uninstall removes it again
 
 ## Test locally
     cd relay && npx wrangler dev --port 8787 --local

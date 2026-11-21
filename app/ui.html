@@ -61,7 +61,7 @@
 	.hidden { display:none !important; }
 
 	/* ---------- idle ---------- */
-	#start { display:grid; grid-template-rows:auto auto 1fr; gap:18px; height:100%; }
+	#start { display:grid; grid-template-rows:auto auto auto 1fr; gap:16px; height:100%; }
 	.hero h1 { font:700 28px/1.1 var(--num); margin:0 0 4px; letter-spacing:.01em; }
 	.hero p { margin:0; color:var(--dim); }
 	.choices { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-content:start; }
@@ -96,6 +96,19 @@
 	.side section + section { border-top:1px solid var(--line); padding-top:16px; }
 	.mvline { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; font-size:13px; }
 	.foot { margin-top:auto; font-size:12px; color:var(--faint); display:flex; justify-content:space-between; }
+	/* now in MultiViewer */
+	.now { border:1px solid var(--line-2); border-radius:10px; background:var(--panel); padding:14px 16px; display:grid; grid-template-columns:1fr auto; gap:6px 18px; align-items:center; }
+	.now .title { font:700 18px/1.2 var(--num); letter-spacing:.01em; }
+	.now .title.empty { color:var(--faint); font-weight:600; }
+	.now .sub { font-size:12px; color:var(--dim); }
+	.stats { display:flex; gap:18px; grid-row:span 2; }
+	.stat b { display:block; font:700 22px/1 var(--num); font-variant-numeric:tabular-nums; text-align:right; }
+	.stat span { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); text-align:right; margin-top:4px; }
+	.live { color:var(--red-hi); }
+	/* stream deck keys */
+	.keys { display:grid; gap:6px; margin-top:4px; }
+	.key { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center; font-size:12px; color:var(--dim); }
+	.key kbd { font:700 10px/1 var(--num); letter-spacing:.08em; color:var(--text); background:#0d0f13; border:1px solid var(--line-2); border-bottom-width:2px; border-radius:4px; padding:4px 6px; min-width:64px; text-align:center; }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -134,7 +147,14 @@
 						<div class="row"><input id="code" class="code grow" maxlength="8" placeholder="CODE" aria-label="Party code"><button id="join">Join</button></div>
 					</div>
 				</div>
-				<div class="error" id="err"></div>
+				<div style="display:flex; flex-direction:column; justify-content:flex-end; min-height:0">
+					<div class="error" id="err"></div>
+					<div class="kicker" style="margin-top:6px">Now in MultiViewer</div>
+					<div class="now">
+						<div><div class="title empty" id="nowtitle">No session open</div><div class="sub" id="nowsub">Open MultiViewer and pick a session.</div></div>
+						<div class="stats"><div class="stat"><b id="nowfeed">–</b><span>World feed</span></div><div class="stat"><b id="nowplayers">0</b><span>Players</span></div></div>
+					</div>
+				</div>
 			</div>
 
 			<div id="party" class="hidden">
@@ -176,15 +196,23 @@
 				<div class="error" id="mverr"></div>
 			</section>
 			<section>
+				<div class="kicker">Stream Deck</div>
+				<div class="mvline" style="margin-bottom:8px"><span id="sdstate">…</span><a id="sdget" class="hidden">Get the plugin</a></div>
+				<div class="keys">
+					<div class="key"><kbd>SYNC ×1</kbd><span>Sync to the host (or your onboards)</span></div>
+					<div class="key"><kbd>SYNC HOLD</kbd><span>Host a party and invite on Discord</span></div>
+				</div>
+			</section>
+			<section>
 				<div class="kicker">Discord invites</div>
-				<div id="dcset" class="hidden"><div class="mvline" style="margin:0"><span class="help" style="margin:0">Webhook set. Hold the Stream Deck Sync key to host and invite.</span><button class="sm" id="dcremove">Remove</button></div></div>
+				<div id="dcset" class="hidden"><div class="mvline" style="margin:0"><span class="help" style="margin:0">Webhook set. Invites go to your channel.</span><button class="sm" id="dcremove">Remove</button></div></div>
 				<div id="dcnew" class="hidden">
 					<div class="row"><input id="dchook" class="grow" placeholder="Webhook URL" autocomplete="off" spellcheck="false"><button id="dcsave">Save</button></div>
 					<div class="help">Server settings → Integrations → Webhooks → New webhook → Copy URL. Stays on this computer.</div>
 				</div>
 				<div class="error" id="dcerr"></div>
 			</section>
-			<div class="foot"><span id="ver"></span><a id="pluginlink">Stream Deck plugin</a></div>
+			<div class="foot"><span id="ver"></span><a id="pluginlink">About the plugin</a></div>
 		</aside>
 	</div>
 </div>
@@ -275,6 +303,18 @@ async function refreshMV() {
 		else hint.append("Plugin ready · " + pl.version);
 	}
 	$("setupopen").disabled = sd ? !pl.running : (!m.setupsReady || !sel.value);
+
+	$("sdstate").textContent = pl.running ? "F1 Race Control " + pl.version : pl.installed ? "Plugin installed, not answering" : "Plugin not installed";
+	$("sdget").classList.toggle("hidden", !!pl.running);
+	$("sdget").textContent = pl.installed ? "Update" : "Get the plugin";
+	$("sdget").onclick = (e) => { e.preventDefault(); post("/api/openurl", { url: pl.download }); };
+
+	const now = m.now || {}, f = now.feed;
+	$("nowtitle").textContent = now.session || (m.running ? "No session open" : "MultiViewer isn't running");
+	$("nowtitle").classList.toggle("empty", !now.session);
+	$("nowsub").textContent = !m.running ? "Open it from the panel on the right." : f ? (f.title === "F1 LIVE" ? "F1 Live" : "International") + (f.paused ? " · paused" : " · playing") : "No world feed open yet.";
+	const nf = $("nowfeed"); nf.textContent = f ? (f.live ? "LIVE" : fmtTime(f.time)) : "–"; nf.classList.toggle("live", !!(f && f.live));
+	$("nowplayers").textContent = now.players ?? 0;
 }
 
 async function refresh() {
@@ -324,7 +364,7 @@ async function refresh() {
 }
 refresh(); refreshMV(); refreshDiscord();
 setInterval(refresh, 500);
-setInterval(refreshMV, 3000);
+setInterval(refreshMV, 2000);
 </script>
 </body>
 </html>

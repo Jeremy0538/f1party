@@ -20,6 +20,7 @@ jobs:
         include:
           - os: windows-latest
             platform: windows/amd64
+            flags: -nsis
             out: F1Party-windows.exe
           - os: macos-latest
             platform: darwin/universal
@@ -45,19 +46,20 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
       - name: Build
-        run: wails build -clean -trimpath -platform ${{ matrix.platform }} ${{ matrix.tags && format('-tags {0}', matrix.tags) || '' }}
+        run: wails build -clean -trimpath -platform ${{ matrix.platform }} ${{ matrix.flags }} ${{ matrix.tags && format('-tags {0}', matrix.tags) || '' }}
       - name: Package
         run: |
           mkdir -p ../dist
           case "${{ runner.os }}" in
-            Windows) cp build/bin/F1Party.exe "../dist/${{ matrix.out }}" ;;
+            Windows) cp build/bin/F1Party.exe "../dist/${{ matrix.out }}"
+                     cp build/bin/*installer*.exe ../dist/F1Party-windows-setup.exe ;;
             macOS)   ditto -c -k --keepParent "build/bin/F1 Party.app" "../dist/${{ matrix.out }}" ;;
             Linux)   cp build/bin/F1Party "../dist/${{ matrix.out }}" ;;
           esac
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.out }}
-          path: dist/${{ matrix.out }}
+          path: dist/*
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
