@@ -18,6 +18,7 @@
 	select { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:#0c0e12; color:var(--text); font:inherit; }
 	.mvline { display:flex; align-items:center; gap:10px; justify-content:space-between; }
 	.mvline button { flex:none; }
+	a { color:#ff6b6b; }
 	input.code { text-transform:uppercase; letter-spacing:4px; font-weight:600; }
 	button { padding:10px 14px; border-radius:8px; border:0; font:inherit; font-weight:600; cursor:pointer; background:#2a2f3a; color:var(--text); }
 	button.primary { background:var(--red); color:#fff; }
@@ -84,6 +85,7 @@
 			<label for="setup" style="margin-top:14px">Your MultiViewer setup</label>
 			<select id="setup"></select>
 			<div class="meta" id="setuphint"></div>
+			<div class="meta" id="pluginhint"></div>
 			<div class="row"><button id="setupopen">Open setup now</button></div>
 		</div>
 		<div class="error" id="mverr"></div>
@@ -124,6 +126,7 @@ $("setup").onchange = async () => { await post("/api/setup", { name: $("setup").
 $("setupopen").onclick = mvAct($("setupopen"), "/api/setup/open", () => ({ name: $("setup").value }));
 
 let mode = "idle";
+const SD = "@streamdeck";
 async function refreshMV() {
 	let m; try { m = await (await fetch("/api/mv")).json(); } catch { return; }
 	$("mvdot").className = "dot " + (m.running ? "ok" : "bad");
@@ -132,19 +135,31 @@ async function refreshMV() {
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
 	$("mvhint").textContent = !m.installed ? "Get it at multiviewer.app/download and sign in with F1 TV."
 		: m.running && !m.setupsReady && (m.setups || []).length ? "To open your setups, F1 Party needs to start MultiViewer itself." : "";
-	const sel = $("setup"), names = (m.setups || []).map(s => s.name);
-	$("setupbox").classList.toggle("hidden", !names.length);
-	const want = ["", ...names].join("|");
+	const sel = $("setup"), names = (m.setups || []).map(s => s.name), pl = m.plugin || {};
+	const want = ["", SD, ...names].join("|");
 	if (sel.dataset.list !== want) {
 		sel.innerHTML = "";
 		sel.append(new Option("None: only the world feed", ""));
-		for (const s of m.setups) sel.append(new Option(`${s.name} (${s.players} players)`, s.name));
+		sel.append(new Option("Stream Deck: F1 Race Control (Race / Quali)", SD));
+		for (const s of m.setups || []) sel.append(new Option(`${s.name} (${s.players} players)`, s.name));
 		sel.dataset.list = want;
 	}
-	if (document.activeElement !== sel) sel.value = names.includes(m.setup) ? m.setup : "";
-	$("setuphint").textContent = mode === "host" ? "Opens for the session you have open in MultiViewer."
+	if (document.activeElement !== sel) sel.value = [SD, ...names].includes(m.setup) ? m.setup : "";
+	const sd = sel.value === SD;
+	$("setuphint").textContent = sd
+		? "Your Stream Deck plugin opens everything: its own desktop, MultiViewer and Ultimate F1 Viewer in place, the Race or Quali setup and layout."
+		: mode === "host" ? "Opens for the session you have open in MultiViewer."
 		: "Opens by itself when you join a party, for the host's session.";
-	$("setupopen").disabled = !m.setupsReady || !sel.value;
+	const hint = $("pluginhint"); hint.innerHTML = "";
+	if (sd) {
+		const link = (text, url) => { const a = document.createElement("a"); a.textContent = text; a.href = "#";
+			a.onclick = (e) => { e.preventDefault(); post("/api/openurl", { url }); }; return a; };
+		if (!pl.installed) hint.append("The F1 Race Control plugin isn't installed. ", link("Download it", pl.download),
+			" (open the file to add it to Stream Deck) or ", link("read more", pl.page), ".");
+		else if (!pl.running) hint.append("The plugin is installed but doesn't answer: start Stream Deck, or ", link("update the plugin", pl.download), ".");
+		else hint.append("Plugin ready (version " + pl.version + ").");
+	}
+	$("setupopen").disabled = sd ? !pl.running : (!m.setupsReady || !sel.value);
 }
 refreshMV();
 setInterval(refreshMV, 3000);

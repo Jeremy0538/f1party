@@ -27,6 +27,9 @@ type FeedState struct {
 	Paused    bool    `json:"paused,omitempty"`
 	Time      float64 `json:"time,omitempty"`
 	At        float64 `json:"at,omitempty"`
+	// Session type from the host's timing ("Race", "Qualifying", …): tells a guest's Stream Deck plugin
+	// which layout to open.
+	SessionType string `json:"sessionType,omitempty"`
 }
 
 type Member struct {
@@ -293,6 +296,8 @@ func (p *Party) relayNow() (float64, bool) {
 func (p *Party) hostLoop(ctx context.Context) {
 	var lastSent FeedState
 	var lastSentAt time.Time
+	var sessionType string
+	var typeAt time.Time
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
 	for {
@@ -310,9 +315,13 @@ func (p *Party) hostLoop(ctx context.Context) {
 		feed := mainFeed(ps, "")
 		fs := FeedState{T: "state", None: true}
 		if feed != nil {
+			if time.Since(typeAt) > 5*time.Second || (sessionType == "" && time.Since(typeAt) > time.Second) {
+				sessionType, typeAt = mvSessionType(), time.Now()
+			}
 			tm, _ := feed.Time()
 			fs = FeedState{T: "state", ContentID: feed.StreamData.ContentID, Title: feed.StreamData.Title,
-				Live: feed.State != nil && feed.State.Live, Paused: feed.State != nil && feed.State.Paused, Time: tm, At: at}
+				Live: feed.State != nil && feed.State.Live, Paused: feed.State != nil && feed.State.Paused, Time: tm, At: at,
+				SessionType: sessionType}
 		}
 		p.set(func(s *Status) {
 			s.MVOnline = true
@@ -353,14 +362,16 @@ const (
 
 func (p *Party) guestLoop(ctx context.Context) {
 	var (
-		lead        = 0.20 // seconds added to seek targets to cover the stream's seek/rebuffer time
-		settleUntil time.Time
-		pendingSync bool
-		measureLead bool
-		creatingAt  time.Time
-		resumeAt    time.Time
-		lastReport  time.Time
-		setupFor    string // content id the chosen setup was opened (or tried) for
+		lead         = 0.20 // seconds added to seek targets to cover the stream's seek/rebuffer time
+		settleUntil  time.Time
+		pendingSync  bool
+		measureLead  bool
+		creatingAt   time.Time
+		resumeAt     time.Time
+		lastReport   time.Time
+		setupFor     string    // content id the chosen setup was opened (or tried) for
+		pluginUntil  time.Time // the Stream Deck plugin is opening the host's session until then
+		mvStartTried bool      // MultiViewer was closed and has been started (once per party)
 	)
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
@@ -384,6 +395,32 @@ func (p *Party) guestLoop(ctx context.Context) {
 		if err != nil {
 			p.set(func(s *Status) { s.MVOnline = false; s.Feed = nil })
 			status = err.Error()
+			p.mu.Lock()
+			host, setup := p.host, p.setup
+			p.mu.Unlock()
+			// MultiViewer is closed: once the host's session is known, the Stream Deck plugin (which starts
+			// MultiViewer itself) or F1 Party starts it.
+			if host != nil && !host.None && host.ContentID != "" && setupFor != host.ContentID && !mvStartTried {
+				mvStartTried = true
+				if setup == setupStreamDeck {
+					setupFor = host.ContentID
+					if err := pluginOpen(sessionKind(host.SessionType), host.ContentID); err != nil {
+						log.Printf("stream deck: %v", err)
+						status = err.Error()
+						_ = mvStart()
+					} else {
+						pluginUntil = time.Now().Add(90 * time.Second)
+					}
+				} else if err := mvStart(); err != nil {
+					status = err.Error()
+				}
+			}
+			if mvStartTried && status == errMVOffline.Error() {
+				status = "Starting MultiViewer…"
+				if time.Now().Before(pluginUntil) {
+					status = "Your Stream Deck is starting MultiViewer…"
+				}
+			}
 			report()
 			continue
 		}
@@ -414,7 +451,33 @@ func (p *Party) guestLoop(ctx context.Context) {
 
 		feed := mainFeed(ps, host.ContentID)
 		p.set(func(s *Status) { s.Feed = feedInfo(feed) })
-		if feed == nil && setup != "" && setupFor != host.ContentID && mvDebugReady() {
+		if feed == nil && setup == setupStreamDeck && setupFor != host.ContentID {
+			// the Stream Deck plugin opens everything: its desktop, MultiViewer, setup and the viewer's layout
+			setupFor = host.ContentID
+			kind := sessionKind(host.SessionType)
+			if err := pluginOpen(kind, host.ContentID); err != nil {
+				log.Printf("stream deck: %v", err)
+				status = err.Error() + ", opening the world feed"
+				report()
+			} else {
+				pluginUntil = time.Now().Add(90 * time.Second)
+			}
+		}
+		// While the plugin opens its layout, leave MultiViewer alone (no pause or seek in between): its
+		// players are starting and the viewer waits for the session to run. Then sync once.
+		if !pluginUntil.IsZero() {
+			if time.Now().Before(pluginUntil) && (pluginBusy() || feed == nil) {
+				status = "Your Stream Deck is opening the host's session…"
+				if feed != nil {
+					status = "Your Stream Deck is opening your layout…"
+				}
+				report()
+				continue
+			}
+			pluginUntil = time.Time{}
+			force = true
+		}
+		if feed == nil && setup != "" && setup != setupStreamDeck && setupFor != host.ContentID && mvDebugReady() {
 			// the chosen MultiViewer setup opens the host's session with all its windows (tried once)
 			setupFor = host.ContentID
 			status = "Opening your setup “" + setup + "”…"
@@ -535,12 +598,12 @@ func feedInfo(f *Player) *FeedInfo {
 	return &FeedInfo{Title: f.StreamData.Title, Time: tm, Paused: f.State.Paused, Live: f.State.Live}
 }
 
-// HostContent: the content id the host is watching (guest), or "".
-func (p *Party) HostContent() string {
+// HostSession: the content id and session type the host is watching (guest), or "".
+func (p *Party) HostSession() (contentID, sessionType string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.host == nil {
-		return ""
+		return "", ""
 	}
-	return p.host.ContentID
+	return p.host.ContentID, p.host.SessionType
 }

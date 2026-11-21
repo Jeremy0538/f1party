@@ -24,7 +24,7 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.3.0"
+var version = "0.4.0"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
@@ -51,7 +51,7 @@ func main() {
 		MinWidth:         420,
 		MinHeight:        560,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
-		AssetServer:      &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) })},
+		AssetServer:      &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) })},
 		OnStartup:        func(ctx context.Context) { appCtx = ctx },
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "nl.jeremyklootwijk.f1party",
@@ -69,7 +69,7 @@ func main() {
 }
 
 // newHandler serves the UI and its small JSON API. It is only reachable from the app's own window.
-func newHandler(party *Party, quit func()) http.Handler {
+func newHandler(party *Party, quit func(), openURL func(string)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -113,7 +113,7 @@ func newHandler(party *Party, quit func()) http.Handler {
 	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
 		running := mvRunning()
 		writeJSON(w, map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
-			"setups": mvSetups(), "setup": party.Setup()})
+			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo()})
 	})
 	mux.HandleFunc("POST /api/mv/start", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, mvStart())
@@ -135,11 +135,28 @@ func newHandler(party *Party, quit func()) http.Handler {
 			http.Error(w, "Choose a setup first", 400)
 			return
 		}
-		contentID := ""
+		contentID, sessionType := "", ""
 		if s := party.Snapshot(); s.Mode == "guest" {
-			contentID = party.HostContent()
+			contentID, sessionType = party.HostSession()
+		}
+		if in.Name == setupStreamDeck {
+			if contentID == "" {
+				sessionType = mvSessionType()
+			}
+			replyErr(w, pluginOpen(sessionKind(sessionType), contentID))
+			return
 		}
 		replyErr(w, mvOpenSetup(in.Name, contentID))
+	})
+	mux.HandleFunc("POST /api/openurl", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ URL string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.URL != pluginDownload && in.URL != pluginPage && in.URL != "https://multiviewer.app/download" {
+			http.Error(w, "forbidden", 403)
+			return
+		}
+		openURL(in.URL)
+		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())

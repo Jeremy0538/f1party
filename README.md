@@ -22,6 +22,12 @@ Also in the app:
   join a party, F1 Party opens it for the host's session by itself; **Open setup now** opens it any time. This
   needs MultiViewer started by F1 Party (it adds a debug port, the same one the F1 Race Control Stream Deck
   plugin uses); if it runs already, **Restart for setups** restarts it that way.
+- **Stream Deck: F1 Race Control**: with the [F1 Race Control](https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control)
+  Stream Deck plugin (1.15 or newer) installed, choose this instead of a setup. On joining, the plugin opens the
+  host's session the way its Race / Quali key does: its own desktop, MultiViewer and Ultimate F1 Viewer in place,
+  the setup and the viewer's layout. F1 Party waits until it is done, then syncs. Without the plugin the app
+  shows a download link.
+- When MultiViewer is closed as you join, F1 Party starts it (or lets the plugin do that).
 - **Sync now**: a guest jumps to the host right away and takes the onboards along; the host lines up their own
   onboards with the world feed.
 
@@ -44,6 +50,8 @@ one who is behind can't be pulled forward (live streams can't skip ahead).
   open window to the front.
   Setups: read from MultiViewer's `setups.config.json` and opened through its debug port (9334) with
   `window.f1mv.setupManager.restoreSetup`, like MultiViewer's own "Open setup" dialog (`app/mvapp.go`).
+  Stream Deck plugin: `app/plugin.go` talks to it on `127.0.0.1:9335`; the host sends its session type
+  (Race / Qualifying / Practice) with its feed state so the guest's plugin knows which layout to open.
 - `relay/`: Cloudflare Worker + Durable Object (one per party code) at `wss://jeremyklootwijk.nl/f1party/ws`.
   Relays the host's world-feed position and answers clock pings.
 
