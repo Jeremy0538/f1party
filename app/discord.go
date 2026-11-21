@@ -89,15 +89,17 @@ func mvSessionName() string {
 	}
 }
 
-// joinLink: an https link that opens F1 Party on this party, when the relay serves the join page (it
-// redirects to f1party://join/CODE); "" otherwise.
+// joinLink: an https link that opens F1 Party on this party (the page redirects to f1party://join/CODE), or ""
+// when no join page answers. The relay's own page comes first; the GitHub Pages copy is the fallback.
 func joinLink(code string) string {
-	base := joinBase()
-	if base == "" {
-		return ""
+	if base := joinBase(); base != "" {
+		return base + code
 	}
-	return base + code
+	return ""
 }
+
+// Join pages, best first: the relay's (once deployed), then the static page on GitHub Pages.
+const pagesJoin = "https://stanvandaalen.github.io/f1party/join/?c="
 
 var joinBaseCache struct {
 	sync.Mutex
@@ -113,23 +115,30 @@ func joinBase() string {
 	}
 	joinBaseCache.checked = time.Now()
 	joinBaseCache.base = ""
-	u, err := url.Parse(relayURL)
-	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") {
-		return ""
+	var bases []string
+	if u, err := url.Parse(relayURL); err == nil && (u.Scheme == "wss" || u.Scheme == "ws") {
+		scheme := "https"
+		if u.Scheme == "ws" {
+			scheme = "http"
+		}
+		bases = append(bases, scheme+"://"+u.Host+strings.TrimSuffix(u.Path, "/ws")+"/join/")
 	}
-	scheme := "https"
-	if u.Scheme == "ws" {
-		scheme = "http"
-	}
-	base := scheme + "://" + u.Host + strings.TrimSuffix(u.Path, "/ws") + "/join/"
-	res, err := (&http.Client{Timeout: 4 * time.Second}).Get(base + "TEST")
-	if err != nil {
-		return ""
-	}
-	defer res.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(res.Body, 8192))
-	if res.StatusCode == 200 && strings.Contains(string(b), "f1party://join/") {
-		joinBaseCache.base = base
+	bases = append(bases, pagesJoin)
+	for _, base := range bases {
+		if servesJoinPage(base + "TEST") {
+			joinBaseCache.base = base
+			break
+		}
 	}
 	return joinBaseCache.base
+}
+
+func servesJoinPage(u string) bool {
+	res, err := (&http.Client{Timeout: 4 * time.Second}).Get(u)
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(res.Body, 16384))
+	return res.StatusCode == 200 && strings.Contains(string(b), "f1party://join/")
 }

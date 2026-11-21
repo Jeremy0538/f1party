@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join an F1 Party</title>
+<meta property="og:title" content="Join my F1 Party">
+<meta property="og:description" content="Watch F1 in sync with friends in MultiViewer. Click to join.">
+<meta property="og:image" content="https://stanvandaalen.github.io/f1party/logo.png">
+<meta name="theme-color" content="#e10600">
+<link rel="icon" href="../logo.png">
+<style>
+	:root { color-scheme: dark; }
+	body { margin:0; min-height:100vh; display:grid; place-items:center; background:#0c0d10; color:#eef0f3; font:15px/1.5 "Segoe UI", system-ui, sans-serif; }
+	main { max-width:380px; padding:24px; text-align:center; }
+	img { width:64px; height:64px; }
+	h1 { font-size:22px; margin:14px 0 4px; }
+	.code { font:700 36px/1.2 "Bahnschrift", system-ui, sans-serif; letter-spacing:.18em; margin:10px 0 18px; }
+	a.btn { display:inline-block; background:#e10600; color:#fff; text-decoration:none; font-weight:600; padding:11px 20px; border-radius:7px; }
+	a.btn:hover { background:#f2201a; }
+	p { color:#8a909c; font-size:13px; }
+	p a { color:#ff7a72; }
+</style>
+</head>
+<body>
+<main>
+	<img src="../logo.png" alt="F1 Party">
+	<h1 id="title">Join this F1 Party</h1>
+	<div class="code" id="code"></div>
+	<a class="btn" id="open" href="#">Open in F1 Party</a>
+	<p>Nothing happens? Get F1 Party from <a href="https://github.com/Jeremy0538/f1party/releases/latest">GitHub</a>,
+		install it, then click the button again. Or enter the code in the app.</p>
+</main>
+<script>
+	// The party code comes as ?c=CODE (or #CODE); only letters and digits, 4–8 long.
+	const q = new URLSearchParams(location.search).get("c") || location.hash.slice(1);
+	const code = (q || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+	if (code.length >= 4 && code.length <= 8) {
+		const app = "f1party://join/" + code;
+		document.getElementById("code").textContent = code;
+		document.getElementById("open").href = app;
+		document.title = "Join F1 Party " + code;
+		location.href = app; // opens the app straight away (the browser may ask first)
+	} else {
+		document.getElementById("title").textContent = "That link has no party code";
+		document.getElementById("open").style.display = "none";
+	}
+</script>
+</body>
+</html>
