@@ -4,6 +4,7 @@
 //
 //   GET /f1party/ws?room=CODE&role=host|guest&name=NAME   (WebSocket)
 //   GET /f1party/health
+//   GET /f1party/join/CODE   (a page that opens f1party://join/CODE: the clickable link in Discord invites)
 //
 // Messages (JSON):
 //   any   -> relay  {t:"ping", c}                        relay -> same  {t:"pong", c, s}
@@ -24,6 +25,8 @@ export default {
 		const url = new URL(req.url);
 		const path = url.pathname.replace(/^\/f1party/, "") || "/";
 		if (path === "/health") return new Response("ok");
+		const join = path.match(/^\/join\/([A-Za-z0-9]{4,8})$/);
+		if (join) return joinPage(join[1].toUpperCase());
 		if (path !== "/ws") return new Response("Not found", { status: 404 });
 		if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
 		const room = (url.searchParams.get("room") || "").toUpperCase();
@@ -121,4 +124,23 @@ export class Room extends DurableObject<Env> {
 			.map(({ role, name, drift, status }) => ({ role, name, drift, status }));
 		this.broadcast({ t: "members", members }, undefined, closing);
 	}
+}
+
+// The page behind an invite link: opens the F1 Party app on this party (f1party://join/CODE), with a
+// download link for people who don't have it yet. Discord only makes https links clickable.
+function joinPage(code: string): Response {
+	const app = `f1party://join/${code}`;
+	const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Join F1 Party ${code}</title>
+<meta property="og:title" content="Join my F1 Party: ${code}">
+<meta property="og:description" content="Watch F1 in sync with friends in MultiViewer.">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0c0d10;color:#eef0f3;font:15px/1.5 system-ui,sans-serif}
+main{max-width:380px;padding:24px;text-align:center}h1{font-size:22px;margin:0 0 6px}.code{font:700 34px/1.2 system-ui;letter-spacing:.18em;margin:14px 0}
+a.btn{display:inline-block;background:#e10600;color:#fff;text-decoration:none;font-weight:600;padding:11px 18px;border-radius:7px}
+p{color:#8a909c}a{color:#ff7a72}</style></head><body><main>
+<h1>Join this F1 Party</h1><div class="code">${code}</div>
+<a class="btn" href="${app}">Open in F1 Party</a>
+<p>Nothing happens? Get F1 Party from <a href="https://github.com/Jeremy0538/f1party/releases/latest">GitHub</a>, then click the button again, or enter the code in the app.</p>
+</main><script>location.href=${JSON.stringify(app)};</script></body></html>`;
+	return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }

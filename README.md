@@ -35,6 +35,14 @@ Also in the app:
   host a party and post the Discord invite. F1 Party listens on `127.0.0.1:47821` for this (`/control/status`,
   `/control/sync`, `/control/host`) and refuses web pages. `F1Party --host` does the same from a shortcut.
 - When MultiViewer is closed as you join, F1 Party starts it (or lets the plugin do that).
+- **Start together** (host): pauses everyone on the same frame, counts down from 5 and starts everyone at once.
+- **Invite links**: Discord invites carry a link that opens F1 Party and joins in one click (`f1party://join/CODE`,
+  through the relay's join page). The installer and `app/install-windows.ps1` register the link type.
+- **Discord status**: your Discord profile shows the session you watch and, for guests, whose party; with a
+  "Join party" button when join links work. Needs the F1 Party Discord application id (`discordAppID`).
+- **Keeps running**: on Windows, closing the window keeps the party going in the tray (icon by the clock: Open /
+  Quit). Starting F1 Party again brings the window back.
+- **Updates**: a "Update to x.y" button appears when a newer release is out.
 - **Sync now**: a guest jumps to the host right away and takes the onboards along; the host lines up their own
   onboards with the world feed.
 
@@ -63,13 +71,28 @@ one who is behind can't be pulled forward (live streams can't skip ahead).
   Relays the host's world-feed position and answers clock pings.
 
 ## How sync works
-Host: every 250 ms reads its world feed (INTERNATIONAL, else F1 LIVE): content id, time, paused, live. Sends it
-once a second and immediately on pause/play/seek/new session, stamped in relay-clock time (ping/pong offset,
-lowest round trip of the last 12 samples).
-Guest: opens the host's session if it isn't open, mirrors pause/play, and seeks the world feed when it's more
-than 0.3 s off (seek target + a learned lead for the stream's seek delay), then MultiViewer's own `playerSync`
-pulls the onboards along. Live streams can't be seeked: a guest ahead pauses until the host catches up; a guest
-behind is only reported (UNTESTED with a real live session as of 2026-11-14).
+Everyone shares one clock: each app pings the relay and keeps the offset of the lowest round trip of its last
+12 samples (NTP-style), so a moment stamped by the host means the same moment on every computer.
+
+- **Host:** every 250 ms reads its world feed (INTERNATIONAL, else F1 LIVE): content id, position, paused,
+  live. It sends that once a second and at once on pause/play/seek/new session, stamped with the shared clock.
+  For live streams it also sends the real-world time of the frame on screen (`track`, from MultiViewer's live
+  timing clock).
+- **Guest:** works out where the host is *now* (position + time since the stamp), opens the host's session
+  if needed, mirrors pause/play, and seeks when it is more than 0.3 s off (plus a learned lead for the
+  stream's own seek delay); then MultiViewer's `playerSync` pulls the onboards along.
+- **Replays** are compared on the player position: the same content has the same timeline on every computer.
+- **Live** streams are compared on the real-world time on screen, since player positions differ per computer
+  (each joined the stream at a different moment). A guest off by more than 0.5 s moves by the difference;
+  forward stops at the live edge. Without timing data it falls back to pausing a guest that's ahead.
+  (Live is not yet tested with a real session.)
+- MultiViewer reports a player's position only every few seconds; between reports the apps extrapolate
+  (`interpolatedCurrentTime`), which holds while a stream plays smoothly.
+- **Start together:** the host pauses, everyone seeks to that frame, a 5-second countdown runs (five red
+  lights), and everyone plays at the same shared-clock moment.
+- **Host leaves:** after 20 seconds without a host, the guest with the lowest member id takes over (every app
+  picks the same one) and the others follow it. When the old host comes back it takes over again; the
+  stand-in carries on as a guest.
 
 ## Build
 Needs Go and the Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1`).
@@ -88,5 +111,8 @@ Install your own build on this PC (Start menu entry, can be pinned to the taskba
     F1PARTY_RELAY=ws://localhost:8787/f1party/ws ./app/build/bin/F1Party
 
 ## Deploy relay
+The join page for invite links (`/f1party/join/CODE`) is part of the relay; it needs a redeploy before
+invites show the one-click link (the app checks for it and leaves the link out until then).
+
     cd relay && npx wrangler login && npx wrangler deploy     # route jeremyklootwijk.nl/f1party/*
 

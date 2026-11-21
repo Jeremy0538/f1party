@@ -24,7 +24,7 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.6.2"
+var version = "0.7.0"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
@@ -45,10 +45,13 @@ func envOr(k, def string) string {
 func main() {
 	cfg := loadConfig()
 	party := NewParty(cfg.Name, cfg.Setup)
+	go party.watchUpdates()
+	go party.watchPresence()
 
 	var appCtx context.Context
 	show := func() {
 		if appCtx != nil {
+			wruntime.WindowShow(appCtx)
 			wruntime.WindowUnminimise(appCtx)
 			wruntime.Show(appCtx)
 		}
@@ -83,6 +86,18 @@ func main() {
 		}
 		return false
 	}
+	// f1party://join/CODE (an invite link): join that party under your saved name.
+	joinArg := func(args []string) {
+		for _, a := range args {
+			if code := joinCode(a); code != "" {
+				if s := party.Snapshot(); s.Code == code {
+					return
+				}
+				party.Start("guest", code, cleanName(loadConfig().Name))
+				return
+			}
+		}
+	}
 
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
@@ -95,10 +110,21 @@ func main() {
 			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
 		OnStartup: func(ctx context.Context) {
 			appCtx = ctx
+			startTray(show, func() { wruntime.Quit(appCtx) })
 			if hostArg(os.Args[1:]) {
 				go hostAndInvite()
 			}
+			go joinArg(os.Args[1:])
 		},
+		// With the tray icon up, closing the window hides it and the party keeps running.
+		OnBeforeClose: func(ctx context.Context) bool {
+			if keepRunningOnClose() {
+				wruntime.WindowHide(ctx)
+				return true
+			}
+			return false
+		},
+		OnShutdown: func(context.Context) { stopTray() },
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "nl.jeremyklootwijk.f1party",
 			OnSecondInstanceLaunch: func(d options.SecondInstanceData) { // already running: bring it to the front
@@ -106,6 +132,7 @@ func main() {
 				if hostArg(d.Args) {
 					go hostAndInvite()
 				}
+				go joinArg(d.Args)
 			},
 		},
 		Windows: &windows.Options{Theme: windows.Dark},
@@ -204,7 +231,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/openurl", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ URL string }
 		json.NewDecoder(r.Body).Decode(&in)
-		if in.URL != pluginDownload && in.URL != pluginPage && in.URL != "https://multiviewer.app/download" {
+		if in.URL != pluginDownload && in.URL != pluginPage && in.URL != "https://multiviewer.app/download" && in.URL != ReleasesPage {
 			http.Error(w, "forbidden", 403)
 			return
 		}
@@ -242,6 +269,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		}
 		replyErr(w, copyText(code))
 	})
+	mux.HandleFunc("POST /api/start", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.StartTogether())
+	})
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())
 	})
@@ -263,6 +293,24 @@ func replyErr(w http.ResponseWriter, err error) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+// joinCode: the party code in an f1party://join/CODE link, or "".
+func joinCode(arg string) string {
+	rest, ok := strings.CutPrefix(strings.ToLower(arg), "f1party://join/")
+	if !ok {
+		return ""
+	}
+	code := strings.ToUpper(strings.Trim(rest, "/ "))
+	for _, r := range code {
+		if !((r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return ""
+		}
+	}
+	if len(code) < 4 || len(code) > 8 {
+		return ""
+	}
+	return code
 }
 
 func cleanName(s string) string {
@@ -288,9 +336,10 @@ func newCode() string {
 }
 
 type config struct {
-	Name    string `json:"name"`
-	Setup   string `json:"setup,omitempty"`   // MultiViewer setup opened on joining
-	Webhook string `json:"webhook,omitempty"` // Discord webhook for party invites (this computer only)
+	Name         string `json:"name"`
+	Setup        string `json:"setup,omitempty"`        // MultiViewer setup opened on joining
+	Webhook      string `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
+	DiscordAppID string `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
 }
 
 // updateConfig changes some settings and keeps the others.

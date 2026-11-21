@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -126,4 +127,34 @@ func playerPause(id string, paused bool) error {
 // playerSync: MultiViewer's own "sync other players to this one" (onboards follow the world feed).
 func playerSync(id string) error {
 	return gql(`mutation($id: ID!) { playerSync(id: $id) }`, map[string]any{"id": id}, nil)
+}
+
+// playerSeekBy moves a player relative to where it is (seconds; live streams clamp at the live edge).
+func playerSeekBy(id string, rel float64) error {
+	return gql(`mutation($id: ID!, $r: Float) { playerSeekTo(id: $id, relative: $r) }`, map[string]any{"id": id, "r": rel}, nil)
+}
+
+// trackNow: the real-world time (UTC, ms) of the moment MultiViewer shows, from its live timing clock (the clock
+// it keeps in step with the video). The same instant of a session has the same track time on every computer,
+// whatever each one's stream delay, so it is the reference for live streams.
+func trackNow() (float64, bool) {
+	var out struct {
+		C struct {
+			Paused     bool   `json:"paused"`
+			SystemTime string `json:"systemTime"`
+			TrackTime  string `json:"trackTime"`
+		} `json:"f1LiveTimingClock"`
+	}
+	if gql(`{ f1LiveTimingClock { paused systemTime trackTime } }`, nil, &out) != nil {
+		return 0, false
+	}
+	sys, err1 := strconv.ParseFloat(out.C.SystemTime, 64)
+	track, err2 := strconv.ParseFloat(out.C.TrackTime, 64)
+	if err1 != nil || err2 != nil || track <= 0 {
+		return 0, false
+	}
+	if out.C.Paused {
+		return track, true
+	}
+	return track + (nowMs() - sys), true
 }

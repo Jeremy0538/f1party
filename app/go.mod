@@ -4,6 +4,7 @@ go 1.27.3
 
 require (
 	github.com/coder/websocket v1.8.15
+	github.com/energye/systray v1.0.3
 	github.com/wailsapp/wails/v2 v2.17.1
 )
 

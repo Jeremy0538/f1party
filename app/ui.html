@@ -24,6 +24,15 @@
 	header img { width:26px; height:26px; }
 	header b { font:700 15px/1 var(--num); letter-spacing:.03em; }
 	header .ver { margin-left:auto; font-size:11px; color:var(--faint); }
+	header .update { margin-left:auto; font-size:12px; color:#fff; background:var(--red); padding:3px 9px; border-radius:999px; text-decoration:none; }
+	header .update + .ver { margin-left:10px; }
+	/* Start together countdown */
+	.countdown { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(8,9,11,.88); z-index:5; }
+	.countdown .n { font:700 96px/1 var(--num); color:#fff; }
+	.lights { display:flex; gap:10px; }
+	.lights i { width:22px; height:22px; border-radius:50%; background:#2a0806; border:2px solid #3a0d0a; }
+	.lights i.on { background:var(--red); border-color:var(--red-hi); box-shadow:0 0 14px rgba(225,6,0,.7); }
+	.countdown .t { font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); }
 
 	.body { display:grid; grid-template-columns:1fr 310px; min-height:0; border-top:1px solid var(--line); }
 	main { padding:22px 26px; min-height:0; display:flex; flex-direction:column; }
@@ -89,10 +98,16 @@
 </style>
 </head>
 <body>
+<div class="countdown hidden" id="countdown" aria-live="assertive">
+	<div class="lights"><i></i><i></i><i></i><i></i><i></i></div>
+	<div class="n" id="cdn">5</div>
+	<div class="t">Lights out together</div>
+</div>
 <div class="app">
 	<header>
 		<img src="/logo.png" alt="">
 		<b>F1 PARTY</b>
+		<a class="update hidden" id="update"></a>
 		<span class="ver" id="ver"></span>
 	</header>
 
@@ -121,7 +136,7 @@
 					<div class="text"><b id="status">…</b><span id="feed"></span></div>
 					<span class="gap" id="gap"></span>
 				</div>
-				<div class="row" style="margin-top:12px"><button id="sync">Sync</button><button id="leave">Leave</button></div>
+				<div class="row" style="margin-top:12px"><button class="primary hidden" id="start">Start together</button><button id="sync">Sync</button><button id="leave">Leave</button></div>
 				<div class="hint" id="note"></div>
 				<div class="error" id="syncerr"></div>
 				<ul class="members" id="members"></ul>
@@ -193,6 +208,9 @@ $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").
 $("leave").onclick = async () => { await post("/api/leave"); refresh(); };
 $("copycode").onclick = async () => { try { await post("/api/copycode"); flash($("copycode"), "Copied"); } catch { flash($("copycode"), "Couldn't copy"); } };
 $("invite").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/invite"); flash($("invite"), "Invite sent"); } catch (e) { $("syncerr").textContent = e.message; } };
+$("start").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/start"); } catch (e) { $("syncerr").textContent = e.message; } };
+$("update").onclick = () => openURL(updateURL);
+let updateURL = "";
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 $("pluginlink").onclick = () => openURL("https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control");
 
@@ -262,6 +280,16 @@ async function refresh() {
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
 	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
 	$("ver").textContent = s.version;
+	const up = s.update;
+	$("update").classList.toggle("hidden", !up);
+	if (up) { $("update").textContent = "Update to " + up.version; updateURL = up.url; }
+	const cd = s.countdown || 0;
+	$("countdown").classList.toggle("hidden", !(cd > 0));
+	if (cd > 0) {
+		const n = Math.ceil(cd);
+		$("cdn").textContent = n;
+		document.querySelectorAll(".lights i").forEach((el, i) => el.classList.toggle("on", i < 6 - n));
+	}
 	const inParty = s.mode !== "idle";
 	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
 	$("start").classList.toggle("hidden", inParty);
@@ -272,6 +300,7 @@ async function refresh() {
 	$("bigcode").textContent = s.code;
 	$("note").textContent = s.note || "";
 	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
+	$("start").classList.toggle("hidden", s.mode !== "host");
 	$("status").textContent = s.status || "";
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : "International"} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";

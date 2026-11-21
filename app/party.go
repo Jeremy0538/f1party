@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,11 +32,17 @@ type FeedState struct {
 	// Session type from the host's timing ("Race", "Qualifying", …): tells a guest's Stream Deck plugin
 	// which layout to open.
 	SessionType string `json:"sessionType,omitempty"`
+	// Track: real-world time (UTC ms) of the frame the host shows at At, from MultiViewer's live timing
+	// clock. Live streams are compared on this, since their player positions differ per computer.
+	Track float64 `json:"track,omitempty"`
+	// CountdownAt: relay time (ms) at which everyone starts playing together ("Start together").
+	CountdownAt float64 `json:"countdown,omitempty"`
 }
 
 type Member struct {
 	Role   string   `json:"role"`
 	Name   string   `json:"name"`
+	ID     string   `json:"id,omitempty"` // random id per app, sent as "name#id" (picks a new host)
 	Drift  *float64 `json:"drift,omitempty"`
 	Status string   `json:"status,omitempty"`
 }
@@ -51,6 +59,8 @@ type Status struct {
 	MVOnline   bool      `json:"mvOnline"`
 	Feed       *FeedInfo `json:"feed,omitempty"`
 	Note       string    `json:"note,omitempty"`
+	Countdown  float64   `json:"countdown,omitempty"` // seconds until "Start together" plays
+	Update     *Update   `json:"update,omitempty"`
 	Version    string    `json:"version"`
 }
 
@@ -77,6 +87,11 @@ type Party struct {
 
 	setup     string // MultiViewer setup a guest opens on joining ("" = none)
 	forceSync bool   // guest: correct the drift now, whatever its size
+
+	id          string    // this app's member id
+	countdownAt float64   // host: relay ms at which "Start together" plays
+	hostOffAt   time.Time // guest: since when the host has been offline
+	update      *Update   // a newer release, when there is one
 }
 
 type clockSample struct{ offset, rtt float64 }
@@ -84,7 +99,44 @@ type clockSample struct{ offset, rtt float64 }
 func nowMs() float64 { return float64(time.Now().UnixNano()) / 1e6 }
 
 func NewParty(name, setup string) *Party {
-	return &Party{st: Status{Mode: "idle", Name: name, Version: version}, setup: setup}
+	return &Party{st: Status{Mode: "idle", Name: name, Version: version}, setup: setup, id: newMemberID()}
+}
+
+func newMemberID() string {
+	const hex = "0123456789abcdef"
+	b := make([]byte, 6)
+	for i := range b {
+		b[i] = hex[rand.Intn(16)]
+	}
+	return string(b)
+}
+
+// StartTogether (host): pause on the current frame, count down 5 seconds, then everyone plays at once.
+func (p *Party) StartTogether() error {
+	p.mu.Lock()
+	host := p.st.Mode == "host"
+	p.mu.Unlock()
+	if !host {
+		return errors.New("only the host can start the party")
+	}
+	at, ok := p.relayNow()
+	if !ok {
+		return errors.New("not connected to the party yet")
+	}
+	ps, err := players()
+	if err != nil {
+		return err
+	}
+	feed := mainFeed(ps, "")
+	if feed == nil {
+		return errors.New("open the world feed (International) in MultiViewer first")
+	}
+	_ = playerPause(feed.ID, true)
+	_ = playerSync(feed.ID)
+	p.mu.Lock()
+	p.countdownAt = at + 5000
+	p.mu.Unlock()
+	return nil
 }
 
 // SetNote shows a short message under the party status (e.g. "Invite sent to Discord").
@@ -122,6 +174,7 @@ func (p *Party) Snapshot() Status {
 	defer p.mu.Unlock()
 	s := p.st
 	s.Members = append([]Member(nil), p.st.Members...)
+	s.Update = p.update
 	return s
 }
 
@@ -134,6 +187,7 @@ func (p *Party) Start(mode, code, name string) {
 	p.cancel = cancel
 	p.st = Status{Mode: mode, Code: code, Name: name, Status: "Connecting…", Version: version}
 	p.samples, p.host = nil, nil
+	p.hostOffAt, p.countdownAt = time.Time{}, 0
 	p.mu.Unlock()
 	go p.connLoop(ctx, mode, code, name)
 	if mode == "host" {
@@ -159,7 +213,7 @@ func (p *Party) Leave() {
 func (p *Party) connLoop(ctx context.Context, mode, code, name string) {
 	backoff := time.Second
 	for ctx.Err() == nil {
-		u := relayURL + "?" + url.Values{"room": {code}, "role": {mode}, "name": {name}}.Encode()
+		u := relayURL + "?" + url.Values{"room": {code}, "role": {mode}, "name": {name + "#" + p.id}}.Encode()
 		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
 		c, _, err := websocket.Dial(dctx, u, nil)
 		dcancel()
@@ -180,12 +234,22 @@ func (p *Party) connLoop(ctx context.Context, mode, code, name string) {
 		p.conn = c
 		p.st.Connected = true
 		p.mu.Unlock()
-		p.readLoop(ctx, c)
+		replaced := p.readLoop(ctx, c)
 		p.mu.Lock()
 		p.conn = nil
 		p.st.Connected = false
 		p.mu.Unlock()
 		c.CloseNow()
+		if replaced {
+			// another member took over hosting (the host had left, or came back): don't reconnect as host
+			// (that would push them out again), carry on as a guest
+			s := p.Snapshot()
+			go func() {
+				p.Start("guest", s.Code, s.Name)
+				p.SetNote("Someone else is hosting now; you follow them")
+			}()
+			return
+		}
 	}
 }
 
@@ -201,7 +265,9 @@ func (p *Party) send(v any) {
 	_ = wsjson.Write(ctx, c, v)
 }
 
-func (p *Party) readLoop(ctx context.Context, c *websocket.Conn) {
+// readLoop handles relay messages until the connection ends. It returns true when this host connection
+// was replaced by another host (close code 4001).
+func (p *Party) readLoop(ctx context.Context, c *websocket.Conn) bool {
 	pctx, pcancel := context.WithCancel(ctx)
 	defer pcancel()
 	go func() { // clock pings: fast at first, then every 5 s
@@ -221,10 +287,7 @@ func (p *Party) readLoop(ctx context.Context, c *websocket.Conn) {
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
-			if websocket.CloseStatus(err) == 4001 {
-				p.set(func(s *Status) { s.Status = "This party was opened as host somewhere else" })
-			}
-			return
+			return websocket.CloseStatus(err) == 4001
 		}
 		var head struct {
 			T string `json:"t"`
@@ -248,11 +311,23 @@ func (p *Party) readLoop(ctx context.Context, c *websocket.Conn) {
 		case "host":
 			var m struct{ Online bool }
 			if json.Unmarshal(data, &m) == nil {
-				p.set(func(s *Status) { s.HostOnline = m.Online })
+				p.mu.Lock()
+				p.st.HostOnline = m.Online
+				if m.Online {
+					p.hostOffAt = time.Time{}
+				} else if p.hostOffAt.IsZero() {
+					p.hostOffAt = time.Now()
+				}
+				p.mu.Unlock()
 			}
 		case "members":
 			var m struct{ Members []Member }
 			if json.Unmarshal(data, &m) == nil {
+				for i := range m.Members {
+					if n, id, ok := strings.Cut(m.Members[i].Name, "#"); ok {
+						m.Members[i].Name, m.Members[i].ID = n, id
+					}
+				}
 				p.set(func(s *Status) {
 					s.Members = m.Members
 					if s.Mode == "host" {
@@ -302,6 +377,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 	var lastSentAt time.Time
 	var sessionType string
 	var typeAt time.Time
+	var startedFor float64 // countdown that has been started
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
 	for {
@@ -326,6 +402,30 @@ func (p *Party) hostLoop(ctx context.Context) {
 			fs = FeedState{T: "state", ContentID: feed.StreamData.ContentID, Title: feed.StreamData.Title,
 				Live: feed.State != nil && feed.State.Live, Paused: feed.State != nil && feed.State.Paused, Time: tm, At: at,
 				SessionType: sessionType}
+			if fs.Live {
+				if track, ok := trackNow(); ok {
+					fs.Track = track
+				}
+			}
+			// Start together: hold the frame until the moment, then play (guests do the same at that moment)
+			p.mu.Lock()
+			cd := p.countdownAt
+			p.mu.Unlock()
+			if cd > 0 && clockOK {
+				fs.CountdownAt = cd
+				if at >= cd && startedFor != cd {
+					startedFor = cd
+					_ = playerPause(feed.ID, false)
+					fs.Paused = false
+				}
+				if at > cd+3000 {
+					p.mu.Lock()
+					if p.countdownAt == cd {
+						p.countdownAt = 0
+					}
+					p.mu.Unlock()
+				}
+			}
 		}
 		p.set(func(s *Status) {
 			s.MVOnline = true
@@ -338,12 +438,18 @@ func (p *Party) hostLoop(ctx context.Context) {
 					s.Status = "Hosting: guests follow your world feed"
 				}
 			}
+			s.Countdown = 0
+			if fs.CountdownAt > at {
+				s.Countdown = (fs.CountdownAt - at) / 1000
+				s.Status = "Starting together…"
+			}
 		})
 		if !clockOK {
 			continue
 		}
 		// send on any discontinuity (pause/play, seek, new stream) right away, otherwise once a second
-		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title
+		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title ||
+			fs.CountdownAt != lastSent.CountdownAt
 		if !changed && !fs.None && !fs.Paused && lastSent.At > 0 {
 			expected := lastSent.Time + (fs.At-lastSent.At)/1000
 			changed = math.Abs(fs.Time-expected) > 0.5
@@ -359,7 +465,8 @@ func (p *Party) hostLoop(ctx context.Context) {
 
 const (
 	tolerance   = 0.30 // seconds of drift we accept before correcting (replays)
-	liveAhead   = 0.60 // live: pause when this far ahead of the host
+	liveTol     = 0.50 // live: seconds of drift we accept before correcting
+	liveAhead   = 0.60 // live without track time: pause when this far ahead of the host
 	seekSettle  = 2500 * time.Millisecond
 	createRetry = 8 * time.Second
 )
@@ -379,6 +486,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		restAt       time.Time // ask the Stream Deck plugin for its best of the rest then (after syncing)
 		pluginErr    string    // the Stream Deck plugin couldn't be asked (shown; asked again later)
 		pluginRetry  time.Time
+		startedFor   float64 // "Start together" countdown this guest has already started playing on
 	)
 	// askPlugin hands the opening of the host's session to the Stream Deck plugin (at most every 10 s).
 	askPlugin := func(host *FeedState) {
@@ -456,6 +564,9 @@ func (p *Party) guestLoop(ctx context.Context) {
 			status = "Connecting to the party…"
 		case !online:
 			status = "Waiting for the host"
+			if p.takeOverHost() {
+				return
+			}
 		case host == nil || !clockOK || time.Since(hostWhen) > 10*time.Second:
 			status = "Waiting for the host's stream"
 		case host.None:
@@ -538,11 +649,53 @@ func (p *Party) guestLoop(ctx context.Context) {
 			report()
 			continue
 		}
+
+		// Start together: during the countdown stay paused on the host's frame; at the moment, play.
+		h := *host
+		if h.CountdownAt > 0 {
+			switch {
+			case now < h.CountdownAt:
+				if !feed.State.Paused {
+					_ = playerPause(feed.ID, true)
+				}
+				if math.Abs(local-h.Time) > tolerance && time.Now().After(settleUntil) {
+					_ = playerSeek(feed.ID, h.Time)
+					settleUntil = time.Now().Add(seekSettle)
+				}
+				left := (h.CountdownAt - now) / 1000
+				p.set(func(s *Status) { s.Countdown = left })
+				status = "Starting together…"
+				report()
+				continue
+			case startedFor != h.CountdownAt && now < h.CountdownAt+3000:
+				startedFor = h.CountdownAt
+				_ = playerPause(feed.ID, false)
+				settleUntil, pendingSync, measureLead = time.Now().Add(seekSettle), true, false
+			}
+			if h.Paused && startedFor == h.CountdownAt && now < h.CountdownAt+3000 {
+				// the host's "playing" state may still be on its way: it plays from the countdown moment
+				h.Paused, h.At = false, h.CountdownAt
+			}
+		}
+		p.set(func(s *Status) { s.Countdown = 0 })
+		host = &h
+
 		target := host.Time
 		if !host.Paused {
 			target += (now - host.At) / 1000
 		}
 		d := local - target
+		// Live: player positions differ per computer, so compare the real-world time on screen instead.
+		liveTrack := false
+		if host.Live && host.Track > 0 {
+			if own, ok := trackNow(); ok {
+				hostTrack := host.Track
+				if !host.Paused {
+					hostTrack += now - host.At
+				}
+				d, liveTrack = (own-hostTrack)/1000, true
+			}
+		}
 		drift = &d
 
 		// mirror pause / play (not while a live hold is pausing us on purpose)
@@ -552,8 +705,20 @@ func (p *Party) guestLoop(ctx context.Context) {
 
 		live := host.Live || feed.State.Live
 		switch {
+		case (force && live && liveTrack) || (live && liveTrack && math.Abs(d) > liveTol && time.Now().After(settleUntil) && !pendingSync):
+			// live: move by the difference in real-world time (forward stops at the live edge)
+			rel := -d
+			if !host.Paused {
+				rel += lead
+			}
+			if err := playerSeekBy(feed.ID, rel); err != nil {
+				status = "Seek failed: " + err.Error()
+			} else {
+				settleUntil, pendingSync, measureLead = time.Now().Add(seekSettle), true, !force
+				status = "Syncing…"
+			}
 		case force && live:
-			// live can't be seeked: just take the onboards along
+			// live without timing: can't be compared exactly, just take the onboards along
 			_ = playerSync(feed.ID)
 			status = "In sync (live)"
 		case force:
@@ -579,8 +744,10 @@ func (p *Party) guestLoop(ctx context.Context) {
 			}
 			measureLead = false
 			status = "In sync"
+		case live && liveTrack:
+			status = "In sync (live)"
 		case live:
-			// live streams can't be seeked: wait out a lead by pausing; a lag can't be fixed from here
+			// live without timing data: wait out a lead by pausing; a lag can't be measured exactly
 			switch {
 			case !resumeAt.IsZero() && time.Now().Before(resumeAt):
 				status = "Waiting for the host…"
@@ -622,6 +789,28 @@ func feedInfo(f *Player) *FeedInfo {
 	}
 	tm, _ := f.Time()
 	return &FeedInfo{Title: f.StreamData.Title, Time: tm, Paused: f.State.Paused, Live: f.State.Live}
+}
+
+// takeOverHost: the host has been gone for 20 seconds. The guest with the lowest member id becomes the host
+// (every guest picks the same one), so the party carries on. Returns true when this app took over.
+func (p *Party) takeOverHost() bool {
+	p.mu.Lock()
+	off, code, name, me := p.hostOffAt, p.st.Code, p.st.Name, p.id
+	var lowest string
+	for _, m := range p.st.Members {
+		if m.Role == "guest" && m.ID != "" && (lowest == "" || m.ID < lowest) {
+			lowest = m.ID
+		}
+	}
+	p.mu.Unlock()
+	if off.IsZero() || time.Since(off) < 20*time.Second || lowest != me {
+		return false
+	}
+	go func() {
+		p.Start("host", code, name)
+		p.SetNote("The host left, so you're hosting now")
+	}()
+	return true
 }
 
 // HostSession: the content id and session type the host is watching (guest), or "".

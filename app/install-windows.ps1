@@ -6,10 +6,12 @@ $ErrorActionPreference = 'Stop'
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\F1 Party'
 $exe = Join-Path $dir 'F1Party.exe'
 $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'F1 Party.lnk'
+$proto = 'HKCU:\Software\Classes\f1party'   # invite links: f1party://join/CODE
 
 Get-Process F1Party -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($Uninstall) {
     Remove-Item $lnk -Force -ErrorAction SilentlyContinue
+    Remove-Item $proto -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
     Write-Output 'F1 Party removed.'
     return
@@ -27,5 +29,12 @@ $s.WorkingDirectory = $dir
 $s.IconLocation = "$exe,0"
 $s.Description = 'Watch MultiViewer in sync with friends'
 $s.Save()
+# f1party:// links (from Discord invites) open this app, which then joins that party.
+New-Item -Path "$proto\shell\open\command" -Force | Out-Null
+Set-ItemProperty -Path $proto -Name '(default)' -Value 'URL:F1 Party invite link'
+Set-ItemProperty -Path $proto -Name 'URL Protocol' -Value ''
+New-Item -Path "$proto\DefaultIcon" -Force | Out-Null
+Set-ItemProperty -Path "$proto\DefaultIcon" -Name '(default)' -Value "`"$exe`",0"
+Set-ItemProperty -Path "$proto\shell\open\command" -Name '(default)' -Value "`"$exe`" `"%1`""
 Write-Output "Installed: $exe"
 Write-Output "Start menu: $lnk"

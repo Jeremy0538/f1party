@@ -8,8 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,6 +39,9 @@ func sendInvite(webhook, name, code, watching string) error {
 	text := fmt.Sprintf("🏁 **%s** is hosting an F1 Party: code **%s**", name, code)
 	if watching != "" {
 		text += "\nWatching: " + watching
+	}
+	if link := joinLink(code); link != "" {
+		text += "\nJoin with one click: " + link
 	}
 	text += "\nOpen F1 Party, enter the code and click Join. No F1 Party yet? " +
 		"<https://github.com/Jeremy0538/f1party/releases/latest>"
@@ -81,4 +87,49 @@ func mvSessionName() string {
 	default:
 		return si.Meeting.Name + si.Name
 	}
+}
+
+// joinLink: an https link that opens F1 Party on this party, when the relay serves the join page (it
+// redirects to f1party://join/CODE); "" otherwise.
+func joinLink(code string) string {
+	base := joinBase()
+	if base == "" {
+		return ""
+	}
+	return base + code
+}
+
+var joinBaseCache struct {
+	sync.Mutex
+	base    string
+	checked time.Time
+}
+
+func joinBase() string {
+	joinBaseCache.Lock()
+	defer joinBaseCache.Unlock()
+	if time.Since(joinBaseCache.checked) < 10*time.Minute {
+		return joinBaseCache.base
+	}
+	joinBaseCache.checked = time.Now()
+	joinBaseCache.base = ""
+	u, err := url.Parse(relayURL)
+	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") {
+		return ""
+	}
+	scheme := "https"
+	if u.Scheme == "ws" {
+		scheme = "http"
+	}
+	base := scheme + "://" + u.Host + strings.TrimSuffix(u.Path, "/ws") + "/join/"
+	res, err := (&http.Client{Timeout: 4 * time.Second}).Get(base + "TEST")
+	if err != nil {
+		return ""
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(res.Body, 8192))
+	if res.StatusCode == 200 && strings.Contains(string(b), "f1party://join/") {
+		joinBaseCache.base = base
+	}
+	return joinBaseCache.base
 }
