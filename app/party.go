@@ -373,7 +373,21 @@ func (p *Party) guestLoop(ctx context.Context) {
 		pluginUntil  time.Time // the Stream Deck plugin is opening the host's session until then
 		mvStartTried bool      // MultiViewer was closed and has been started (once per party)
 		restAt       time.Time // ask the Stream Deck plugin for its best of the rest then (after syncing)
+		pluginErr    string    // the Stream Deck plugin couldn't be asked (shown; asked again later)
+		pluginRetry  time.Time
 	)
+	// askPlugin hands the opening of the host's session to the Stream Deck plugin (at most every 10 s).
+	askPlugin := func(host *FeedState) {
+		if time.Now().Before(pluginRetry) {
+			return
+		}
+		if err := pluginOpen(sessionKind(host.SessionType), host.ContentID); err != nil {
+			log.Printf("stream deck: %v", err)
+			pluginErr, pluginRetry = err.Error(), time.Now().Add(10*time.Second)
+			return
+		}
+		setupFor, pluginErr, pluginUntil = host.ContentID, "", time.Now().Add(90*time.Second)
+	}
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
 	for {
@@ -401,26 +415,26 @@ func (p *Party) guestLoop(ctx context.Context) {
 			p.mu.Unlock()
 			// MultiViewer is closed: once the host's session is known, the Stream Deck plugin (which starts
 			// MultiViewer itself) or F1 Party starts it.
-			if host != nil && !host.None && host.ContentID != "" && setupFor != host.ContentID && !mvStartTried {
+			known := host != nil && !host.None && host.ContentID != ""
+			switch {
+			case setup == setupStreamDeck:
+				// only the plugin starts MultiViewer then, on F1's own desktop (never F1 Party itself)
+				if known && setupFor != host.ContentID {
+					askPlugin(host)
+				}
+				if pluginErr != "" {
+					status = pluginErr
+				} else if time.Now().Before(pluginUntil) {
+					status = "Your Stream Deck is starting MultiViewer…"
+				}
+			case known && !mvStartTried:
 				mvStartTried = true
-				if setup == setupStreamDeck {
-					setupFor = host.ContentID
-					if err := pluginOpen(sessionKind(host.SessionType), host.ContentID); err != nil {
-						log.Printf("stream deck: %v", err)
-						status = err.Error()
-						_ = mvStart()
-					} else {
-						pluginUntil = time.Now().Add(90 * time.Second)
-					}
-				} else if err := mvStart(); err != nil {
+				if err := mvStart(); err != nil {
 					status = err.Error()
 				}
 			}
 			if mvStartTried && status == errMVOffline.Error() {
 				status = "Starting MultiViewer…"
-				if time.Now().Before(pluginUntil) {
-					status = "Your Stream Deck is starting MultiViewer…"
-				}
 			}
 			report()
 			continue
@@ -455,15 +469,13 @@ func (p *Party) guestLoop(ctx context.Context) {
 		if setup == setupStreamDeck && setupFor != host.ContentID {
 			// the Stream Deck plugin opens everything: its desktop, MultiViewer, setup and the viewer's layout
 			// (also when the session is open already: it skips what is in place)
-			setupFor = host.ContentID
-			kind := sessionKind(host.SessionType)
-			if err := pluginOpen(kind, host.ContentID); err != nil {
-				log.Printf("stream deck: %v", err)
-				status = err.Error() + ", opening the world feed"
-				report()
-			} else {
-				pluginUntil = time.Now().Add(90 * time.Second)
-			}
+			askPlugin(host)
+		}
+		if setup == setupStreamDeck && pluginErr != "" && feed == nil {
+			// no world feed of our own on whatever desktop shows: wait for the plugin (asked again every 10 s)
+			status = pluginErr
+			report()
+			continue
 		}
 		// While the plugin opens its layout, leave MultiViewer alone (no pause or seek in between): its
 		// players are starting and the viewer waits for the session to run. Then sync once.
