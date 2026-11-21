@@ -6,217 +6,150 @@
 <title>F1 Party</title>
 <style>
 	:root {
-		--bg:#0b0c0f; --panel:#121419; --panel-2:#171a21; --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.12);
-		--text:#f2f3f5; --dim:#8d93a1; --faint:#5d6370;
-		--red:#e10600; --red-hi:#ff2a1f; --ok:#22c55e; --warn:#f5a524; --bad:#ef4444;
-		--num:"Bahnschrift","DIN Alternate","Barlow Semi Condensed","Roboto Condensed",system-ui,sans-serif;
+		--bg:#0c0d10; --panel:#121418; --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.11);
+		--text:#eef0f3; --dim:#8a909c; --faint:#5a606b;
+		--red:#e10600; --red-hi:#f2201a; --ok:#22c55e; --warn:#f5a524; --bad:#ef4444;
+		--num:"Bahnschrift","DIN Alternate","Barlow Semi Condensed",system-ui,sans-serif;
 		--ui:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
 	}
 	* { box-sizing:border-box; }
-	html, body { height:100%; }
-	body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 var(--ui); overflow:hidden; -webkit-font-smoothing:antialiased; }
+	html { height:100%; background:var(--bg); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+	/* The whole layout is drawn at one size and scaled to the window (see fit() below), so it looks the
+	   same at any window size and display scale. */
+	body { margin:0; width:760px; height:480px; flex:none; color:var(--text); font:13px/1.45 var(--ui); -webkit-font-smoothing:antialiased; overflow:hidden; }
 	button, input, select { font:inherit; color:inherit; }
 	.app { height:100%; display:grid; grid-template-rows:auto 1fr; }
 
-	/* ---------- top bar ---------- */
-	.top { display:flex; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid var(--line); background:linear-gradient(180deg,#111317,#0b0c0f); position:relative; }
-	.top::before { content:""; position:absolute; left:0; top:0; height:3px; width:180px; background:var(--red); clip-path:polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%); }
-	.top img { width:34px; height:34px; display:block; }
-	.brand b { display:block; font:700 17px/1.1 var(--num); letter-spacing:.02em; }
-	.brand span { font-size:12px; color:var(--dim); }
-	.lights { margin-left:auto; display:flex; gap:6px; }
-	.light { display:flex; align-items:center; gap:7px; padding:5px 10px; border:1px solid var(--line-2); border-radius:999px; font-size:12px; color:var(--dim); background:rgba(255,255,255,.02); }
-	.light i { width:7px; height:7px; border-radius:50%; background:var(--faint); }
-	.light.ok i { background:var(--ok); box-shadow:0 0 6px rgba(34,197,94,.6); } .light.warn i { background:var(--warn); } .light.bad i { background:var(--bad); }
-	.light.ok { color:var(--text); }
+	header { display:flex; align-items:center; gap:10px; padding:14px 20px 12px; }
+	header img { width:26px; height:26px; }
+	header b { font:700 15px/1 var(--num); letter-spacing:.03em; }
+	header .ver { margin-left:auto; font-size:11px; color:var(--faint); }
 
-	/* ---------- body ---------- */
-	.body { display:grid; grid-template-columns:1fr 300px; min-height:0; }
-	.main { padding:18px 20px; display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); }
-	.side { padding:18px; display:flex; flex-direction:column; gap:18px; background:var(--panel); min-height:0; }
-	.kicker { font:600 11px/1 var(--num); letter-spacing:.14em; text-transform:uppercase; color:var(--dim); display:flex; align-items:center; gap:8px; margin:0 0 10px; }
-	.kicker::before { content:""; width:3px; height:11px; background:var(--red); transform:skewX(-14deg); }
+	.body { display:grid; grid-template-columns:1fr 250px; min-height:0; border-top:1px solid var(--line); }
+	main { padding:22px 26px; min-height:0; display:flex; flex-direction:column; }
+	aside { padding:20px; border-left:1px solid var(--line); display:flex; flex-direction:column; gap:20px; min-height:0; }
 
-	label { display:block; font-size:12px; color:var(--dim); margin:0 0 5px; }
-	input, select { width:100%; min-width:0; height:38px; padding:0 12px; border-radius:6px; border:1px solid var(--line-2); background:#0d0f13; transition:border-color .15s; }
-	input:focus, select:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px rgba(225,6,0,.18); }
-	select { cursor:pointer; }
-	button { height:38px; padding:0 14px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2); font-weight:600; cursor:pointer; white-space:nowrap; transition:background .15s, border-color .15s, transform .05s; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
-	button:hover { background:#1f232c; border-color:rgba(255,255,255,.2); }
-	button:active { transform:translateY(1px); }
+	h1 { font:700 22px/1.15 var(--num); margin:0 0 4px; }
+	.lead { color:var(--dim); margin:0 0 20px; }
+	.label { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 6px; }
+	input, select { width:100%; min-width:0; height:34px; padding:0 11px; border-radius:6px; border:1px solid var(--line-2); background:#0f1114; transition:border-color .15s; }
+	input:focus, select:focus { outline:none; border-color:var(--red); }
+	select { cursor:pointer; text-overflow:ellipsis; }
+	button { height:34px; padding:0 13px; border-radius:6px; border:1px solid var(--line-2); background:#181b20; font-weight:600; cursor:pointer; white-space:nowrap; transition:background .15s, border-color .15s; }
+	button:hover { background:#20242b; }
 	button:focus-visible { outline:2px solid var(--red-hi); outline-offset:2px; }
 	button:disabled { opacity:.45; cursor:default; }
 	button.primary { background:var(--red); border-color:var(--red); color:#fff; }
 	button.primary:hover { background:var(--red-hi); border-color:var(--red-hi); }
-	button.ghost { background:transparent; }
-	button.sm { height:30px; padding:0 10px; font-size:12px; }
-	button svg { width:15px; height:15px; flex:none; }
+	button.link { height:auto; padding:0; border:0; background:none; color:var(--dim); font-weight:500; }
+	button.link:hover { color:var(--text); background:none; }
 	.row { display:flex; gap:8px; align-items:center; }
-	.row > .grow { flex:1; }
-	.help { font-size:12px; color:var(--dim); margin-top:6px; }
-	.help:empty { display:none; }
+	.grow { flex:1; min-width:0; }
+	.hint { font-size:12px; color:var(--dim); margin-top:6px; }
+	.hint:empty, .error:empty { display:none; }
 	.error { font-size:12px; color:#ff7a72; margin-top:6px; }
-	.error:empty { display:none; }
-	a { color:#ff7a72; text-decoration:none; cursor:pointer; } a:hover { text-decoration:underline; }
+	a { color:var(--dim); text-decoration:underline; text-underline-offset:2px; cursor:pointer; } a:hover { color:var(--text); }
 	.hidden { display:none !important; }
+	.dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--faint); margin-right:7px; vertical-align:1px; }
+	.dot.ok { background:var(--ok); } .dot.warn { background:var(--warn); } .dot.bad { background:var(--bad); }
 
-	/* ---------- idle ---------- */
-	#start { display:grid; grid-template-rows:auto auto auto 1fr; gap:16px; height:100%; }
-	.hero h1 { font:700 28px/1.1 var(--num); margin:0 0 4px; letter-spacing:.01em; }
-	.hero p { margin:0; color:var(--dim); }
-	.choices { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-content:start; }
-	.choice { border:1px solid var(--line-2); border-radius:10px; padding:16px; background:var(--panel); display:flex; flex-direction:column; gap:10px; }
-	.choice h3 { margin:0; font:700 15px/1.2 var(--num); letter-spacing:.02em; }
-	.choice p { margin:0; font-size:12px; color:var(--dim); flex:1; }
-	.choice.host { background:linear-gradient(160deg, rgba(225,6,0,.16), rgba(225,6,0,.03) 60%), var(--panel); border-color:rgba(225,6,0,.35); }
-	input.code { font:700 18px/1 var(--num); letter-spacing:.35em; text-transform:uppercase; text-align:center; }
-	input.code::placeholder { color:var(--faint); letter-spacing:.35em; }
+	/* not in a party */
+	#start { max-width:360px; }
+	.or { display:flex; align-items:center; gap:10px; color:var(--faint); font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin:16px 0; }
+	.or::before, .or::after { content:""; flex:1; height:1px; background:var(--line-2); }
+	input.code { font:700 15px/1 var(--num); letter-spacing:.3em; text-transform:uppercase; }
 
-	/* ---------- in a party ---------- */
-	#party { display:grid; grid-template-rows:auto auto auto 1fr; gap:14px; height:100%; min-height:0; }
-	.codebar { display:flex; align-items:center; gap:16px; }
-	.code-big { font:700 44px/1 var(--num); letter-spacing:.18em; user-select:all; }
-	.codebar .actions { margin-left:auto; display:flex; gap:8px; }
-	.syncbar { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; padding:12px 14px; border:1px solid var(--line-2); border-radius:10px; background:var(--panel); }
-	.gap { font:700 26px/1 var(--num); min-width:86px; text-align:center; padding:8px 10px; border-radius:6px; background:#0d0f13; border:1px solid var(--line); font-variant-numeric:tabular-nums; }
+	/* in a party */
+	#party { display:flex; flex-direction:column; min-height:0; height:100%; }
+	.code { font:700 40px/1 var(--num); letter-spacing:.16em; user-select:all; }
+	.codeacts { display:flex; gap:16px; margin:10px 0 22px; }
+	.state { display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+	.state .text { flex:1; min-width:0; }
+	.state .text b { display:block; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.state .text span { font-size:12px; color:var(--dim); }
+	.gap { font:700 20px/1 var(--num); font-variant-numeric:tabular-nums; min-width:56px; text-align:right; }
 	.gap.ok { color:var(--ok); } .gap.warn { color:var(--warn); } .gap.bad { color:var(--bad); }
-	.syncinfo b { display:block; font-weight:600; }
-	.syncinfo span { font-size:12px; color:var(--dim); }
-	.note { font-size:12px; color:var(--ok); }
-	.note:empty { display:none; }
-	.tower { min-height:0; display:flex; flex-direction:column; }
-	.tower ol { list-style:none; margin:0; padding:0; overflow:auto; min-height:0; border-top:1px solid var(--line); }
-	.tower li { display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid var(--line); font-size:13px; }
-	.tower .pos { font:700 13px/1 var(--num); color:var(--dim); text-align:center; }
-	.tower .tag { font:700 10px/1 var(--num); letter-spacing:.1em; color:#fff; background:var(--red); padding:3px 5px; border-radius:3px; margin-left:8px; transform:skewX(-8deg); display:inline-block; }
-	.tower .val { font:600 13px/1 var(--num); color:var(--dim); font-variant-numeric:tabular-nums; }
-	.tower .val.ok { color:var(--ok); }
+	.members { list-style:none; margin:14px 0 0; padding:0; overflow:auto; min-height:0; flex:1; }
+	.members li { display:flex; justify-content:space-between; padding:5px 0; font-size:13px; }
+	.members .host { font:700 10px/1 var(--num); letter-spacing:.08em; color:var(--red-hi); margin-left:8px; }
+	.members .val { color:var(--dim); font-variant-numeric:tabular-nums; }
+	.members .val.ok { color:var(--ok); }
 
-	/* ---------- side ---------- */
-	.side section + section { border-top:1px solid var(--line); padding-top:16px; }
-	.mvline { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; font-size:13px; }
-	.foot { margin-top:auto; font-size:12px; color:var(--faint); display:flex; justify-content:space-between; }
-	/* now in MultiViewer */
-	.now { border:1px solid var(--line-2); border-radius:10px; background:var(--panel); padding:14px 16px; display:grid; grid-template-columns:1fr auto; gap:6px 18px; align-items:center; }
-	.now .title { font:700 18px/1.2 var(--num); letter-spacing:.01em; }
-	.now .title.empty { color:var(--faint); font-weight:600; }
-	.now .sub { font-size:12px; color:var(--dim); }
-	.stats { display:flex; gap:18px; grid-row:span 2; }
-	.stat b { display:block; font:700 22px/1 var(--num); font-variant-numeric:tabular-nums; text-align:right; }
-	.stat span { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); text-align:right; margin-top:4px; }
-	.live { color:var(--red-hi); }
-	/* stream deck keys */
-	.keys { display:grid; gap:6px; margin-top:4px; }
-	.key { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center; font-size:12px; color:var(--dim); }
-	.key kbd { font:700 10px/1 var(--num); letter-spacing:.08em; color:var(--text); background:#0d0f13; border:1px solid var(--line-2); border-bottom-width:2px; border-radius:4px; padding:4px 6px; min-width:64px; text-align:center; }
+	aside .foot { margin-top:auto; font-size:11px; color:var(--faint); }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
 <body>
 <div class="app">
-	<header class="top">
-		<img src="/logo.png" alt="F1 Party">
-		<div class="brand"><b>F1 PARTY</b><span>Watch MultiViewer in sync with friends</span></div>
-		<div class="lights" aria-label="Status">
-			<div class="light" id="lmv"><i></i>MultiViewer</div>
-			<div class="light" id="lsd"><i></i>Stream Deck</div>
-			<div class="light" id="ldc"><i></i>Discord</div>
-		</div>
+	<header>
+		<img src="/logo.png" alt="">
+		<b>F1 PARTY</b>
+		<span class="ver" id="ver"></span>
 	</header>
 
 	<div class="body">
-		<main class="main">
+		<main>
 			<div id="start">
-				<div class="hero">
-					<h1>Lights out and away we go</h1>
-					<p>Host a party and share the code, or join a friend's.</p>
-				</div>
-				<div>
-					<label for="name">Your name</label>
-					<input id="name" maxlength="24" placeholder="Name" style="max-width:280px">
-				</div>
-				<div class="choices">
-					<div class="choice host">
-						<h3>Host a party</h3>
-						<p>Friends follow your world feed: play, pause and seek.</p>
-						<button class="primary" id="host">Host a party</button>
-					</div>
-					<div class="choice">
-						<h3>Join a party</h3>
-						<p>Enter the code your host shared.</p>
-						<div class="row"><input id="code" class="code grow" maxlength="8" placeholder="CODE" aria-label="Party code"><button id="join">Join</button></div>
-					</div>
-				</div>
-				<div style="display:flex; flex-direction:column; justify-content:flex-end; min-height:0">
-					<div class="error" id="err"></div>
-					<div class="kicker" style="margin-top:6px">Now in MultiViewer</div>
-					<div class="now">
-						<div><div class="title empty" id="nowtitle">No session open</div><div class="sub" id="nowsub">Open MultiViewer and pick a session.</div></div>
-						<div class="stats"><div class="stat"><b id="nowfeed">–</b><span>World feed</span></div><div class="stat"><b id="nowplayers">0</b><span>Players</span></div></div>
-					</div>
-				</div>
+				<h1>Watch together</h1>
+				<p class="lead">Host a party and share the code, or join a friend's.</p>
+				<label class="label" for="name">Your name</label>
+				<input id="name" maxlength="24" placeholder="Name">
+				<button class="primary" id="host" style="width:100%; margin-top:12px">Host a party</button>
+				<div class="or">or join</div>
+				<div class="row"><input id="code" class="code grow" maxlength="8" placeholder="CODE" aria-label="Party code"><button id="join">Join</button></div>
+				<div class="error" id="err"></div>
 			</div>
 
 			<div id="party" class="hidden">
-				<div>
-					<div class="kicker" id="roleline">Party</div>
-					<div class="codebar">
-						<span class="code-big" id="bigcode"></span>
-						<div class="actions">
-							<button class="sm" id="copycode" title="Copy the party code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>
-							<button class="sm hidden" id="invite" title="Post the code to your Discord channel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg><span>Invite</span></button>
-						</div>
-					</div>
+				<span class="label" id="roleline"></span>
+				<div class="code" id="bigcode"></div>
+				<div class="codeacts">
+					<button class="link" id="copycode">Copy code</button>
+					<button class="link hidden" id="invite">Invite on Discord</button>
 				</div>
-				<div class="syncbar">
-					<div class="gap" id="gap">–</div>
-					<div class="syncinfo"><b id="status">…</b><span id="feed"></span></div>
-					<div class="row"><button id="sync">Sync</button><button class="ghost" id="leave">Leave</button></div>
+				<div class="state">
+					<span class="dot" id="dot"></span>
+					<div class="text"><b id="status">…</b><span id="feed"></span></div>
+					<span class="gap" id="gap"></span>
 				</div>
-				<div><div class="note" id="note"></div><div class="error" id="syncerr"></div></div>
-				<div class="tower">
-					<div class="kicker">In this party</div>
-					<ol id="members"></ol>
-				</div>
+				<div class="row" style="margin-top:12px"><button id="sync">Sync</button><button id="leave">Leave</button></div>
+				<div class="hint" id="note"></div>
+				<div class="error" id="syncerr"></div>
+				<ul class="members" id="members"></ul>
 			</div>
 		</main>
 
-		<aside class="side">
+		<aside>
 			<section>
-				<div class="kicker">MultiViewer</div>
-				<div class="mvline"><span id="mvstate">…</span>
-					<span><button class="sm hidden" id="mvstart">Open</button><button class="sm hidden" id="mvrestart">Restart for setups</button></span></div>
-				<div id="setupbox">
-					<label for="setup">Open with</label>
-					<div class="row"><select id="setup" class="grow"></select><button id="setupopen">Open</button></div>
-					<div class="help" id="setuphint"></div>
-					<div class="help" id="pluginhint"></div>
+				<span class="label">MultiViewer</span>
+				<div class="row" style="justify-content:space-between; margin-bottom:12px">
+					<span><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
+					<button class="link hidden" id="mvstart">Open</button><button class="link hidden" id="mvrestart">Restart for setups</button>
 				</div>
-				<div class="help" id="mvhint"></div>
+				<div class="row"><select id="setup" class="grow" aria-label="Open with"></select><button id="setupopen">Open</button></div>
+				<div class="hint" id="setuphint"></div>
 				<div class="error" id="mverr"></div>
 			</section>
 			<section>
-				<div class="kicker">Stream Deck</div>
-				<div class="mvline" style="margin-bottom:8px"><span id="sdstate">…</span><a id="sdget" class="hidden">Get the plugin</a></div>
-				<div class="keys">
-					<div class="key"><kbd>SYNC ×1</kbd><span>Sync to the host (or your onboards)</span></div>
-					<div class="key"><kbd>SYNC HOLD</kbd><span>Host a party and invite on Discord</span></div>
-				</div>
-			</section>
-			<section>
-				<div class="kicker">Discord invites</div>
-				<div id="dcset" class="hidden"><div class="mvline" style="margin:0"><span class="help" style="margin:0">Webhook set. Invites go to your channel.</span><button class="sm" id="dcremove">Remove</button></div></div>
+				<span class="label">Discord invites</span>
+				<div id="dcset" class="hidden row" style="justify-content:space-between"><span><span class="dot ok"></span>Webhook set</span><button class="link" id="dcremove">Remove</button></div>
 				<div id="dcnew" class="hidden">
 					<div class="row"><input id="dchook" class="grow" placeholder="Webhook URL" autocomplete="off" spellcheck="false"><button id="dcsave">Save</button></div>
-					<div class="help">Server settings → Integrations → Webhooks → New webhook → Copy URL. Stays on this computer.</div>
 				</div>
 				<div class="error" id="dcerr"></div>
 			</section>
-			<div class="foot"><span id="ver"></span><a id="pluginlink">About the plugin</a></div>
+			<div class="foot"><a id="pluginlink">Stream Deck plugin</a></div>
 		</aside>
 	</div>
 </div>
 <script>
+// Draw at 760×480 and scale to the window, keeping the proportions.
+function fit() {
+	const z = Math.max(0.6, Math.min(innerWidth / 760, innerHeight / 480));
+	document.body.style.zoom = z;
+}
+addEventListener("resize", fit); fit();
+
 const $ = (id) => document.getElementById(id);
 async function post(path, body) {
 	const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -225,31 +158,26 @@ async function post(path, body) {
 }
 const fmtTime = (s) => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
 	return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
-const fmtDrift = (d) => d == null ? "–" : (Math.abs(d) < 0.05 ? "0.0" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1));
-const light = (id, state) => { $(id).className = "light " + (state || ""); };
-const flash = (btn, text, ms = 1600) => { const s = btn.querySelector("span") || btn, old = s.textContent; s.textContent = text; setTimeout(() => { s.textContent = old; }, ms); };
+const fmtDrift = (d) => d == null ? "" : (Math.abs(d) < 0.05 ? "0.0 s" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1) + " s");
+const flash = (btn, text, ms = 1500) => { const old = btn.textContent; btn.textContent = text; setTimeout(() => { btn.textContent = old; }, ms); };
+const openURL = (url) => post("/api/openurl", { url });
 const SD = "@streamdeck";
-let mode = "idle", nameFilled = false, webhookSet = false;
+let mode = "idle", nameFilled = false, webhookSet = false, pluginDownload = "";
 
 $("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", { name: $("name").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { name: $("name").value, code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").click(); });
 $("leave").onclick = async () => { await post("/api/leave"); refresh(); };
-$("copycode").onclick = async () => { try { await post("/api/copycode"); flash($("copycode"), "Copied"); } catch { flash($("copycode"), "Failed"); } };
-$("invite").onclick = async () => {
-	const b = $("invite"); b.disabled = true; $("syncerr").textContent = "";
-	try { await post("/api/invite"); flash(b, "Sent"); } catch (e) { $("syncerr").textContent = e.message; }
-	setTimeout(() => { b.disabled = false; }, 1600);
-};
+$("copycode").onclick = async () => { try { await post("/api/copycode"); flash($("copycode"), "Copied"); } catch { flash($("copycode"), "Couldn't copy"); } };
+$("invite").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/invite"); flash($("invite"), "Invite sent"); } catch (e) { $("syncerr").textContent = e.message; } };
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
-$("pluginlink").onclick = (e) => { e.preventDefault(); post("/api/openurl", { url: "https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control" }); };
+$("pluginlink").onclick = () => openURL("https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control");
 
 async function refreshDiscord() {
 	try { webhookSet = (await (await fetch("/api/discord")).json()).webhookSet; } catch { return; }
 	$("dcset").classList.toggle("hidden", !webhookSet);
 	$("dcnew").classList.toggle("hidden", webhookSet);
 	$("invite").classList.toggle("hidden", !webhookSet || mode !== "host");
-	light("ldc", webhookSet ? "ok" : "");
 }
 $("dcsave").onclick = async () => {
 	$("dcerr").textContent = "";
@@ -274,47 +202,31 @@ $("setupopen").onclick = mvAct($("setupopen"), "/api/setup/open", () => ({ name:
 async function refreshMV() {
 	let m; try { m = await (await fetch("/api/mv")).json(); } catch { return; }
 	const pl = m.plugin || {};
-	light("lmv", m.running ? "ok" : "bad");
-	light("lsd", pl.running ? "ok" : (pl.installed ? "warn" : ""));
+	pluginDownload = pl.download || "";
+	$("mvdot").className = "dot " + (m.running ? "ok" : "bad");
 	$("mvstate").textContent = m.running ? "Running" : (m.installed ? "Not running" : "Not installed");
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
-	$("mvhint").textContent = !m.installed ? "Get it at multiviewer.app/download and sign in with F1 TV." : "";
 	const sel = $("setup"), names = (m.setups || []).map(s => s.name);
 	const want = ["", SD, ...names].join("|");
 	if (sel.dataset.list !== want) {
 		sel.innerHTML = "";
 		sel.append(new Option("World feed only", ""));
-		sel.append(new Option("Stream Deck plugin", SD));
-		for (const s of m.setups || []) sel.append(new Option(`${s.name} · ${s.players} players`, s.name));
+		sel.append(new Option("Stream Deck", SD));
+		for (const s of m.setups || []) sel.append(new Option(s.name, s.name));
 		sel.dataset.list = want;
 	}
 	if (document.activeElement !== sel) sel.value = [SD, ...names].includes(m.setup) ? m.setup : "";
-	const sd = sel.value === SD;
-	$("setuphint").textContent = sd ? "The plugin opens it all: F1 desktop, MultiViewer, Ultimate F1 Viewer, setup and layout."
-		: sel.value ? (mode === "host" ? "Opens for the session open in MultiViewer." : "Opens by itself when you join.")
-		: "Only the host's world feed opens.";
-	const hint = $("pluginhint"); hint.innerHTML = "";
-	if (sd) {
-		const link = (text, url) => { const a = document.createElement("a"); a.textContent = text;
-			a.onclick = (e) => { e.preventDefault(); post("/api/openurl", { url }); }; return a; };
-		if (!pl.installed) hint.append("Plugin not installed. ", link("Download it", pl.download), ", then open the file.");
-		else if (!pl.running) hint.append("Plugin doesn't answer: start Stream Deck, or ", link("update it", pl.download), ".");
-		else hint.append("Plugin ready · " + pl.version);
+	const sd = sel.value === SD, hint = $("setuphint");
+	hint.innerHTML = "";
+	if (!m.installed) {
+		hint.append("Get MultiViewer at ", Object.assign(document.createElement("a"), { textContent: "multiviewer.app", onclick: () => openURL("https://multiviewer.app/download") }), ".");
+	} else if (sd && !pl.installed) {
+		hint.append("Plugin not installed. ", Object.assign(document.createElement("a"), { textContent: "Download", onclick: () => openURL(pl.download) }));
+	} else if (sd && !pl.running) {
+		hint.append("Start Stream Deck, or ", Object.assign(document.createElement("a"), { textContent: "update the plugin", onclick: () => openURL(pl.download) }), ".");
 	}
 	$("setupopen").disabled = sd ? !pl.running : (!m.setupsReady || !sel.value);
-
-	$("sdstate").textContent = pl.running ? "F1 Race Control " + pl.version : pl.installed ? "Plugin installed, not answering" : "Plugin not installed";
-	$("sdget").classList.toggle("hidden", !!pl.running);
-	$("sdget").textContent = pl.installed ? "Update" : "Get the plugin";
-	$("sdget").onclick = (e) => { e.preventDefault(); post("/api/openurl", { url: pl.download }); };
-
-	const now = m.now || {}, f = now.feed;
-	$("nowtitle").textContent = now.session || (m.running ? "No session open" : "MultiViewer isn't running");
-	$("nowtitle").classList.toggle("empty", !now.session);
-	$("nowsub").textContent = !m.running ? "Open it from the panel on the right." : f ? (f.title === "F1 LIVE" ? "F1 Live" : "International") + (f.paused ? " · paused" : " · playing") : "No world feed open yet.";
-	const nf = $("nowfeed"); nf.textContent = f ? (f.live ? "LIVE" : fmtTime(f.time)) : "–"; nf.classList.toggle("live", !!(f && f.live));
-	$("nowplayers").textContent = now.players ?? 0;
 }
 
 async function refresh() {
@@ -322,49 +234,46 @@ async function refresh() {
 	try { s = await (await fetch("/api/status")).json(); }
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
 	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
-	$("ver").textContent = "Version " + s.version;
+	$("ver").textContent = s.version;
 	const inParty = s.mode !== "idle";
 	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
 	$("start").classList.toggle("hidden", inParty);
 	$("party").classList.toggle("hidden", !inParty);
 	if (!inParty) return;
 
-	$("roleline").textContent = s.mode === "host" ? "You're hosting · friends join with" : "You joined";
+	$("roleline").textContent = s.mode === "host" ? "You're hosting" : "Party";
 	$("bigcode").textContent = s.code;
 	$("note").textContent = s.note || "";
 	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
 	$("status").textContent = s.status || "";
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : "International"} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
+	const ok = s.mvOnline && s.connected;
+	$("dot").className = "dot " + (!ok ? "bad" : /in sync|hosting/i.test(s.status || "") ? "ok" : "warn");
 	const gap = $("gap");
-	if (s.mode === "guest") {
+	if (s.mode === "guest" && s.drift != null) {
+		const d = Math.abs(s.drift);
 		gap.textContent = fmtDrift(s.drift);
-		const d = Math.abs(s.drift ?? 99);
-		gap.className = "gap " + (s.drift == null ? "" : d <= 0.3 ? "ok" : d <= 2 ? "warn" : "bad");
-	} else {
-		gap.textContent = s.connected && s.mvOnline ? "HOST" : "–";
-		gap.className = "gap " + (s.connected && s.mvOnline ? "ok" : "bad");
-	}
+		gap.className = "gap " + (d <= 0.3 ? "ok" : d <= 2 ? "warn" : "bad");
+	} else { gap.textContent = ""; gap.className = "gap"; }
 
-	const ol = $("members"); ol.innerHTML = "";
-	const members = (s.members || []).slice().sort((a, b) => (b.role === "host") - (a.role === "host"));
-	members.forEach((m, i) => {
+	const ul = $("members"); ul.innerHTML = "";
+	for (const m of (s.members || []).slice().sort((a, b) => (b.role === "host") - (a.role === "host"))) {
 		const li = document.createElement("li");
-		const pos = document.createElement("span"); pos.className = "pos"; pos.textContent = i + 1;
 		const name = document.createElement("span"); name.textContent = m.name;
-		if (m.role === "host") { const t = document.createElement("span"); t.className = "tag"; t.textContent = "HOST"; name.append(t); }
+		if (m.role === "host") { const t = document.createElement("span"); t.className = "host"; t.textContent = "HOST"; name.append(t); }
 		const val = document.createElement("span"); val.className = "val";
 		if (m.role !== "host") {
 			const synced = m.status === "In sync" || m.status === "In sync (live)";
-			val.textContent = synced ? fmtDrift(m.drift) + " s" : (m.status || "…");
+			val.textContent = synced ? fmtDrift(m.drift) : (m.status || "…");
 			if (synced) val.classList.add("ok");
 		}
-		li.append(pos, name, val); ol.append(li);
-	});
+		li.append(name, val); ul.append(li);
+	}
 }
 refresh(); refreshMV(); refreshDiscord();
 setInterval(refresh, 500);
-setInterval(refreshMV, 2000);
+setInterval(refreshMV, 3000);
 </script>
 </body>
 </html>

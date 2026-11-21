@@ -24,7 +24,7 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.6.1"
+var version = "0.6.2"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
@@ -86,10 +86,10 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
-		Width:            840,
-		Height:           560,
-		MinWidth:         760,
-		MinHeight:        520,
+		Width:            780,
+		Height:           530,
+		MinWidth:         600,
+		MinHeight:        420,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
 		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
 			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
@@ -166,16 +166,6 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
 			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo()}
-		if running { // what MultiViewer shows now: session, world feed, number of players
-			now := map[string]any{"session": mvSessionName()}
-			if ps, err := players(); err == nil {
-				now["players"] = len(ps)
-				if f := feedInfo(mainFeed(ps, "")); f != nil {
-					now["feed"] = f
-				}
-			}
-			out["now"] = now
-		}
 		writeJSON(w, out)
 	})
 	mux.HandleFunc("POST /api/mv/start", func(w http.ResponseWriter, r *http.Request) {
