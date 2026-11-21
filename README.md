@@ -18,8 +18,8 @@ Watch [MultiViewer](https://multiviewer.app) in sync with friends on Windows, ma
 
 First launch warnings (the app isn't signed):
 - **Windows:** "Windows protected your PC", then **More info**, then **Run anyway**.
-- **macOS:** unzip, move **F1Party.app** to Applications, open Terminal and run
-  `xattr -dr com.apple.quarantine /Applications/F1Party.app`, then open it.
+- **macOS:** unzip, move **F1 Party.app** to Applications, open Terminal and run
+  `xattr -dr com.apple.quarantine "/Applications/F1 Party.app"`, then open it.
 - **Linux:** needs WebKitGTK (`libwebkit2gtk-4.1-0`, installed on most desktops), then
   `chmod +x F1Party-linux && ./F1Party-linux`
 
