@@ -69,7 +69,15 @@ func main() {
 			s = party.Snapshot()
 		}
 		if wh := loadConfig().Webhook; wh != "" {
-			if err := sendInvite(wh, s.Name, s.Code, mvSessionName()); err != nil {
+			watching := mvSessionName()
+			if f := party.Snapshot().Feed; watching != "" && f != nil {
+				if f.Live {
+					watching += " · LIVE"
+				} else {
+					watching += " · replay"
+				}
+			}
+			if err := sendInvite(wh, s.Name, s.Code, watching); err != nil {
 				party.SetNote(err.Error())
 				return s.Code, err
 			}

@@ -36,15 +36,15 @@ func sendInvite(webhook, name, code, watching string) error {
 	if !validWebhook(webhook) {
 		return errors.New("that isn't a Discord webhook URL")
 	}
-	text := fmt.Sprintf("🏁 **%s** is hosting an F1 Party: code **%s**", name, code)
+	text := fmt.Sprintf("🏁 **%s** is hosting an F1 Party", name)
 	if watching != "" {
-		text += "\nWatching: " + watching
+		text += "\n📺 **" + watching + "**"
 	}
+	text += fmt.Sprintf("\nCode: **%s**", code)
 	if link := joinLink(code); link != "" {
-		text += "\nJoin with one click: " + link
+		text += fmt.Sprintf(" · [Join the party](<%s>)", link)
 	}
-	text += "\nOpen F1 Party, enter the code and click Join. No F1 Party yet? " +
-		"<https://github.com/Jeremy0538/f1party/releases/latest>"
+	text += "\nNo F1 Party yet? [Download it](<https://github.com/Jeremy0538/f1party/releases/latest>)"
 	body, _ := json.Marshal(map[string]any{
 		"username": "F1 Party", "content": text,
 		"allowed_mentions": map[string]any{"parse": []string{}}, // never ping anyone
@@ -65,13 +65,23 @@ func sendInvite(webhook, name, code, watching string) error {
 	return nil
 }
 
-// mvSessionName: the session MultiViewer shows, e.g. "Las Vegas Grand Prix · Qualifying" ("" when unknown).
+// mvSessionName: the session MultiViewer has open, e.g. "2026 Las Vegas Grand Prix · Qualifying" ("" when
+// unknown). The session window's title is exact for what is open; the live timing is the fallback.
 func mvSessionName() string {
+	if pages, err := cdpPages(); err == nil {
+		for _, p := range pages {
+			t := strings.TrimSpace(strings.TrimSuffix(p.Title, "— MultiViewer"))
+			if strings.Contains(p.URL, "#/content/") && t != "" && t != "MultiViewer" {
+				return strings.Replace(t, " - ", " · ", 1)
+			}
+		}
+	}
 	var out struct {
 		State struct {
 			SessionInfo struct {
-				Name    string `json:"Name"`
-				Meeting struct {
+				Name      string `json:"Name"`
+				StartDate string `json:"StartDate"`
+				Meeting   struct {
 					Name string `json:"Name"`
 				} `json:"Meeting"`
 			} `json:"SessionInfo"`
@@ -81,11 +91,15 @@ func mvSessionName() string {
 		return ""
 	}
 	si := out.State.SessionInfo
+	gp := si.Meeting.Name
+	if len(si.StartDate) >= 4 && gp != "" {
+		gp = si.StartDate[:4] + " " + gp
+	}
 	switch {
-	case si.Meeting.Name != "" && si.Name != "":
-		return si.Meeting.Name + " · " + si.Name
+	case gp != "" && si.Name != "":
+		return gp + " · " + si.Name
 	default:
-		return si.Meeting.Name + si.Name
+		return gp + si.Name
 	}
 }
 
