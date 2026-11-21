@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Builds F1 Party for every platform into dist/.
+# Builds F1 Party for this computer into app/build/bin/ (needs Go and the Wails CLI:
+#   go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1).
+# Builds for all platforms run on GitHub Actions (.github/workflows/build.yml).
 set -euo pipefail
 cd "$(dirname "$0")/app"
-mkdir -p ../dist
-for t in windows/amd64 darwin/arm64 darwin/amd64 linux/amd64; do
-	case $t in windows/*) n=windows.exe ;; darwin/arm64) n=macos-apple-silicon ;; darwin/amd64) n=macos-intel ;; *) n=linux ;; esac
-	CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -ldflags='-s -w' -o "../dist/F1Party-$n" .
-done
-ls -la ../dist
+tags=""
+[ "$(uname -s)" = Linux ] && tags="-tags webkit2_41"
+wails build -clean -trimpath $tags
+ls -la build/bin

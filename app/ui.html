@@ -91,7 +91,7 @@ $("host").onclick = async () => { $("err").textContent = ""; try { await post("/
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { name: $("name").value, code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").click(); });
 $("leave").onclick = async () => { await post("/api/leave"); refresh(); };
-$("quit").onclick = async () => { await post("/api/quit"); document.body.innerHTML = "<main><h1>F1 Party stopped</h1><p class='sub'>You can close this tab.</p></main>"; clearInterval(timer); };
+$("quit").onclick = async () => { await post("/api/quit"); clearInterval(timer); };
 
 let nameFilled = false;
 async function refresh() {

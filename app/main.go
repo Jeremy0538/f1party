@@ -1,31 +1,33 @@
-// F1 Party: watch MultiViewer for F1 in sync with friends. One small program per platform; it opens a
-// local page in the browser and talks to the MultiViewer running on the same computer.
+// F1 Party: watch MultiViewer for F1 in sync with friends. A small desktop app (Wails: the system's own
+// web view, no browser needed) that talks to the MultiViewer running on the same computer.
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	_ "embed"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"math/big"
-	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.1.0"
+var version = "0.2.0"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
-
-var uiAddr = "127.0.0.1:" + envOr("F1PARTY_PORT", "47821")
 
 //go:embed ui.html
 var uiHTML []byte
@@ -38,16 +40,36 @@ func envOr(k, def string) string {
 }
 
 func main() {
-	pageURL := "http://" + uiAddr + "/"
-	ln, err := net.Listen("tcp", uiAddr)
-	if err != nil { // already running: just show it
-		fmt.Println("F1 Party is already running, opening it…")
-		openBrowser(pageURL)
-		return
-	}
 	cfg := loadConfig()
 	party := NewParty(cfg.Name)
 
+	var appCtx context.Context
+	err := wails.Run(&options.App{
+		Title:            "F1 Party",
+		Width:            500,
+		Height:           780,
+		MinWidth:         420,
+		MinHeight:        560,
+		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
+		AssetServer:      &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) })},
+		OnStartup:        func(ctx context.Context) { appCtx = ctx },
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "nl.jeremyklootwijk.f1party",
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) { // already running: bring it to the front
+				wruntime.WindowUnminimise(appCtx)
+				wruntime.Show(appCtx)
+			},
+		},
+		Windows: &windows.Options{Theme: windows.Dark},
+		Mac:     &mac.Options{Appearance: mac.NSAppearanceNameDarkAqua, About: &mac.AboutInfo{Title: "F1 Party", Message: "Version " + version}},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// newHandler serves the UI and its small JSON API. It is only reachable from the app's own window.
+func newHandler(party *Party, quit func()) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -89,28 +111,9 @@ func main() {
 	})
 	mux.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
-		go func() { time.Sleep(200 * time.Millisecond); os.Exit(0) }()
+		go func() { time.Sleep(200 * time.Millisecond); quit() }()
 	})
-
-	// Only this computer's browser may drive it: reject requests whose Host isn't our own address
-	// (DNS-rebinding guard) and cross-site posts.
-	guard := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != uiAddr {
-			http.Error(w, "forbidden", 403)
-			return
-		}
-		if o := r.Header.Get("Origin"); r.Method == "POST" && o != "" && o != "http://"+uiAddr {
-			http.Error(w, "forbidden", 403)
-			return
-		}
-		mux.ServeHTTP(w, r)
-	})
-
-	fmt.Printf("F1 Party %s is running at %s\nKeep this window open while you watch. Close it to stop.\n", version, pageURL)
-	if os.Getenv("F1PARTY_NOBROWSER") == "" {
-		go func() { time.Sleep(300 * time.Millisecond); openBrowser(pageURL) }()
-	}
-	log.Fatal(http.Serve(ln, guard))
+	return mux
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -138,21 +141,6 @@ func newCode() string {
 		b[i] = alphabet[n.Int64()]
 	}
 	return string(b)
-}
-
-func openBrowser(u string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", u)
-	case "darwin":
-		cmd = exec.Command("open", u)
-	default:
-		cmd = exec.Command("xdg-open", u)
-	}
-	if err := cmd.Start(); err != nil {
-		fmt.Println("Open this address in your browser:", u)
-	}
 }
 
 type config struct {
