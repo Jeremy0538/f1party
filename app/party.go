@@ -101,6 +101,7 @@ type Party struct {
 	req       string            // guest: last request to the host ("p3"/"r3")
 	reqN      int               // guest: request counter
 	seenReq   map[string]string // host: last request seen per member
+	hostSince time.Time         // when this app started hosting this party
 	hostOffAt time.Time         // guest: since when the host has been offline
 	update    *Update           // a newer release, when there is one
 }
@@ -249,6 +250,10 @@ func (p *Party) Start(mode, code, name string) {
 	p.samples, p.host = nil, nil
 	p.hostOffAt, p.countdownAt = time.Time{}, 0
 	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
+	p.hostSince = time.Time{}
+	if mode == "host" {
+		p.hostSince = time.Now()
+	}
 	p.mu.Unlock()
 	go p.connLoop(ctx, mode, code, name)
 	if mode == "host" {
@@ -292,13 +297,20 @@ func (p *Party) connLoop(ctx context.Context, mode, code, name string) {
 		backoff = time.Second
 		c.SetReadLimit(1 << 16)
 		p.mu.Lock()
+		if ctx.Err() != nil { // this party was left meanwhile
+			p.mu.Unlock()
+			c.CloseNow()
+			return
+		}
 		p.conn = c
 		p.st.Connected = true
 		p.mu.Unlock()
 		replaced := p.readLoop(ctx, c)
 		p.mu.Lock()
-		p.conn = nil
-		p.st.Connected = false
+		if p.conn == c { // only our own connection: a newer party may have its own by now
+			p.conn = nil
+			p.st.Connected = false
+		}
 		p.mu.Unlock()
 		c.CloseNow()
 		if replaced {
@@ -919,12 +931,14 @@ func feedInfo(f *Player) *FeedInfo {
 }
 
 // hostRequests (host): a guest pressed Pause for the whole party; pause or play the world feed, and everyone
-// follows. A member's first request is only remembered (it may be from before this app hosted).
+// follows. Requests already there in the first seconds of hosting are only remembered (they were meant for
+// the previous host); after that every new request counts, also a newly joined guest's first one.
 func (p *Party) hostRequests(ps []Player, contentID string) {
 	p.mu.Lock()
 	if p.seenReq == nil {
 		p.seenReq = map[string]string{}
 	}
+	settled := !p.hostSince.IsZero() && time.Since(p.hostSince) > 5*time.Second
 	var act []string
 	for _, m := range p.st.Members {
 		if m.Role != "guest" || m.ID == "" {
@@ -933,7 +947,7 @@ func (p *Party) hostRequests(ps []Player, contentID string) {
 		last, known := p.seenReq[m.ID]
 		if m.Req != last {
 			p.seenReq[m.ID] = m.Req
-			if known && m.Req != "" {
+			if (known || settled) && m.Req != "" {
 				act = append(act, m.Req)
 			}
 		}

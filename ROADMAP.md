@@ -18,3 +18,5 @@ Ideas still to build, roughly in order. Done items move to the README.
 - F1P logo, a compact window without scrolling, the plugin also found in OpenDeck (0.6.0).
 - Live sync on real-world time, Start together, host takeover, invite links, Discord status, tray, update
   notice (0.7.0).
+- Stream Deck: hold Sync while hosting syncs everyone; Pause pauses the whole party or just you (0.8.0).
+- First full version (1.0.0).
