@@ -24,13 +24,16 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.5.0"
+var version = "0.6.0"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
 
 //go:embed ui.html
 var uiHTML []byte
+
+//go:embed logo64.png
+var logoPNG []byte
 
 func envOr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -83,10 +86,10 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
-		Width:            500,
-		Height:           900,
-		MinWidth:         420,
-		MinHeight:        560,
+		Width:            820,
+		Height:           560,
+		MinWidth:         760,
+		MinHeight:        520,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
 		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
 			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
@@ -119,6 +122,10 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(uiHTML)
+	})
+	mux.HandleFunc("GET /logo.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(logoPNG)
 	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, party.Snapshot())

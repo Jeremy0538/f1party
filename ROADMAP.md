@@ -14,3 +14,4 @@ Ideas still to build, roughly in order. Done items move to the README.
 - Stream Deck plugin opens the host's session with its desktop, setup and Ultimate F1 Viewer layout (0.4.0).
 - Copy the party code with one click (0.4.0).
 - Stream Deck Sync key works with the party; Discord invites through a webhook (0.5.0).
+- F1P logo, a compact window without scrolling, the plugin also found in OpenDeck (0.6.0).

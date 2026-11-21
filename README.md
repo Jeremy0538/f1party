@@ -23,7 +23,7 @@ Also in the app:
   needs MultiViewer started by F1 Party (it adds a debug port, the same one the F1 Race Control Stream Deck
   plugin uses); if it runs already, **Restart for setups** restarts it that way.
 - **Stream Deck: F1 Race Control**: with the [F1 Race Control](https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control)
-  Stream Deck plugin (1.15 or newer) installed, choose this instead of a setup. On joining, the plugin opens the
+  Stream Deck plugin (1.15 or newer) installed in Stream Deck or OpenDeck, choose this instead of a setup. On joining, the plugin opens the
   host's session the way its Race / Quali key does: its own desktop, MultiViewer and Ultimate F1 Viewer in place,
   the setup and the viewer's layout. F1 Party waits until it is done, then syncs. Without the plugin the app
   shows a download link.

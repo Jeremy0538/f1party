@@ -53,22 +53,25 @@ func pluginInfo() PluginInfo {
 	return info
 }
 
-// pluginInstalled looks for the plugin's folder in Stream Deck (Windows, macOS) or OpenDeck (Linux).
+// pluginInstalled looks for the plugin's folder in Stream Deck (Windows, macOS) or OpenDeck (any system).
 func pluginInstalled() bool {
 	cfg, err := os.UserConfigDir()
 	if err != nil {
 		return false
 	}
-	var dir string
+	dirs := []string{filepath.Join(cfg, "opendeck", "plugins")}
 	switch runtime.GOOS {
 	case "windows":
-		dir = filepath.Join(cfg, "Elgato", "StreamDeck", "Plugins")
+		dirs = append(dirs, filepath.Join(cfg, "Elgato", "StreamDeck", "Plugins"))
 	case "darwin":
-		dir = filepath.Join(cfg, "com.elgato.StreamDeck", "Plugins")
-	default:
-		dir = filepath.Join(cfg, "opendeck", "plugins")
+		dirs = append(dirs, filepath.Join(cfg, "com.elgato.StreamDeck", "Plugins"))
 	}
-	return fileExists(filepath.Join(dir, "com.stan.f1.sdPlugin"))
+	for _, d := range dirs {
+		if fileExists(filepath.Join(d, "com.stan.f1.sdPlugin")) {
+			return true
+		}
+	}
+	return false
 }
 
 // pluginBusy: the plugin is still opening (desktop, apps, setup, layout). Unknown counts as not busy.
@@ -100,9 +103,9 @@ func pluginOpen(kind, contentID string) error {
 	res, err := pluginHTTP.Post(pluginURL+"/f1/open", "application/json", bytes.NewReader(body))
 	if err != nil {
 		if pluginInstalled() {
-			return errors.New("the Stream Deck plugin doesn't answer: start Stream Deck, or update the plugin")
+			return errors.New("the Stream Deck plugin doesn't answer: start Stream Deck (or OpenDeck), or update the plugin")
 		}
-		return errors.New("the F1 Race Control Stream Deck plugin isn't installed")
+		return errors.New("the F1 Race Control plugin isn't installed in Stream Deck or OpenDeck")
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {

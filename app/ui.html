@@ -5,107 +5,189 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>F1 Party</title>
 <style>
-	:root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --text:#e8eaf0; --dim:#9aa1b1; --red:#e10600; --ok:#2fbf71; --warn:#e8a33d; }
-	* { box-sizing: border-box; }
-	body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display:flex; justify-content:center; padding:32px 16px; }
-	main { width:100%; max-width:460px; }
-	h1 { font-size:22px; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
-	h1 .flag { width:10px; height:22px; background:var(--red); border-radius:2px; }
-	.sub { color:var(--dim); margin:0 0 24px; }
-	.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:14px; }
-	label { display:block; font-size:13px; color:var(--dim); margin-bottom:6px; }
-	input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:#0c0e12; color:var(--text); font:inherit; }
-	select { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:#0c0e12; color:var(--text); font:inherit; }
-	.mvline { display:flex; align-items:center; gap:10px; justify-content:space-between; }
-	.mvline button { flex:none; }
-	a { color:#ff6b6b; }
-	input.code { text-transform:uppercase; letter-spacing:4px; font-weight:600; }
-	button { padding:10px 14px; border-radius:8px; border:0; font:inherit; font-weight:600; cursor:pointer; background:#2a2f3a; color:var(--text); }
-	button.primary { background:var(--red); color:#fff; }
-	button:disabled { opacity:.5; cursor:default; }
-	.row { display:flex; gap:10px; margin-top:12px; }
-	.row > * { flex:1; }
-	.or { text-align:center; color:var(--dim); font-size:13px; margin:14px 0; }
-	.bigcode { font-size:36px; font-weight:700; letter-spacing:8px; text-align:center; margin:4px 0 2px; user-select:all; }
-	.hint { color:var(--dim); font-size:13px; text-align:center; }
-	.status { display:flex; align-items:center; gap:10px; }
-	.dot { width:10px; height:10px; border-radius:50%; background:var(--warn); flex:none; }
-	.dot.ok { background:var(--ok); }
-	.dot.bad { background:var(--red); }
-	ul { list-style:none; margin:8px 0 0; padding:0; }
-	li { display:flex; justify-content:space-between; padding:7px 0; border-top:1px solid var(--line); font-size:14px; }
-	li span:last-child { color:var(--dim); }
-	.meta { color:var(--dim); font-size:13px; margin-top:8px; }
-	.error { color:#ff6b6b; font-size:13px; margin-top:8px; min-height:1em; }
-	.hidden { display:none; }
-	footer { color:var(--dim); font-size:12px; text-align:center; margin-top:18px; }
+	:root {
+		--bg:#0b0c0f; --panel:#121419; --panel-2:#171a21; --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.12);
+		--text:#f2f3f5; --dim:#8d93a1; --faint:#5d6370;
+		--red:#e10600; --red-hi:#ff2a1f; --ok:#22c55e; --warn:#f5a524; --bad:#ef4444;
+		--num:"Bahnschrift","DIN Alternate","Barlow Semi Condensed","Roboto Condensed",system-ui,sans-serif;
+		--ui:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+	}
+	* { box-sizing:border-box; }
+	html, body { height:100%; }
+	body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 var(--ui); overflow:hidden; -webkit-font-smoothing:antialiased; }
+	button, input, select { font:inherit; color:inherit; }
+	.app { height:100%; display:grid; grid-template-rows:auto 1fr; }
+
+	/* ---------- top bar ---------- */
+	.top { display:flex; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid var(--line); background:linear-gradient(180deg,#111317,#0b0c0f); position:relative; }
+	.top::before { content:""; position:absolute; left:0; top:0; height:3px; width:180px; background:var(--red); clip-path:polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%); }
+	.top img { width:34px; height:34px; display:block; }
+	.brand b { display:block; font:700 17px/1.1 var(--num); letter-spacing:.02em; }
+	.brand span { font-size:12px; color:var(--dim); }
+	.lights { margin-left:auto; display:flex; gap:6px; }
+	.light { display:flex; align-items:center; gap:7px; padding:5px 10px; border:1px solid var(--line-2); border-radius:999px; font-size:12px; color:var(--dim); background:rgba(255,255,255,.02); }
+	.light i { width:7px; height:7px; border-radius:50%; background:var(--faint); }
+	.light.ok i { background:var(--ok); box-shadow:0 0 6px rgba(34,197,94,.6); } .light.warn i { background:var(--warn); } .light.bad i { background:var(--bad); }
+	.light.ok { color:var(--text); }
+
+	/* ---------- body ---------- */
+	.body { display:grid; grid-template-columns:1fr 300px; min-height:0; }
+	.main { padding:18px 20px; display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); }
+	.side { padding:18px; display:flex; flex-direction:column; gap:18px; background:var(--panel); min-height:0; }
+	.kicker { font:600 11px/1 var(--num); letter-spacing:.14em; text-transform:uppercase; color:var(--dim); display:flex; align-items:center; gap:8px; margin:0 0 10px; }
+	.kicker::before { content:""; width:3px; height:11px; background:var(--red); transform:skewX(-14deg); }
+
+	label { display:block; font-size:12px; color:var(--dim); margin:0 0 5px; }
+	input, select { width:100%; min-width:0; height:38px; padding:0 12px; border-radius:6px; border:1px solid var(--line-2); background:#0d0f13; transition:border-color .15s; }
+	input:focus, select:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px rgba(225,6,0,.18); }
+	select { cursor:pointer; }
+	button { height:38px; padding:0 14px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2); font-weight:600; cursor:pointer; white-space:nowrap; transition:background .15s, border-color .15s, transform .05s; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
+	button:hover { background:#1f232c; border-color:rgba(255,255,255,.2); }
+	button:active { transform:translateY(1px); }
+	button:focus-visible { outline:2px solid var(--red-hi); outline-offset:2px; }
+	button:disabled { opacity:.45; cursor:default; }
+	button.primary { background:var(--red); border-color:var(--red); color:#fff; }
+	button.primary:hover { background:var(--red-hi); border-color:var(--red-hi); }
+	button.ghost { background:transparent; }
+	button.sm { height:30px; padding:0 10px; font-size:12px; }
+	button svg { width:15px; height:15px; flex:none; }
+	.row { display:flex; gap:8px; align-items:center; }
+	.row > .grow { flex:1; }
+	.help { font-size:12px; color:var(--dim); margin-top:6px; }
+	.help:empty { display:none; }
+	.error { font-size:12px; color:#ff7a72; margin-top:6px; }
+	.error:empty { display:none; }
+	a { color:#ff7a72; text-decoration:none; cursor:pointer; } a:hover { text-decoration:underline; }
+	.hidden { display:none !important; }
+
+	/* ---------- idle ---------- */
+	#start { display:grid; grid-template-rows:auto auto 1fr; gap:18px; height:100%; }
+	.hero h1 { font:700 28px/1.1 var(--num); margin:0 0 4px; letter-spacing:.01em; }
+	.hero p { margin:0; color:var(--dim); }
+	.choices { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-content:start; }
+	.choice { border:1px solid var(--line-2); border-radius:10px; padding:16px; background:var(--panel); display:flex; flex-direction:column; gap:10px; }
+	.choice h3 { margin:0; font:700 15px/1.2 var(--num); letter-spacing:.02em; }
+	.choice p { margin:0; font-size:12px; color:var(--dim); flex:1; }
+	.choice.host { background:linear-gradient(160deg, rgba(225,6,0,.16), rgba(225,6,0,.03) 60%), var(--panel); border-color:rgba(225,6,0,.35); }
+	input.code { font:700 18px/1 var(--num); letter-spacing:.35em; text-transform:uppercase; text-align:center; }
+	input.code::placeholder { color:var(--faint); letter-spacing:.35em; }
+
+	/* ---------- in a party ---------- */
+	#party { display:grid; grid-template-rows:auto auto auto 1fr; gap:14px; height:100%; min-height:0; }
+	.codebar { display:flex; align-items:center; gap:16px; }
+	.code-big { font:700 44px/1 var(--num); letter-spacing:.18em; user-select:all; }
+	.codebar .actions { margin-left:auto; display:flex; gap:8px; }
+	.syncbar { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; padding:12px 14px; border:1px solid var(--line-2); border-radius:10px; background:var(--panel); }
+	.gap { font:700 26px/1 var(--num); min-width:86px; text-align:center; padding:8px 10px; border-radius:6px; background:#0d0f13; border:1px solid var(--line); font-variant-numeric:tabular-nums; }
+	.gap.ok { color:var(--ok); } .gap.warn { color:var(--warn); } .gap.bad { color:var(--bad); }
+	.syncinfo b { display:block; font-weight:600; }
+	.syncinfo span { font-size:12px; color:var(--dim); }
+	.note { font-size:12px; color:var(--ok); }
+	.note:empty { display:none; }
+	.tower { min-height:0; display:flex; flex-direction:column; }
+	.tower ol { list-style:none; margin:0; padding:0; overflow:auto; min-height:0; border-top:1px solid var(--line); }
+	.tower li { display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid var(--line); font-size:13px; }
+	.tower .pos { font:700 13px/1 var(--num); color:var(--dim); text-align:center; }
+	.tower .tag { font:700 10px/1 var(--num); letter-spacing:.1em; color:#fff; background:var(--red); padding:3px 5px; border-radius:3px; margin-left:8px; transform:skewX(-8deg); display:inline-block; }
+	.tower .val { font:600 13px/1 var(--num); color:var(--dim); font-variant-numeric:tabular-nums; }
+	.tower .val.ok { color:var(--ok); }
+
+	/* ---------- side ---------- */
+	.side section + section { border-top:1px solid var(--line); padding-top:16px; }
+	.mvline { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; font-size:13px; }
+	.foot { margin-top:auto; font-size:12px; color:var(--faint); display:flex; justify-content:space-between; }
+	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
 <body>
-<main>
-	<h1><span class="flag"></span>F1 Party</h1>
-	<p class="sub">Watch MultiViewer in sync with friends.</p>
+<div class="app">
+	<header class="top">
+		<img src="/logo.png" alt="F1 Party">
+		<div class="brand"><b>F1 PARTY</b><span>Watch MultiViewer in sync with friends</span></div>
+		<div class="lights" aria-label="Status">
+			<div class="light" id="lmv"><i></i>MultiViewer</div>
+			<div class="light" id="lsd"><i></i>Stream Deck</div>
+			<div class="light" id="ldc"><i></i>Discord</div>
+		</div>
+	</header>
 
-	<section id="start">
-		<div class="card">
-			<label for="name">Your name</label>
-			<input id="name" maxlength="24" placeholder="Name">
-			<div class="row"><button class="primary" id="host">Host a party</button></div>
-			<div class="or">or join one</div>
-			<label for="code">Party code</label>
-			<input id="code" class="code" maxlength="8" placeholder="ABCDE">
-			<div class="row"><button id="join">Join</button></div>
-			<div class="error" id="err"></div>
-		</div>
-	</section>
+	<div class="body">
+		<main class="main">
+			<div id="start">
+				<div class="hero">
+					<h1>Lights out and away we go</h1>
+					<p>Host a party and share the code, or join a friend's.</p>
+				</div>
+				<div>
+					<label for="name">Your name</label>
+					<input id="name" maxlength="24" placeholder="Name" style="max-width:280px">
+				</div>
+				<div class="choices">
+					<div class="choice host">
+						<h3>Host a party</h3>
+						<p>Friends follow your world feed: play, pause and seek.</p>
+						<button class="primary" id="host">Host a party</button>
+					</div>
+					<div class="choice">
+						<h3>Join a party</h3>
+						<p>Enter the code your host shared.</p>
+						<div class="row"><input id="code" class="code grow" maxlength="8" placeholder="CODE" aria-label="Party code"><button id="join">Join</button></div>
+					</div>
+				</div>
+				<div class="error" id="err"></div>
+			</div>
 
-	<section id="party" class="hidden">
-		<div class="card">
-			<div class="hint" id="roleline"></div>
-			<div class="bigcode" id="bigcode"></div>
-			<div class="hint" id="codehint"></div>
-			<div class="row"><button id="copycode">Copy code</button><button id="invite" class="hidden">Invite on Discord</button></div>
-		</div>
-		<div class="card">
-			<div class="status"><span class="dot" id="dot"></span><span id="status"></span></div>
-			<div class="meta" id="feed"></div>
-			<div class="meta" id="note"></div>
-			<div class="row"><button id="sync">Sync now</button></div>
-			<div class="error" id="syncerr"></div>
-		</div>
-		<div class="card">
-			<label>In this party</label>
-			<ul id="members"></ul>
-		</div>
-	</section>
+			<div id="party" class="hidden">
+				<div>
+					<div class="kicker" id="roleline">Party</div>
+					<div class="codebar">
+						<span class="code-big" id="bigcode"></span>
+						<div class="actions">
+							<button class="sm" id="copycode" title="Copy the party code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>
+							<button class="sm hidden" id="invite" title="Post the code to your Discord channel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg><span>Invite</span></button>
+						</div>
+					</div>
+				</div>
+				<div class="syncbar">
+					<div class="gap" id="gap">–</div>
+					<div class="syncinfo"><b id="status">…</b><span id="feed"></span></div>
+					<div class="row"><button id="sync">Sync</button><button class="ghost" id="leave">Leave</button></div>
+				</div>
+				<div><div class="note" id="note"></div><div class="error" id="syncerr"></div></div>
+				<div class="tower">
+					<div class="kicker">In this party</div>
+					<ol id="members"></ol>
+				</div>
+			</div>
+		</main>
 
-	<div class="card" id="mvcard">
-		<div class="mvline"><span class="status"><span class="dot" id="mvdot"></span><span id="mvstate">MultiViewer</span></span>
-			<button id="mvstart" class="hidden">Open MultiViewer</button><button id="mvrestart" class="hidden">Restart for setups</button></div>
-		<div class="meta" id="mvhint"></div>
-		<div id="setupbox">
-			<label for="setup" style="margin-top:14px">Your MultiViewer setup</label>
-			<select id="setup"></select>
-			<div class="meta" id="setuphint"></div>
-			<div class="meta" id="pluginhint"></div>
-			<div class="row"><button id="setupopen">Open setup now</button></div>
-		</div>
-		<div class="error" id="mverr"></div>
+		<aside class="side">
+			<section>
+				<div class="kicker">MultiViewer</div>
+				<div class="mvline"><span id="mvstate">…</span>
+					<span><button class="sm hidden" id="mvstart">Open</button><button class="sm hidden" id="mvrestart">Restart for setups</button></span></div>
+				<div id="setupbox">
+					<label for="setup">Open with</label>
+					<div class="row"><select id="setup" class="grow"></select><button id="setupopen">Open</button></div>
+					<div class="help" id="setuphint"></div>
+					<div class="help" id="pluginhint"></div>
+				</div>
+				<div class="help" id="mvhint"></div>
+				<div class="error" id="mverr"></div>
+			</section>
+			<section>
+				<div class="kicker">Discord invites</div>
+				<div id="dcset" class="hidden"><div class="mvline" style="margin:0"><span class="help" style="margin:0">Webhook set. Hold the Stream Deck Sync key to host and invite.</span><button class="sm" id="dcremove">Remove</button></div></div>
+				<div id="dcnew" class="hidden">
+					<div class="row"><input id="dchook" class="grow" placeholder="Webhook URL" autocomplete="off" spellcheck="false"><button id="dcsave">Save</button></div>
+					<div class="help">Server settings → Integrations → Webhooks → New webhook → Copy URL. Stays on this computer.</div>
+				</div>
+				<div class="error" id="dcerr"></div>
+			</section>
+			<div class="foot"><span id="ver"></span><a id="pluginlink">Stream Deck plugin</a></div>
+		</aside>
 	</div>
-	<div class="card">
-		<label>Discord invites</label>
-		<div id="dcset" class="hidden"><div class="mvline"><span class="meta" style="margin:0">Invites go to your Discord channel. Holding the Sync key on your Stream Deck hosts a party and sends one.</span>
-			<button id="dcremove">Remove</button></div></div>
-		<div id="dcnew" class="hidden">
-			<input id="dchook" placeholder="Discord webhook URL" autocomplete="off" spellcheck="false">
-			<div class="meta">In Discord: Server settings → Integrations → Webhooks → New webhook, pick the channel, Copy webhook URL. It stays on this computer.</div>
-			<div class="row"><button id="dcsave">Save</button></div>
-		</div>
-		<div class="error" id="dcerr"></div>
-	</div>
-	<div class="row hidden" id="partybtns"><button id="leave">Leave party</button><button id="quit">Quit F1 Party</button></div>
-	<footer id="ver"></footer>
-</main>
+</div>
 <script>
 const $ = (id) => document.getElementById(id);
 async function post(path, body) {
@@ -115,29 +197,31 @@ async function post(path, body) {
 }
 const fmtTime = (s) => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
 	return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
-const fmtDrift = (d) => d == null ? "" : (Math.abs(d) < 0.05 ? "±0.0 s" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1) + " s");
+const fmtDrift = (d) => d == null ? "–" : (Math.abs(d) < 0.05 ? "0.0" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1));
+const light = (id, state) => { $(id).className = "light " + (state || ""); };
+const flash = (btn, text, ms = 1600) => { const s = btn.querySelector("span") || btn, old = s.textContent; s.textContent = text; setTimeout(() => { s.textContent = old; }, ms); };
+const SD = "@streamdeck";
+let mode = "idle", nameFilled = false, webhookSet = false;
 
 $("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", { name: $("name").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { name: $("name").value, code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").click(); });
 $("leave").onclick = async () => { await post("/api/leave"); refresh(); };
-$("quit").onclick = async () => { await post("/api/quit"); clearInterval(timer); };
-$("copycode").onclick = async () => {
-	try { await post("/api/copycode"); $("copycode").textContent = "Copied!"; }
-	catch (e) { $("copycode").textContent = "Couldn't copy"; }
-	setTimeout(() => { $("copycode").textContent = "Copy code"; }, 1500);
-};
+$("copycode").onclick = async () => { try { await post("/api/copycode"); flash($("copycode"), "Copied"); } catch { flash($("copycode"), "Failed"); } };
 $("invite").onclick = async () => {
-	const b = $("invite"); b.disabled = true;
-	try { await post("/api/invite"); b.textContent = "Invite sent!"; } catch (e) { b.textContent = "Not sent"; $("syncerr").textContent = e.message; }
-	setTimeout(() => { b.textContent = "Invite on Discord"; b.disabled = false; }, 2000);
+	const b = $("invite"); b.disabled = true; $("syncerr").textContent = "";
+	try { await post("/api/invite"); flash(b, "Sent"); } catch (e) { $("syncerr").textContent = e.message; }
+	setTimeout(() => { b.disabled = false; }, 1600);
 };
-let webhookSet = false;
+$("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
+$("pluginlink").onclick = (e) => { e.preventDefault(); post("/api/openurl", { url: "https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control" }); };
+
 async function refreshDiscord() {
 	try { webhookSet = (await (await fetch("/api/discord")).json()).webhookSet; } catch { return; }
 	$("dcset").classList.toggle("hidden", !webhookSet);
 	$("dcnew").classList.toggle("hidden", webhookSet);
 	$("invite").classList.toggle("hidden", !webhookSet || mode !== "host");
+	light("ldc", webhookSet ? "ok" : "");
 }
 $("dcsave").onclick = async () => {
 	$("dcerr").textContent = "";
@@ -145,9 +229,7 @@ $("dcsave").onclick = async () => {
 	refreshDiscord();
 };
 $("dcremove").onclick = async () => { await post("/api/discord", { webhook: "" }); refreshDiscord(); };
-$("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 
-// ---- MultiViewer: start it, setup support, choose and open a setup
 const mvAct = (btn, path, body) => async () => {
 	$("mverr").textContent = ""; btn.disabled = true;
 	try { await post(path, body && body()); } catch (e) { $("mverr").textContent = e.message; }
@@ -161,82 +243,88 @@ $("mvrestart").onclick = async () => {
 $("setup").onchange = async () => { await post("/api/setup", { name: $("setup").value }); refreshMV(); };
 $("setupopen").onclick = mvAct($("setupopen"), "/api/setup/open", () => ({ name: $("setup").value }));
 
-let mode = "idle";
-const SD = "@streamdeck";
 async function refreshMV() {
 	let m; try { m = await (await fetch("/api/mv")).json(); } catch { return; }
-	$("mvdot").className = "dot " + (m.running ? "ok" : "bad");
-	$("mvstate").textContent = m.running ? "MultiViewer is running" : (m.installed ? "MultiViewer isn't running" : "MultiViewer isn't installed");
+	const pl = m.plugin || {};
+	light("lmv", m.running ? "ok" : "bad");
+	light("lsd", pl.running ? "ok" : (pl.installed ? "warn" : ""));
+	$("mvstate").textContent = m.running ? "Running" : (m.installed ? "Not running" : "Not installed");
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
-	$("mvhint").textContent = !m.installed ? "Get it at multiviewer.app/download and sign in with F1 TV."
-		: m.running && !m.setupsReady && (m.setups || []).length ? "To open your setups, F1 Party needs to start MultiViewer itself." : "";
-	const sel = $("setup"), names = (m.setups || []).map(s => s.name), pl = m.plugin || {};
+	$("mvhint").textContent = !m.installed ? "Get it at multiviewer.app/download and sign in with F1 TV." : "";
+	const sel = $("setup"), names = (m.setups || []).map(s => s.name);
 	const want = ["", SD, ...names].join("|");
 	if (sel.dataset.list !== want) {
 		sel.innerHTML = "";
-		sel.append(new Option("None: only the world feed", ""));
-		sel.append(new Option("Stream Deck: F1 Race Control (Race / Quali)", SD));
-		for (const s of m.setups || []) sel.append(new Option(`${s.name} (${s.players} players)`, s.name));
+		sel.append(new Option("World feed only", ""));
+		sel.append(new Option("Stream Deck plugin", SD));
+		for (const s of m.setups || []) sel.append(new Option(`${s.name} · ${s.players} players`, s.name));
 		sel.dataset.list = want;
 	}
 	if (document.activeElement !== sel) sel.value = [SD, ...names].includes(m.setup) ? m.setup : "";
 	const sd = sel.value === SD;
-	$("setuphint").textContent = sd
-		? "Your Stream Deck plugin opens everything: its own desktop, MultiViewer and Ultimate F1 Viewer in place, the Race or Quali setup and layout."
-		: mode === "host" ? "Opens for the session you have open in MultiViewer."
-		: "Opens by itself when you join a party, for the host's session.";
+	$("setuphint").textContent = sd ? "The plugin opens it all: F1 desktop, MultiViewer, Ultimate F1 Viewer, setup and layout."
+		: sel.value ? (mode === "host" ? "Opens for the session open in MultiViewer." : "Opens by itself when you join.")
+		: "Only the host's world feed opens.";
 	const hint = $("pluginhint"); hint.innerHTML = "";
 	if (sd) {
-		const link = (text, url) => { const a = document.createElement("a"); a.textContent = text; a.href = "#";
+		const link = (text, url) => { const a = document.createElement("a"); a.textContent = text;
 			a.onclick = (e) => { e.preventDefault(); post("/api/openurl", { url }); }; return a; };
-		if (!pl.installed) hint.append("The F1 Race Control plugin isn't installed. ", link("Download it", pl.download),
-			" (open the file to add it to Stream Deck) or ", link("read more", pl.page), ".");
-		else if (!pl.running) hint.append("The plugin is installed but doesn't answer: start Stream Deck, or ", link("update the plugin", pl.download), ".");
-		else hint.append("Plugin ready (version " + pl.version + ").");
+		if (!pl.installed) hint.append("Plugin not installed. ", link("Download it", pl.download), ", then open the file.");
+		else if (!pl.running) hint.append("Plugin doesn't answer: start Stream Deck, or ", link("update it", pl.download), ".");
+		else hint.append("Plugin ready · " + pl.version);
 	}
 	$("setupopen").disabled = sd ? !pl.running : (!m.setupsReady || !sel.value);
 }
-refreshMV();
-setInterval(refreshMV, 3000);
-refreshDiscord();
 
-let nameFilled = false;
 async function refresh() {
 	let s;
 	try { s = await (await fetch("/api/status")).json(); }
-	catch { $("status").textContent = "F1 Party isn't running anymore"; $("dot").className = "dot bad"; return; }
+	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
 	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
-	$("ver").textContent = "F1 Party " + s.version;
+	$("ver").textContent = "Version " + s.version;
 	const inParty = s.mode !== "idle";
 	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
-	$("note").textContent = s.note || "";
 	$("start").classList.toggle("hidden", inParty);
 	$("party").classList.toggle("hidden", !inParty);
-	$("partybtns").classList.toggle("hidden", !inParty);
-	$("sync").textContent = s.mode === "guest" ? "Sync to host now" : "Sync onboards now";
 	if (!inParty) return;
 
-	$("roleline").textContent = s.mode === "host" ? "You're hosting. Party code:" : "You joined party";
+	$("roleline").textContent = s.mode === "host" ? "You're hosting · friends join with" : "You joined";
 	$("bigcode").textContent = s.code;
-	$("codehint").textContent = s.mode === "host" ? "Friends enter this code in their F1 Party app." : "";
+	$("note").textContent = s.note || "";
+	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
 	$("status").textContent = s.status || "";
-	let cls = "dot";
-	if (!s.mvOnline || !s.connected) cls += " bad";
-	else if (/in sync|hosting/i.test(s.status || "")) cls += " ok";
-	$("dot").className = cls;
-	$("feed").textContent = s.feed ? `${s.feed.title === "F1 LIVE" ? "F1 Live" : "International"} · ${s.feed.live ? "LIVE" : fmtTime(s.feed.time)}${s.feed.paused ? " · paused" : ""}${s.mode === "guest" && s.drift != null ? " · " + fmtDrift(s.drift) + " vs host" : ""}` : "";
-
-	const ul = $("members"); ul.innerHTML = "";
-	for (const m of (s.members || []).sort((a, b) => (a.role === "host" ? -1 : 0) - (b.role === "host" ? -1 : 0))) {
-		const li = document.createElement("li");
-		const a = document.createElement("span"); a.textContent = m.name + (m.role === "host" ? " (host)" : "");
-		const b = document.createElement("span"); b.textContent = m.role === "host" ? "" : (m.status === "In sync" || m.status === "In sync (live)" ? fmtDrift(m.drift) : (m.status || "…"));
-		li.append(a, b); ul.append(li);
+	const f = s.feed;
+	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : "International"} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
+	const gap = $("gap");
+	if (s.mode === "guest") {
+		gap.textContent = fmtDrift(s.drift);
+		const d = Math.abs(s.drift ?? 99);
+		gap.className = "gap " + (s.drift == null ? "" : d <= 0.3 ? "ok" : d <= 2 ? "warn" : "bad");
+	} else {
+		gap.textContent = s.connected && s.mvOnline ? "HOST" : "–";
+		gap.className = "gap " + (s.connected && s.mvOnline ? "ok" : "bad");
 	}
+
+	const ol = $("members"); ol.innerHTML = "";
+	const members = (s.members || []).slice().sort((a, b) => (b.role === "host") - (a.role === "host"));
+	members.forEach((m, i) => {
+		const li = document.createElement("li");
+		const pos = document.createElement("span"); pos.className = "pos"; pos.textContent = i + 1;
+		const name = document.createElement("span"); name.textContent = m.name;
+		if (m.role === "host") { const t = document.createElement("span"); t.className = "tag"; t.textContent = "HOST"; name.append(t); }
+		const val = document.createElement("span"); val.className = "val";
+		if (m.role !== "host") {
+			const synced = m.status === "In sync" || m.status === "In sync (live)";
+			val.textContent = synced ? fmtDrift(m.drift) + " s" : (m.status || "…");
+			if (synced) val.classList.add("ok");
+		}
+		li.append(pos, name, val); ol.append(li);
+	});
 }
-refresh();
-const timer = setInterval(refresh, 500);
+refresh(); refreshMV(); refreshDiscord();
+setInterval(refresh, 500);
+setInterval(refreshMV, 3000);
 </script>
 </body>
 </html>
