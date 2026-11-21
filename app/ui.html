@@ -64,6 +64,7 @@
 			<div class="hint" id="roleline"></div>
 			<div class="bigcode" id="bigcode"></div>
 			<div class="hint" id="codehint"></div>
+			<div class="row"><button id="copycode">Copy code</button></div>
 		</div>
 		<div class="card">
 			<div class="status"><span class="dot" id="dot"></span><span id="status"></span></div>
@@ -109,6 +110,11 @@ $("join").onclick = async () => { $("err").textContent = ""; try { await post("/
 $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").click(); });
 $("leave").onclick = async () => { await post("/api/leave"); refresh(); };
 $("quit").onclick = async () => { await post("/api/quit"); clearInterval(timer); };
+$("copycode").onclick = async () => {
+	try { await post("/api/copycode"); $("copycode").textContent = "Copied!"; }
+	catch (e) { $("copycode").textContent = "Couldn't copy"; }
+	setTimeout(() => { $("copycode").textContent = "Copy code"; }, 1500);
+};
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 
 // ---- MultiViewer: start it, setup support, choose and open a setup

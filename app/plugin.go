@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -79,6 +80,17 @@ func pluginBusy() bool {
 	defer res.Body.Close()
 	var s struct{ Busy bool }
 	return json.NewDecoder(res.Body).Decode(&s) == nil && s.Busy
+}
+
+// pluginRefreshRest asks the plugin to fill its best-of-the-rest onboards for the replay's time now (after
+// a guest jumped to the host). Swapping players takes a few seconds, hence the longer wait.
+func pluginRefreshRest() {
+	res, err := (&http.Client{Timeout: 60 * time.Second}).Post(pluginURL+"/f1/rest", "application/json", nil)
+	if err != nil {
+		log.Printf("stream deck rest: %v", err)
+		return
+	}
+	res.Body.Close()
 }
 
 // pluginOpen asks the plugin for Race / Quali / Practice, for one session (contentID) or, without, for

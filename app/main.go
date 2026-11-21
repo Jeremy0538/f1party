@@ -51,8 +51,9 @@ func main() {
 		MinWidth:         420,
 		MinHeight:        560,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
-		AssetServer:      &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) })},
-		OnStartup:        func(ctx context.Context) { appCtx = ctx },
+		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
+			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) })},
+		OnStartup: func(ctx context.Context) { appCtx = ctx },
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "nl.jeremyklootwijk.f1party",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) { // already running: bring it to the front
@@ -69,7 +70,7 @@ func main() {
 }
 
 // newHandler serves the UI and its small JSON API. It is only reachable from the app's own window.
-func newHandler(party *Party, quit func(), openURL func(string)) http.Handler {
+func newHandler(party *Party, quit func(), openURL func(string), copyText func(string) error) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -157,6 +158,14 @@ func newHandler(party *Party, quit func(), openURL func(string)) http.Handler {
 		}
 		openURL(in.URL)
 		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/copycode", func(w http.ResponseWriter, r *http.Request) {
+		code := party.Snapshot().Code
+		if code == "" {
+			http.Error(w, "Not in a party", 400)
+			return
+		}
+		replyErr(w, copyText(code))
 	})
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())

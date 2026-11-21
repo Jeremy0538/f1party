@@ -27,6 +27,7 @@ Also in the app:
   host's session the way its Race / Quali key does: its own desktop, MultiViewer and Ultimate F1 Viewer in place,
   the setup and the viewer's layout. F1 Party waits until it is done, then syncs. Without the plugin the app
   shows a download link.
+- **Copy code**: puts the party code on the clipboard, ready to paste in a chat.
 - When MultiViewer is closed as you join, F1 Party starts it (or lets the plugin do that).
 - **Sync now**: a guest jumps to the host right away and takes the onboards along; the host lines up their own
   onboards with the world feed.

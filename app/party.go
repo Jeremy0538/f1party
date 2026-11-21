@@ -372,6 +372,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		setupFor     string    // content id the chosen setup was opened (or tried) for
 		pluginUntil  time.Time // the Stream Deck plugin is opening the host's session until then
 		mvStartTried bool      // MultiViewer was closed and has been started (once per party)
+		restAt       time.Time // ask the Stream Deck plugin for its best of the rest then (after syncing)
 	)
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
@@ -451,8 +452,9 @@ func (p *Party) guestLoop(ctx context.Context) {
 
 		feed := mainFeed(ps, host.ContentID)
 		p.set(func(s *Status) { s.Feed = feedInfo(feed) })
-		if feed == nil && setup == setupStreamDeck && setupFor != host.ContentID {
+		if setup == setupStreamDeck && setupFor != host.ContentID {
 			// the Stream Deck plugin opens everything: its desktop, MultiViewer, setup and the viewer's layout
+			// (also when the session is open already: it skips what is in place)
 			setupFor = host.ContentID
 			kind := sessionKind(host.SessionType)
 			if err := pluginOpen(kind, host.ContentID); err != nil {
@@ -476,6 +478,14 @@ func (p *Party) guestLoop(ctx context.Context) {
 			}
 			pluginUntil = time.Time{}
 			force = true
+		}
+		if force && setup == setupStreamDeck {
+			// the replay's time changes with the sync, and with it who the best of the rest are
+			restAt = time.Now().Add(seekSettle + 3*time.Second)
+		}
+		if !restAt.IsZero() && time.Now().After(restAt) {
+			restAt = time.Time{}
+			go pluginRefreshRest()
 		}
 		if feed == nil && setup != "" && setup != setupStreamDeck && setupFor != host.ContentID && mvDebugReady() {
 			// the chosen MultiViewer setup opens the host's session with all its windows (tried once)
