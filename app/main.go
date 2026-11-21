@@ -56,10 +56,11 @@ func main() {
 			wruntime.Show(appCtx)
 		}
 	}
-	// hostAndInvite: the Stream Deck's Sync key held, or "F1Party --host": host a party (or keep the one
-	// hosted now) and post the invite to Discord when a webhook is set.
-	hostAndInvite := func() (string, error) {
+	// hostAndInvite: host a party (or keep the one hosted now) and post the invite. With resync (the Stream Deck's
+	// Sync key held), a host that already runs a party first has everyone sync to them.
+	hostAndInvite := func(resync bool) (string, error) {
 		s := party.Snapshot()
+		resynced := false
 		switch s.Mode {
 		case "guest":
 			return "", errors.New("you're a guest in a party; leave it first")
@@ -67,6 +68,12 @@ func main() {
 			name := cleanName(loadConfig().Name)
 			party.Start("host", newCode(), name)
 			s = party.Snapshot()
+		case "host":
+			if resync {
+				// already hosting: everyone syncs to you, then the invite goes out again
+				resynced = party.ResyncAll() == nil
+				party.SetNote("Everyone synced to you")
+			}
 		}
 		if wh := loadConfig().Webhook; wh != "" {
 			watching := mvSessionName()
@@ -81,11 +88,15 @@ func main() {
 				party.SetNote(err.Error())
 				return s.Code, err
 			}
-			party.SetNote("Invite sent to Discord")
+			if resynced {
+				party.SetNote("Everyone synced to you · invite sent again")
+			} else {
+				party.SetNote("Invite sent to Discord")
+			}
 		}
 		return s.Code, nil
 	}
-	startControl(party, hostAndInvite, show)
+	startControl(party, func() (string, error) { return hostAndInvite(true) }, show)
 	hostArg := func(args []string) bool {
 		for _, a := range args {
 			if a == "--host" {
@@ -120,7 +131,7 @@ func main() {
 			appCtx = ctx
 			startTray(show, func() { wruntime.Quit(appCtx) })
 			if hostArg(os.Args[1:]) {
-				go hostAndInvite()
+				go hostAndInvite(true)
 			}
 			go joinArg(os.Args[1:])
 		},
@@ -138,7 +149,7 @@ func main() {
 			OnSecondInstanceLaunch: func(d options.SecondInstanceData) { // already running: bring it to the front
 				show()
 				if hostArg(d.Args) {
-					go hostAndInvite()
+					go hostAndInvite(true)
 				}
 				go joinArg(d.Args)
 			},
@@ -152,7 +163,7 @@ func main() {
 }
 
 // newHandler serves the UI and its small JSON API. It is only reachable from the app's own window.
-func newHandler(party *Party, quit func(), openURL func(string), copyText func(string) error, hostAndInvite func() (string, error)) http.Handler {
+func newHandler(party *Party, quit func(), openURL func(string), copyText func(string) error, hostAndInvite func(bool) (string, error)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -266,7 +277,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			http.Error(w, "Host a party first", 400)
 			return
 		}
-		_, err := hostAndInvite()
+		_, err := hostAndInvite(false)
 		replyErr(w, err)
 	})
 	mux.HandleFunc("POST /api/copycode", func(w http.ResponseWriter, r *http.Request) {

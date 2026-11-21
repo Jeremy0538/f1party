@@ -37,6 +37,8 @@ type FeedState struct {
 	Track float64 `json:"track,omitempty"`
 	// CountdownAt: relay time (ms) at which everyone starts playing together ("Start together").
 	CountdownAt float64 `json:"countdown,omitempty"`
+	// Resync: goes up each time the host asks everyone to sync to them now.
+	Resync int `json:"resync,omitempty"`
 }
 
 type Member struct {
@@ -90,6 +92,7 @@ type Party struct {
 
 	id          string    // this app's member id
 	countdownAt float64   // host: relay ms at which "Start together" plays
+	resync      int       // host: number of "everyone sync to me" requests
 	hostOffAt   time.Time // guest: since when the host has been offline
 	update      *Update   // a newer release, when there is one
 }
@@ -109,6 +112,25 @@ func newMemberID() string {
 		b[i] = hex[rand.Intn(16)]
 	}
 	return string(b)
+}
+
+// ResyncAll (host): every guest syncs to the host right now (and the host's own onboards follow its world feed).
+func (p *Party) ResyncAll() error {
+	p.mu.Lock()
+	host := p.st.Mode == "host"
+	if host {
+		p.resync++
+	}
+	p.mu.Unlock()
+	if !host {
+		return errors.New("only the host can sync everyone")
+	}
+	if ps, err := players(); err == nil {
+		if feed := mainFeed(ps, ""); feed != nil {
+			_ = playerSync(feed.ID)
+		}
+	}
+	return nil
 }
 
 // StartTogether (host): pause on the current frame, count down 5 seconds, then everyone plays at once.
@@ -410,6 +432,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 			// Start together: hold the frame until the moment, then play (guests do the same at that moment)
 			p.mu.Lock()
 			cd := p.countdownAt
+			fs.Resync = p.resync
 			p.mu.Unlock()
 			if cd > 0 && clockOK {
 				fs.CountdownAt = cd
@@ -449,7 +472,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 		}
 		// send on any discontinuity (pause/play, seek, new stream) right away, otherwise once a second
 		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title ||
-			fs.CountdownAt != lastSent.CountdownAt
+			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync
 		if !changed && !fs.None && !fs.Paused && lastSent.At > 0 {
 			expected := lastSent.Time + (fs.At-lastSent.At)/1000
 			changed = math.Abs(fs.Time-expected) > 0.5
@@ -487,6 +510,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		pluginErr    string    // the Stream Deck plugin couldn't be asked (shown; asked again later)
 		pluginRetry  time.Time
 		startedFor   float64 // "Start together" countdown this guest has already started playing on
+		resyncSeen   = -1    // host's resync number last acted on (-1: none seen yet)
 	)
 	// askPlugin hands the opening of the host's session to the Stream Deck plugin (at most every 10 s).
 	askPlugin := func(host *FeedState) {
@@ -648,6 +672,14 @@ func (p *Party) guestLoop(ctx context.Context) {
 			status = "Loading stream…"
 			report()
 			continue
+		}
+
+		// The host asked everyone to sync to them now.
+		if host.Resync != resyncSeen {
+			if resyncSeen >= 0 {
+				force = true
+			}
+			resyncSeen = host.Resync
 		}
 
 		// Start together: during the countdown stay paused on the host's frame; at the moment, play.
