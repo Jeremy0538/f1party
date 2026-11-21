@@ -5,6 +5,7 @@ package main
 // host names (DNS rebinding).
 //   GET  /control/status → { "mode": "idle" | "host" | "guest", "code": "…", "version": "…" }
 //   POST /control/sync   → guest: jump to the host and take the onboards along; otherwise sync the onboards
+//   POST /control/pause  {paused, everyone} → the Pause key: the whole party, or just you
 //   POST /control/host   → start a party (or keep the one hosted now) and send the Discord invite
 
 import (
@@ -33,6 +34,14 @@ func startControl(party *Party, host func() (string, error), show func()) {
 	})
 	mux.HandleFunc("POST /control/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())
+	})
+	mux.HandleFunc("POST /control/pause", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Paused   bool `json:"paused"`
+			Everyone bool `json:"everyone"`
+		}
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, party.Pause(in.Paused, in.Everyone))
 	})
 	mux.HandleFunc("POST /control/host", func(w http.ResponseWriter, r *http.Request) {
 		code, err := host()

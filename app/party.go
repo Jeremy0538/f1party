@@ -45,6 +45,7 @@ type Member struct {
 	Role   string   `json:"role"`
 	Name   string   `json:"name"`
 	ID     string   `json:"id,omitempty"` // random id per app, sent as "name#id" (picks a new host)
+	Req    string   `json:"-"`            // pause request riding on the status ("p3" = pause, "r3" = resume)
 	Drift  *float64 `json:"drift,omitempty"`
 	Status string   `json:"status,omitempty"`
 }
@@ -90,11 +91,18 @@ type Party struct {
 	setup     string // MultiViewer setup a guest opens on joining ("" = none)
 	forceSync bool   // guest: correct the drift now, whatever its size
 
-	id          string    // this app's member id
-	countdownAt float64   // host: relay ms at which "Start together" plays
-	resync      int       // host: number of "everyone sync to me" requests
-	hostOffAt   time.Time // guest: since when the host has been offline
-	update      *Update   // a newer release, when there is one
+	id          string  // this app's member id
+	countdownAt float64 // host: relay ms at which "Start together" plays
+	resync      int     // host: number of "everyone sync to me" requests
+
+	// Pausing from the Stream Deck (F1 Race Control's Pause key).
+	hold      bool              // paused just for you: the party plays on (guest: no syncing; host: guests keep going)
+	askHoldTo time.Time         // guest: asked the host to pause/resume everyone; don't undo our own pause meanwhile
+	req       string            // guest: last request to the host ("p3"/"r3")
+	reqN      int               // guest: request counter
+	seenReq   map[string]string // host: last request seen per member
+	hostOffAt time.Time         // guest: since when the host has been offline
+	update    *Update           // a newer release, when there is one
 }
 
 type clockSample struct{ offset, rtt float64 }
@@ -112,6 +120,36 @@ func newMemberID() string {
 		b[i] = hex[rand.Intn(16)]
 	}
 	return string(b)
+}
+
+// Pause (F1 Race Control's Pause key, which pauses your own MultiViewer itself). everyone: the whole party
+// pauses or plays (a guest asks the host, whose stream everyone follows); otherwise just you, and the party
+// plays on (you catch up when you play again).
+func (p *Party) Pause(paused, everyone bool) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	switch p.st.Mode {
+	case "idle":
+		return errors.New("not in a party")
+	case "host":
+		p.hold = paused && !everyone
+	case "guest":
+		if everyone {
+			p.hold = false
+			p.reqN++
+			p.req = fmt.Sprintf("r%d", p.reqN)
+			if paused {
+				p.req = fmt.Sprintf("p%d", p.reqN)
+			}
+			p.askHoldTo = time.Now().Add(4 * time.Second)
+		} else {
+			p.hold = paused
+			if !paused {
+				p.forceSync = true
+			}
+		}
+	}
+	return nil
 }
 
 // ResyncAll (host): every guest syncs to the host right now (and the host's own onboards follow its world feed).
@@ -210,6 +248,7 @@ func (p *Party) Start(mode, code, name string) {
 	p.st = Status{Mode: mode, Code: code, Name: name, Status: "Connecting…", Version: version}
 	p.samples, p.host = nil, nil
 	p.hostOffAt, p.countdownAt = time.Time{}, 0
+	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
 	p.mu.Unlock()
 	go p.connLoop(ctx, mode, code, name)
 	if mode == "host" {
@@ -349,6 +388,9 @@ func (p *Party) readLoop(ctx context.Context, c *websocket.Conn) bool {
 					if n, id, ok := strings.Cut(m.Members[i].Name, "#"); ok {
 						m.Members[i].Name, m.Members[i].ID = n, id
 					}
+					if st, req, ok := strings.Cut(m.Members[i].Status, "|"); ok {
+						m.Members[i].Status, m.Members[i].Req = st, req
+					}
 				}
 				p.set(func(s *Status) {
 					s.Members = m.Members
@@ -400,6 +442,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 	var sessionType string
 	var typeAt time.Time
 	var startedFor float64 // countdown that has been started
+	var held *FeedState    // pause just for the host: the party's position when it started
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
 	for {
@@ -415,6 +458,9 @@ func (p *Party) hostLoop(ctx context.Context) {
 			continue
 		}
 		feed := mainFeed(ps, "")
+		if feed != nil {
+			p.hostRequests(ps, feed.StreamData.ContentID)
+		}
 		fs := FeedState{T: "state", None: true}
 		if feed != nil {
 			if time.Since(typeAt) > 5*time.Second || (sessionType == "" && time.Since(typeAt) > time.Second) {
@@ -429,6 +475,23 @@ func (p *Party) hostLoop(ctx context.Context) {
 					fs.Track = track
 				}
 			}
+			// Paused just for the host: guests keep going from where the party was; on play the host catches up.
+			p.mu.Lock()
+			hold := p.hold
+			p.mu.Unlock()
+			switch {
+			case hold && held == nil && !fs.Paused:
+				h := fs
+				held = &h
+			case hold && held != nil:
+				fs.Paused, fs.Time, fs.At = false, held.Time+(at-held.At)/1000, at
+			case !hold && held != nil:
+				catchUp := held.Time + (at-held.At)/1000
+				held = nil
+				_ = playerSeek(feed.ID, catchUp+0.3)
+				fs.Time, fs.Paused = catchUp, false
+			}
+
 			// Start together: hold the frame until the moment, then play (guests do the same at that moment)
 			p.mu.Lock()
 			cd := p.countdownAt
@@ -511,6 +574,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		pluginRetry  time.Time
 		startedFor   float64 // "Start together" countdown this guest has already started playing on
 		resyncSeen   = -1    // host's resync number last acted on (-1: none seen yet)
+		sentReq      string  // pause request last sent to the host
 	)
 	// askPlugin hands the opening of the host's session to the Stream Deck plugin (at most every 10 s).
 	askPlugin := func(host *FeedState) {
@@ -534,11 +598,18 @@ func (p *Party) guestLoop(ctx context.Context) {
 		}
 		status := ""
 		var drift *float64
+		p.mu.Lock()
+		req := p.req
+		p.mu.Unlock()
 		report := func() {
 			p.set(func(s *Status) { s.Status = status; s.Drift = drift })
-			if time.Since(lastReport) > 2*time.Second {
-				p.send(map[string]any{"t": "report", "drift": drift, "status": status})
-				lastReport = time.Now()
+			if time.Since(lastReport) > 2*time.Second || req != sentReq {
+				st := status
+				if req != "" {
+					st += "|" + req // a pause request for the host rides on the status
+				}
+				p.send(map[string]any{"t": "report", "drift": drift, "status": st})
+				lastReport, sentReq = time.Now(), req
 			}
 		}
 
@@ -674,6 +745,21 @@ func (p *Party) guestLoop(ctx context.Context) {
 			continue
 		}
 
+		// Paused just for you, or waiting for the host to take up your pause/play: leave your stream alone.
+		p.mu.Lock()
+		hold, asking := p.hold, time.Now().Before(p.askHoldTo)
+		p.mu.Unlock()
+		if hold {
+			status = "Paused just for you; the party plays on"
+			report()
+			continue
+		}
+		if asking && feed.State.Paused != host.Paused {
+			status = "Asking the host…"
+			report()
+			continue
+		}
+
 		// The host asked everyone to sync to them now.
 		if host.Resync != resyncSeen {
 			if resyncSeen >= 0 {
@@ -732,7 +818,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 
 		// mirror pause / play (not while a live hold is pausing us on purpose)
 		if resumeAt.IsZero() && feed.State.Paused != host.Paused {
-			_ = playerPause(feed.ID, host.Paused)
+			pauseAll(ps, host.ContentID, host.Paused)
 		}
 
 		live := host.Live || feed.State.Live
@@ -815,12 +901,52 @@ func (p *Party) guestLoop(ctx context.Context) {
 	}
 }
 
+// pauseAll pauses or plays every player of a session (world feed, onboards, tracker), not just the world feed.
+func pauseAll(ps []Player, contentID string, paused bool) {
+	for _, pl := range ps {
+		if pl.StreamData != nil && pl.StreamData.ContentID == contentID && (pl.State == nil || pl.State.Paused != paused) {
+			_ = playerPause(pl.ID, paused)
+		}
+	}
+}
+
 func feedInfo(f *Player) *FeedInfo {
 	if f == nil || f.State == nil || f.StreamData == nil {
 		return nil
 	}
 	tm, _ := f.Time()
 	return &FeedInfo{Title: f.StreamData.Title, Time: tm, Paused: f.State.Paused, Live: f.State.Live}
+}
+
+// hostRequests (host): a guest pressed Pause for the whole party; pause or play the world feed, and everyone
+// follows. A member's first request is only remembered (it may be from before this app hosted).
+func (p *Party) hostRequests(ps []Player, contentID string) {
+	p.mu.Lock()
+	if p.seenReq == nil {
+		p.seenReq = map[string]string{}
+	}
+	var act []string
+	for _, m := range p.st.Members {
+		if m.Role != "guest" || m.ID == "" {
+			continue
+		}
+		last, known := p.seenReq[m.ID]
+		if m.Req != last {
+			p.seenReq[m.ID] = m.Req
+			if known && m.Req != "" {
+				act = append(act, m.Req)
+			}
+		}
+	}
+	p.mu.Unlock()
+	for _, r := range act {
+		pauseAll(ps, contentID, strings.HasPrefix(r, "p"))
+		if !strings.HasPrefix(r, "p") {
+			p.mu.Lock()
+			p.hold = false
+			p.mu.Unlock()
+		}
+	}
 }
 
 // takeOverHost: the host has been gone for 20 seconds. The guest with the lowest member id becomes the host
