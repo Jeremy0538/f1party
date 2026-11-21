@@ -16,6 +16,15 @@ Watch [MultiViewer](https://multiviewer.app) in sync with friends on Windows, ma
 4. Everyone else enters the code and clicks **Join**. Their MultiViewer opens the same session and follows the
    host's play/pause/seek. Onboards you open yourself follow along.
 
+Also in the app:
+- **Open MultiViewer**: starts MultiViewer when it isn't running.
+- **Your MultiViewer setup**: pick one of your own MultiViewer setups (players and live timing windows). When you
+  join a party, F1 Party opens it for the host's session by itself; **Open setup now** opens it any time. This
+  needs MultiViewer started by F1 Party (it adds a debug port, the same one the F1 Race Control Stream Deck
+  plugin uses); if it runs already, **Restart for setups** restarts it that way.
+- **Sync now**: a guest jumps to the host right away and takes the onboards along; the host lines up their own
+  onboards with the world feed.
+
 First launch warnings (the app isn't signed):
 - **Windows:** "Windows protected your PC", then **More info**, then **Run anyway**.
 - **macOS:** unzip, move **F1 Party.app** to Applications, open Terminal and run
@@ -33,6 +42,8 @@ one who is behind can't be pulled forward (live streams can't skip ahead).
   JSON API are served straight into that window, not on a network port. It talks to the MultiViewer on the
   same computer through its local API (`http://localhost:10101/api/graphql`). Starting it twice brings the
   open window to the front.
+  Setups: read from MultiViewer's `setups.config.json` and opened through its debug port (9334) with
+  `window.f1mv.setupManager.restoreSetup`, like MultiViewer's own "Open setup" dialog (`app/mvapp.go`).
 - `relay/`: Cloudflare Worker + Durable Object (one per party code) at `wss://jeremyklootwijk.nl/f1party/ws`.
   Relays the host's world-feed position and answers clock pings.
 

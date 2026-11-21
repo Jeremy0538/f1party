@@ -15,6 +15,9 @@
 	.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:14px; }
 	label { display:block; font-size:13px; color:var(--dim); margin-bottom:6px; }
 	input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:#0c0e12; color:var(--text); font:inherit; }
+	select { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:#0c0e12; color:var(--text); font:inherit; }
+	.mvline { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+	.mvline button { flex:none; }
 	input.code { text-transform:uppercase; letter-spacing:4px; font-weight:600; }
 	button { padding:10px 14px; border-radius:8px; border:0; font:inherit; font-weight:600; cursor:pointer; background:#2a2f3a; color:var(--text); }
 	button.primary { background:var(--red); color:#fff; }
@@ -53,9 +56,6 @@
 			<div class="row"><button id="join">Join</button></div>
 			<div class="error" id="err"></div>
 		</div>
-		<div class="card meta">
-			Keep MultiViewer open and signed in. Guests don't need to open anything: the host's session opens by itself.
-		</div>
 	</section>
 
 	<section id="party" class="hidden">
@@ -67,13 +67,28 @@
 		<div class="card">
 			<div class="status"><span class="dot" id="dot"></span><span id="status"></span></div>
 			<div class="meta" id="feed"></div>
+			<div class="row"><button id="sync">Sync now</button></div>
+			<div class="error" id="syncerr"></div>
 		</div>
 		<div class="card">
 			<label>In this party</label>
 			<ul id="members"></ul>
 		</div>
-		<div class="row"><button id="leave">Leave party</button><button id="quit">Quit F1 Party</button></div>
 	</section>
+
+	<div class="card" id="mvcard">
+		<div class="mvline"><span class="status"><span class="dot" id="mvdot"></span><span id="mvstate">MultiViewer</span></span>
+			<button id="mvstart" class="hidden">Open MultiViewer</button><button id="mvrestart" class="hidden">Restart for setups</button></div>
+		<div class="meta" id="mvhint"></div>
+		<div id="setupbox">
+			<label for="setup" style="margin-top:14px">Your MultiViewer setup</label>
+			<select id="setup"></select>
+			<div class="meta" id="setuphint"></div>
+			<div class="row"><button id="setupopen">Open setup now</button></div>
+		</div>
+		<div class="error" id="mverr"></div>
+	</div>
+	<div class="row hidden" id="partybtns"><button id="leave">Leave party</button><button id="quit">Quit F1 Party</button></div>
 	<footer id="ver"></footer>
 </main>
 <script>
@@ -92,6 +107,47 @@ $("join").onclick = async () => { $("err").textContent = ""; try { await post("/
 $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").click(); });
 $("leave").onclick = async () => { await post("/api/leave"); refresh(); };
 $("quit").onclick = async () => { await post("/api/quit"); clearInterval(timer); };
+$("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
+
+// ---- MultiViewer: start it, setup support, choose and open a setup
+const mvAct = (btn, path, body) => async () => {
+	$("mverr").textContent = ""; btn.disabled = true;
+	try { await post(path, body && body()); } catch (e) { $("mverr").textContent = e.message; }
+	btn.disabled = false; refreshMV();
+};
+$("mvstart").onclick = mvAct($("mvstart"), "/api/mv/start");
+$("mvrestart").onclick = async () => {
+	if (!confirm("MultiViewer closes and opens again, so F1 Party can open your setups. Continue?")) return;
+	await mvAct($("mvrestart"), "/api/mv/restart")();
+};
+$("setup").onchange = async () => { await post("/api/setup", { name: $("setup").value }); refreshMV(); };
+$("setupopen").onclick = mvAct($("setupopen"), "/api/setup/open", () => ({ name: $("setup").value }));
+
+let mode = "idle";
+async function refreshMV() {
+	let m; try { m = await (await fetch("/api/mv")).json(); } catch { return; }
+	$("mvdot").className = "dot " + (m.running ? "ok" : "bad");
+	$("mvstate").textContent = m.running ? "MultiViewer is running" : (m.installed ? "MultiViewer isn't running" : "MultiViewer isn't installed");
+	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
+	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
+	$("mvhint").textContent = !m.installed ? "Get it at multiviewer.app/download and sign in with F1 TV."
+		: m.running && !m.setupsReady && (m.setups || []).length ? "To open your setups, F1 Party needs to start MultiViewer itself." : "";
+	const sel = $("setup"), names = (m.setups || []).map(s => s.name);
+	$("setupbox").classList.toggle("hidden", !names.length);
+	const want = ["", ...names].join("|");
+	if (sel.dataset.list !== want) {
+		sel.innerHTML = "";
+		sel.append(new Option("None: only the world feed", ""));
+		for (const s of m.setups) sel.append(new Option(`${s.name} (${s.players} players)`, s.name));
+		sel.dataset.list = want;
+	}
+	if (document.activeElement !== sel) sel.value = names.includes(m.setup) ? m.setup : "";
+	$("setuphint").textContent = mode === "host" ? "Opens for the session you have open in MultiViewer."
+		: "Opens by itself when you join a party, for the host's session.";
+	$("setupopen").disabled = !m.setupsReady || !sel.value;
+}
+refreshMV();
+setInterval(refreshMV, 3000);
 
 let nameFilled = false;
 async function refresh() {
@@ -101,8 +157,11 @@ async function refresh() {
 	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
 	$("ver").textContent = "F1 Party " + s.version;
 	const inParty = s.mode !== "idle";
+	if (mode !== s.mode) { mode = s.mode; refreshMV(); }
 	$("start").classList.toggle("hidden", inParty);
 	$("party").classList.toggle("hidden", !inParty);
+	$("partybtns").classList.toggle("hidden", !inParty);
+	$("sync").textContent = s.mode === "guest" ? "Sync to host now" : "Sync onboards now";
 	if (!inParty) return;
 
 	$("roleline").textContent = s.mode === "host" ? "You're hosting. Party code:" : "You joined party";

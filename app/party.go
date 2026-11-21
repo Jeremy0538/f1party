@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -69,14 +70,44 @@ type Party struct {
 
 	host     *FeedState // guest: latest state from the host
 	hostWhen time.Time
+
+	setup     string // MultiViewer setup a guest opens on joining ("" = none)
+	forceSync bool   // guest: correct the drift now, whatever its size
 }
 
 type clockSample struct{ offset, rtt float64 }
 
 func nowMs() float64 { return float64(time.Now().UnixNano()) / 1e6 }
 
-func NewParty(name string) *Party {
-	return &Party{st: Status{Mode: "idle", Name: name, Version: version}}
+func NewParty(name, setup string) *Party {
+	return &Party{st: Status{Mode: "idle", Name: name, Version: version}, setup: setup}
+}
+
+func (p *Party) SetSetup(name string) { p.mu.Lock(); p.setup = name; p.mu.Unlock() }
+
+func (p *Party) Setup() string { p.mu.Lock(); defer p.mu.Unlock(); return p.setup }
+
+// SyncNow: a guest jumps to the host right away and takes the onboards along; otherwise (host, or not in
+// a party) MultiViewer's own sync pulls the onboards to the world feed.
+func (p *Party) SyncNow() error {
+	p.mu.Lock()
+	guest := p.st.Mode == "guest"
+	if guest {
+		p.forceSync = true
+	}
+	p.mu.Unlock()
+	if guest {
+		return nil
+	}
+	ps, err := players()
+	if err != nil {
+		return err
+	}
+	feed := mainFeed(ps, "")
+	if feed == nil {
+		return errors.New("open the world feed (International) in MultiViewer first")
+	}
+	return playerSync(feed.ID)
 }
 
 func (p *Party) Snapshot() Status {
@@ -329,6 +360,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		creatingAt  time.Time
 		resumeAt    time.Time
 		lastReport  time.Time
+		setupFor    string // content id the chosen setup was opened (or tried) for
 	)
 	t := time.NewTicker(250 * time.Millisecond)
 	defer t.Stop()
@@ -358,7 +390,9 @@ func (p *Party) guestLoop(ctx context.Context) {
 		p.set(func(s *Status) { s.MVOnline = true })
 
 		p.mu.Lock()
-		host, hostWhen, online, connected := p.host, p.hostWhen, p.st.HostOnline, p.st.Connected
+		host, hostWhen, online, connected, setup := p.host, p.hostWhen, p.st.HostOnline, p.st.Connected, p.setup
+		force := p.forceSync
+		p.forceSync = false
 		p.mu.Unlock()
 		now, clockOK := p.relayNow()
 		switch {
@@ -380,6 +414,19 @@ func (p *Party) guestLoop(ctx context.Context) {
 
 		feed := mainFeed(ps, host.ContentID)
 		p.set(func(s *Status) { s.Feed = feedInfo(feed) })
+		if feed == nil && setup != "" && setupFor != host.ContentID && mvDebugReady() {
+			// the chosen MultiViewer setup opens the host's session with all its windows (tried once)
+			setupFor = host.ContentID
+			status = "Opening your setup “" + setup + "”…"
+			report()
+			if err := mvOpenSetup(setup, host.ContentID); err != nil {
+				log.Printf("setup %q: %v", setup, err)
+				status = "Setup didn't open (" + err.Error() + "), opening the world feed"
+				report()
+			}
+			creatingAt = time.Now() // give the setup's players time to appear before opening one ourselves
+			continue
+		}
 		if feed == nil {
 			status = "Opening the host's session…"
 			if time.Since(creatingAt) > createRetry {
@@ -414,7 +461,24 @@ func (p *Party) guestLoop(ctx context.Context) {
 			_ = playerPause(feed.ID, host.Paused)
 		}
 
+		live := host.Live || feed.State.Live
 		switch {
+		case force && live:
+			// live can't be seeked: just take the onboards along
+			_ = playerSync(feed.ID)
+			status = "In sync (live)"
+		case force:
+			seekTo := target
+			if !host.Paused {
+				seekTo += lead
+			}
+			resumeAt = time.Time{}
+			if err := playerSeek(feed.ID, math.Max(0, seekTo)); err != nil {
+				status = "Seek failed: " + err.Error()
+			} else {
+				settleUntil, pendingSync, measureLead = time.Now().Add(seekSettle), true, false
+				status = "Syncing…"
+			}
 		case time.Now().Before(settleUntil):
 			status = "Syncing…"
 		case pendingSync:
@@ -426,7 +490,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 			}
 			measureLead = false
 			status = "In sync"
-		case host.Live || feed.State.Live:
+		case live:
 			// live streams can't be seeked: wait out a lead by pausing; a lag can't be fixed from here
 			switch {
 			case !resumeAt.IsZero() && time.Now().Before(resumeAt):
@@ -469,4 +533,14 @@ func feedInfo(f *Player) *FeedInfo {
 	}
 	tm, _ := f.Time()
 	return &FeedInfo{Title: f.StreamData.Title, Time: tm, Paused: f.State.Paused, Live: f.State.Live}
+}
+
+// HostContent: the content id the host is watching (guest), or "".
+func (p *Party) HostContent() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.host == nil {
+		return ""
+	}
+	return p.host.ContentID
 }

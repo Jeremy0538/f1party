@@ -24,7 +24,7 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.2.0"
+var version = "0.3.0"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
@@ -41,13 +41,13 @@ func envOr(k, def string) string {
 
 func main() {
 	cfg := loadConfig()
-	party := NewParty(cfg.Name)
+	party := NewParty(cfg.Name, cfg.Setup)
 
 	var appCtx context.Context
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
 		Width:            500,
-		Height:           780,
+		Height:           900,
 		MinWidth:         420,
 		MinHeight:        560,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
@@ -82,7 +82,7 @@ func newHandler(party *Party, quit func()) http.Handler {
 		var in struct{ Name string }
 		json.NewDecoder(r.Body).Decode(&in)
 		name := cleanName(in.Name)
-		saveConfig(config{Name: name})
+		saveConfig(config{Name: name, Setup: party.Setup()})
 		code := newCode()
 		party.Start("host", code, name)
 		writeJSON(w, map[string]string{"code": code})
@@ -101,7 +101,7 @@ func newHandler(party *Party, quit func()) http.Handler {
 			return
 		}
 		name := cleanName(in.Name)
-		saveConfig(config{Name: name})
+		saveConfig(config{Name: name, Setup: party.Setup()})
 		party.Start("guest", code, name)
 		writeJSON(w, map[string]string{"code": code})
 	})
@@ -109,11 +109,54 @@ func newHandler(party *Party, quit func()) http.Handler {
 		party.Leave()
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	// MultiViewer itself: running, setup support (debug port), its setups and the one chosen here.
+	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
+		running := mvRunning()
+		writeJSON(w, map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
+			"setups": mvSetups(), "setup": party.Setup()})
+	})
+	mux.HandleFunc("POST /api/mv/start", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, mvStart())
+	})
+	mux.HandleFunc("POST /api/mv/restart", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, mvRestart())
+	})
+	mux.HandleFunc("POST /api/setup", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Name string }
+		json.NewDecoder(r.Body).Decode(&in)
+		party.SetSetup(in.Name)
+		saveConfig(config{Name: party.Snapshot().Name, Setup: in.Name})
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/setup/open", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Name string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.Name == "" {
+			http.Error(w, "Choose a setup first", 400)
+			return
+		}
+		contentID := ""
+		if s := party.Snapshot(); s.Mode == "guest" {
+			contentID = party.HostContent()
+		}
+		replyErr(w, mvOpenSetup(in.Name, contentID))
+	})
+	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.SyncNow())
+	})
 	mux.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
 		go func() { time.Sleep(200 * time.Millisecond); quit() }()
 	})
 	return mux
+}
+
+func replyErr(w http.ResponseWriter, err error) {
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -144,7 +187,8 @@ func newCode() string {
 }
 
 type config struct {
-	Name string `json:"name"`
+	Name  string `json:"name"`
+	Setup string `json:"setup,omitempty"` // MultiViewer setup opened on joining
 }
 
 func configPath() (string, error) {
