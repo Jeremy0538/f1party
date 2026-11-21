@@ -24,7 +24,7 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.4.0"
+var version = "0.5.0"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
@@ -44,6 +44,43 @@ func main() {
 	party := NewParty(cfg.Name, cfg.Setup)
 
 	var appCtx context.Context
+	show := func() {
+		if appCtx != nil {
+			wruntime.WindowUnminimise(appCtx)
+			wruntime.Show(appCtx)
+		}
+	}
+	// hostAndInvite: the Stream Deck's Sync key held, or "F1Party --host": host a party (or keep the one
+	// hosted now) and post the invite to Discord when a webhook is set.
+	hostAndInvite := func() (string, error) {
+		s := party.Snapshot()
+		switch s.Mode {
+		case "guest":
+			return "", errors.New("you're a guest in a party; leave it first")
+		case "idle":
+			name := cleanName(loadConfig().Name)
+			party.Start("host", newCode(), name)
+			s = party.Snapshot()
+		}
+		if wh := loadConfig().Webhook; wh != "" {
+			if err := sendInvite(wh, s.Name, s.Code, mvSessionName()); err != nil {
+				party.SetNote(err.Error())
+				return s.Code, err
+			}
+			party.SetNote("Invite sent to Discord")
+		}
+		return s.Code, nil
+	}
+	startControl(party, hostAndInvite, show)
+	hostArg := func(args []string) bool {
+		for _, a := range args {
+			if a == "--host" {
+				return true
+			}
+		}
+		return false
+	}
+
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
 		Width:            500,
@@ -52,13 +89,20 @@ func main() {
 		MinHeight:        560,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
 		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
-			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) })},
-		OnStartup: func(ctx context.Context) { appCtx = ctx },
+			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
+		OnStartup: func(ctx context.Context) {
+			appCtx = ctx
+			if hostArg(os.Args[1:]) {
+				go hostAndInvite()
+			}
+		},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "nl.jeremyklootwijk.f1party",
-			OnSecondInstanceLaunch: func(options.SecondInstanceData) { // already running: bring it to the front
-				wruntime.WindowUnminimise(appCtx)
-				wruntime.Show(appCtx)
+			OnSecondInstanceLaunch: func(d options.SecondInstanceData) { // already running: bring it to the front
+				show()
+				if hostArg(d.Args) {
+					go hostAndInvite()
+				}
 			},
 		},
 		Windows: &windows.Options{Theme: windows.Dark},
@@ -70,7 +114,7 @@ func main() {
 }
 
 // newHandler serves the UI and its small JSON API. It is only reachable from the app's own window.
-func newHandler(party *Party, quit func(), openURL func(string), copyText func(string) error) http.Handler {
+func newHandler(party *Party, quit func(), openURL func(string), copyText func(string) error, hostAndInvite func() (string, error)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -83,7 +127,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		var in struct{ Name string }
 		json.NewDecoder(r.Body).Decode(&in)
 		name := cleanName(in.Name)
-		saveConfig(config{Name: name, Setup: party.Setup()})
+		updateConfig(func(c *config) { c.Name = name })
 		code := newCode()
 		party.Start("host", code, name)
 		writeJSON(w, map[string]string{"code": code})
@@ -102,7 +146,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			return
 		}
 		name := cleanName(in.Name)
-		saveConfig(config{Name: name, Setup: party.Setup()})
+		updateConfig(func(c *config) { c.Name = name })
 		party.Start("guest", code, name)
 		writeJSON(w, map[string]string{"code": code})
 	})
@@ -126,7 +170,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		var in struct{ Name string }
 		json.NewDecoder(r.Body).Decode(&in)
 		party.SetSetup(in.Name)
-		saveConfig(config{Name: party.Snapshot().Name, Setup: in.Name})
+		updateConfig(func(c *config) { c.Setup = in.Name })
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/setup/open", func(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +202,29 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		}
 		openURL(in.URL)
 		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Discord invites: whether a webhook is set (never the URL itself), set or clear it, send one now.
+	mux.HandleFunc("GET /api/discord", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]bool{"webhookSet": loadConfig().Webhook != ""})
+	})
+	mux.HandleFunc("POST /api/discord", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Webhook string }
+		json.NewDecoder(r.Body).Decode(&in)
+		in.Webhook = strings.TrimSpace(in.Webhook)
+		if in.Webhook != "" && !validWebhook(in.Webhook) {
+			http.Error(w, "That isn't a Discord webhook URL (it starts with https://discord.com/api/webhooks/)", 400)
+			return
+		}
+		updateConfig(func(c *config) { c.Webhook = in.Webhook })
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/invite", func(w http.ResponseWriter, r *http.Request) {
+		if party.Snapshot().Mode != "host" {
+			http.Error(w, "Host a party first", 400)
+			return
+		}
+		_, err := hostAndInvite()
+		replyErr(w, err)
 	})
 	mux.HandleFunc("POST /api/copycode", func(w http.ResponseWriter, r *http.Request) {
 		code := party.Snapshot().Code
@@ -213,8 +280,16 @@ func newCode() string {
 }
 
 type config struct {
-	Name  string `json:"name"`
-	Setup string `json:"setup,omitempty"` // MultiViewer setup opened on joining
+	Name    string `json:"name"`
+	Setup   string `json:"setup,omitempty"`   // MultiViewer setup opened on joining
+	Webhook string `json:"webhook,omitempty"` // Discord webhook for party invites (this computer only)
+}
+
+// updateConfig changes some settings and keeps the others.
+func updateConfig(f func(c *config)) {
+	c := loadConfig()
+	f(&c)
+	saveConfig(c)
 }
 
 func configPath() (string, error) {

@@ -50,6 +50,7 @@ type Status struct {
 	Drift      *float64  `json:"drift,omitempty"`
 	MVOnline   bool      `json:"mvOnline"`
 	Feed       *FeedInfo `json:"feed,omitempty"`
+	Note       string    `json:"note,omitempty"`
 	Version    string    `json:"version"`
 }
 
@@ -85,6 +86,9 @@ func nowMs() float64 { return float64(time.Now().UnixNano()) / 1e6 }
 func NewParty(name, setup string) *Party {
 	return &Party{st: Status{Mode: "idle", Name: name, Version: version}, setup: setup}
 }
+
+// SetNote shows a short message under the party status (e.g. "Invite sent to Discord").
+func (p *Party) SetNote(note string) { p.mu.Lock(); p.st.Note = note; p.mu.Unlock() }
 
 func (p *Party) SetSetup(name string) { p.mu.Lock(); p.setup = name; p.mu.Unlock() }
 

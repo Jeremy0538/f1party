@@ -28,6 +28,11 @@ Also in the app:
   the setup and the viewer's layout. F1 Party waits until it is done, then syncs. Without the plugin the app
   shows a download link.
 - **Copy code**: puts the party code on the clipboard, ready to paste in a chat.
+- **Discord invites**: paste a Discord webhook URL once (Server settings → Integrations → Webhooks); **Invite on
+  Discord** then posts the party code to that channel. The URL stays in this computer's settings.
+- **Stream Deck Sync key** (F1 Race Control 1.15+): press = sync (a guest goes to the host first); hold 1 s =
+  host a party and post the Discord invite. F1 Party listens on `127.0.0.1:47821` for this (`/control/status`,
+  `/control/sync`, `/control/host`) and refuses web pages. `F1Party --host` does the same from a shortcut.
 - When MultiViewer is closed as you join, F1 Party starts it (or lets the plugin do that).
 - **Sync now**: a guest jumps to the host right away and takes the onboards along; the host lines up their own
   onboards with the world feed.

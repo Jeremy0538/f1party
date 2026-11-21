@@ -64,11 +64,12 @@
 			<div class="hint" id="roleline"></div>
 			<div class="bigcode" id="bigcode"></div>
 			<div class="hint" id="codehint"></div>
-			<div class="row"><button id="copycode">Copy code</button></div>
+			<div class="row"><button id="copycode">Copy code</button><button id="invite" class="hidden">Invite on Discord</button></div>
 		</div>
 		<div class="card">
 			<div class="status"><span class="dot" id="dot"></span><span id="status"></span></div>
 			<div class="meta" id="feed"></div>
+			<div class="meta" id="note"></div>
 			<div class="row"><button id="sync">Sync now</button></div>
 			<div class="error" id="syncerr"></div>
 		</div>
@@ -90,6 +91,17 @@
 			<div class="row"><button id="setupopen">Open setup now</button></div>
 		</div>
 		<div class="error" id="mverr"></div>
+	</div>
+	<div class="card">
+		<label>Discord invites</label>
+		<div id="dcset" class="hidden"><div class="mvline"><span class="meta" style="margin:0">Invites go to your Discord channel. Holding the Sync key on your Stream Deck hosts a party and sends one.</span>
+			<button id="dcremove">Remove</button></div></div>
+		<div id="dcnew" class="hidden">
+			<input id="dchook" placeholder="Discord webhook URL" autocomplete="off" spellcheck="false">
+			<div class="meta">In Discord: Server settings → Integrations → Webhooks → New webhook, pick the channel, Copy webhook URL. It stays on this computer.</div>
+			<div class="row"><button id="dcsave">Save</button></div>
+		</div>
+		<div class="error" id="dcerr"></div>
 	</div>
 	<div class="row hidden" id="partybtns"><button id="leave">Leave party</button><button id="quit">Quit F1 Party</button></div>
 	<footer id="ver"></footer>
@@ -115,6 +127,24 @@ $("copycode").onclick = async () => {
 	catch (e) { $("copycode").textContent = "Couldn't copy"; }
 	setTimeout(() => { $("copycode").textContent = "Copy code"; }, 1500);
 };
+$("invite").onclick = async () => {
+	const b = $("invite"); b.disabled = true;
+	try { await post("/api/invite"); b.textContent = "Invite sent!"; } catch (e) { b.textContent = "Not sent"; $("syncerr").textContent = e.message; }
+	setTimeout(() => { b.textContent = "Invite on Discord"; b.disabled = false; }, 2000);
+};
+let webhookSet = false;
+async function refreshDiscord() {
+	try { webhookSet = (await (await fetch("/api/discord")).json()).webhookSet; } catch { return; }
+	$("dcset").classList.toggle("hidden", !webhookSet);
+	$("dcnew").classList.toggle("hidden", webhookSet);
+	$("invite").classList.toggle("hidden", !webhookSet || mode !== "host");
+}
+$("dcsave").onclick = async () => {
+	$("dcerr").textContent = "";
+	try { await post("/api/discord", { webhook: $("dchook").value }); $("dchook").value = ""; } catch (e) { $("dcerr").textContent = e.message; }
+	refreshDiscord();
+};
+$("dcremove").onclick = async () => { await post("/api/discord", { webhook: "" }); refreshDiscord(); };
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 
 // ---- MultiViewer: start it, setup support, choose and open a setup
@@ -169,6 +199,7 @@ async function refreshMV() {
 }
 refreshMV();
 setInterval(refreshMV, 3000);
+refreshDiscord();
 
 let nameFilled = false;
 async function refresh() {
@@ -178,7 +209,8 @@ async function refresh() {
 	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
 	$("ver").textContent = "F1 Party " + s.version;
 	const inParty = s.mode !== "idle";
-	if (mode !== s.mode) { mode = s.mode; refreshMV(); }
+	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
+	$("note").textContent = s.note || "";
 	$("start").classList.toggle("hidden", inParty);
 	$("party").classList.toggle("hidden", !inParty);
 	$("partybtns").classList.toggle("hidden", !inParty);
