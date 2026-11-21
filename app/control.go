@@ -28,7 +28,8 @@ func startControl(party *Party, host func() (string, error), show func()) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /control/status", func(w http.ResponseWriter, r *http.Request) {
 		s := party.Snapshot()
-		writeJSON(w, map[string]string{"mode": s.Mode, "code": s.Code, "version": version})
+		ps, _ := presenceState.Load().(string)
+		writeJSON(w, map[string]string{"mode": s.Mode, "code": s.Code, "version": version, "discordStatus": ps})
 	})
 	mux.HandleFunc("POST /control/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())

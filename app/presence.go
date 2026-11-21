@@ -11,12 +11,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync/atomic"
 	"time"
 )
 
 // discordAppID: the Discord application "F1 Party" (developer portal), with an art asset named "f1party".
 // Override per computer with "discordAppId" in the settings file; empty switches presence off.
 const discordAppID = "1573782077885653193"
+
+// presenceState: the last result of updating the Discord status (shown in /control/status, for checks).
+var presenceState atomic.Value
 
 type presence struct {
 	conn    io.ReadWriteCloser
@@ -46,10 +50,16 @@ func (p *Party) watchPresence() {
 			continue
 		}
 		if err := pr.set(id, activity); err != nil {
+			presenceState.Store("error: " + err.Error())
 			pr.close()
 			continue
 		}
 		pr.shown = activity != nil
+		if pr.shown {
+			presenceState.Store("shown " + time.Now().Format("15:04:05"))
+		} else {
+			presenceState.Store("cleared")
+		}
 	}
 }
 
@@ -74,6 +84,7 @@ func (pr *presence) activity(s Status) map[string]any {
 		}
 	}
 	a := map[string]any{
+		"type":       3, // "Watching F1 Party"
 		"details":    details,
 		"state":      state,
 		"timestamps": map[string]any{"start": pr.started},
