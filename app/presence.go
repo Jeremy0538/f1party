@@ -16,7 +16,7 @@ import (
 
 // discordAppID: the Discord application "F1 Party" (developer portal), with an art asset named "f1party".
 // Override per computer with "discordAppId" in the settings file; empty switches presence off.
-const discordAppID = ""
+const discordAppID = "1573782077885653193"
 
 type presence struct {
 	conn    io.ReadWriteCloser
@@ -27,7 +27,7 @@ type presence struct {
 
 func (p *Party) watchPresence() {
 	pr := &presence{}
-	for range time.Tick(15 * time.Second) {
+	for ; ; time.Sleep(15 * time.Second) {
 		id := loadConfig().DiscordAppID
 		if id == "" {
 			id = discordAppID
