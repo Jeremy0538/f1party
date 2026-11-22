@@ -19,6 +19,7 @@ import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
 	ROOMS: DurableObjectNamespace<Room>;
+	SKIP_WEBHOOK_CHECK?: string; // local tests only (wrangler dev --var SKIP_WEBHOOK_CHECK:1), never set live
 }
 
 const CODE_RE = /^[A-Z0-9]{4,8}$/;
@@ -31,12 +32,25 @@ export default {
 		const join = path.match(/^\/join\/([A-Za-z0-9]{4,8})$/);
 		if (join) return joinPage(join[1].toUpperCase());
 		if (path === "/post" && req.method === "POST") return postToDiscord(req, env, url.origin);
-		if (path === "/team/create" && req.method === "POST") return teamCreate(req, env);
-		if (path === "/team/info" && req.method === "POST") return teamInfo(req, env);
+		if (req.method === "POST") {
+			switch (path) {
+				case "/people": return people(req, env);
+				case "/team/create": return teamCreate(req, env);
+				case "/team/info": return teamInfo(req, env);
+				case "/team/rename": return teamAction(req, env, "teamRename");
+				case "/team/leave": return teamAction(req, env, "teamLeave");
+				case "/team/invitefriend": return teamAction(req, env, "teamInviteFriend");
+				case "/friend/link": return friendLink(req, env, url.origin);
+				case "/friend/redeem": return friendRedeem(req, env);
+				case "/invite/send": return sendInvites(req, env);
+			}
+		}
 		if (path === "/group/invite" && req.method === "POST") return groupInvite(req, env, url.origin);
 		if (path === "/group/redeem" && req.method === "POST") return groupRedeem(req, env);
 		const groupLink = path.match(/^\/group\/([A-Za-z0-9]{12,32})$/);
 		if (groupLink) return groupPage(groupLink[1]);
+		const friendLinkPath = path.match(/^\/friend\/([A-Za-z0-9]{12,32})$/);
+		if (friendLinkPath) return friendPage(friendLinkPath[1]);
 		if (path !== "/ws") return new Response("Not found", { status: 404 });
 		if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
 		const room = (url.searchParams.get("room") || "").toUpperCase();
@@ -50,7 +64,7 @@ type Attachment = { role: "host" | "guest"; name: string; drift?: number; status
 export class Room extends DurableObject<Env> {
 	async fetch(req: Request): Promise<Response> {
 		const url = new URL(req.url);
-		if (url.pathname === "/internal/group") return this.groupTokens(await req.json());
+		if (url.pathname === "/internal/group") return this.people(await req.json());
 		if (url.pathname === "/internal/allow") return this.allowPost(url.searchParams.get("kind") || "", url.searchParams.get("needHost") === "1");
 		const role = url.searchParams.get("role") === "host" ? "host" : "guest";
 		const name = (url.searchParams.get("name") || "Guest").slice(0, 32);
@@ -138,55 +152,201 @@ export class Room extends DurableObject<Env> {
 		return new Response("ok");
 	}
 
-	// Teams and team links (only in the "__group" object). team:<id> -> {name, webhook, key}; t:<token> ->
-	// {team, exp, uses}. Caps: 10 new teams a day (3 per address), 20 links a day per team, 60 link tries an
-	// hour, so keys and links can't be guessed or farmed.
-	private async groupTokens(cmd: { op: string; token?: string; team?: string; name?: string; webhook?: string; ip?: string }): Promise<Response> {
+	// People, teams and links, all in the one "__group" object (a friend group's worth of data):
+	//   u:<uid>     {secret (sha256), name, status, seen, friends[], teams[]}   the app's fixed id + its secret
+	//   team:<id>   {name, webhook, key, created, owner, members{uid: seen}}
+	//   t:<token>   team link {team, exp, uses}      fl:<token> friend link {from, exp, uses}
+	//   inbox:<uid> [events]  friend made, party invite, team invite; handed over on the next presence call
+	// Caps keep keys and links from being guessed or farmed.
+	private async people(cmd: any): Promise<Response> {
 		const now = Date.now();
+		const st = this.ctx.storage;
 		const cap = async (name: string, max: number, windowMs: number) => {
-			const recent = ((await this.ctx.storage.get<number[]>(name)) || []).filter((t) => now - t < windowMs);
+			const recent = ((await st.get<number[]>(name)) || []).filter((t) => now - t < windowMs);
 			if (recent.length >= max) return false;
 			recent.push(now);
-			await this.ctx.storage.put(name, recent);
+			await st.put(name, recent);
 			return true;
 		};
 		const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 		const random = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => abc[b % abc.length]).join("");
+		const err = (msg: string, status = 400) => new Response(msg, { status });
+
+		// The app's id + secret: the first call claims the id, later calls must bring the same secret.
+		let me: User | undefined;
+		const auth = async (): Promise<Response | null> => {
+			if (!/^[0-9a-f]{12}$/.test(cmd.uid || "") || typeof cmd.secret !== "string" || cmd.secret.length < 20) return err("Bad request");
+			const hash = await sha256(cmd.secret);
+			me = await st.get<User>("u:" + cmd.uid);
+			if (!me) {
+				if (!(await cap("newusers", 200, 86400_000))) return err("Too many new users today", 429);
+				me = { secret: hash, name: cmd.name || "Someone", seen: now, friends: [], teams: [] };
+				await st.put("u:" + cmd.uid, me);
+			} else if (!sameKey(hash, me.secret)) return err("This app's id belongs to someone else", 403);
+			if (cmd.name) me.name = cmd.name;
+			return null;
+		};
+		const saveMe = () => st.put("u:" + cmd.uid, me);
+		const inbox = async (to: string, ev: object) => {
+			const list = ((await st.get<object[]>("inbox:" + to)) || []).slice(-19);
+			list.push({ ...ev, at: now });
+			await st.put("inbox:" + to, list);
+		};
+		const user = (id: string) => st.get<User>("u:" + id);
+		const mutual = async (a: User, aid: string, bid: string) => a.friends.includes(bid) && !!(await user(bid))?.friends.includes(aid);
+		const sharesTeam = async (a: User, bid: string) => {
+			for (const tid of a.teams) if ((await st.get<TeamRec>("team:" + tid))?.members?.[bid]) return true;
+			return false;
+		};
+		const teamLink = async (team: string, uses: number) => {
+			const token = random(16);
+			await st.put("t:" + token, { team, exp: now + 7 * 86400_000, uses });
+			return token;
+		};
+
 		switch (cmd.op) {
-			case "teamCreate": {
-				if (!(await cap("teams:" + (cmd.ip || "?"), 3, 86400_000)) || !(await cap("teams", 10, 86400_000)))
-					return new Response("Too many new teams today, try again tomorrow", { status: 429 });
-				const id = random(8);
-				const key = `f1p_${id}${random(24)}`;
-				await this.ctx.storage.put("team:" + id, { name: cmd.name, webhook: cmd.webhook, key, created: now });
-				return Response.json({ id, key });
-			}
 			case "teamGet": {
-				const t = await this.ctx.storage.get("team:" + cmd.team);
-				return t ? Response.json(t) : new Response("No such team", { status: 404 });
+				const t = await st.get("team:" + cmd.team);
+				return t ? Response.json(t) : err("No such team", 404);
 			}
-			case "create": {
-				if (!(await cap("created:" + cmd.team, 20, 86400_000))) return new Response("Too many team links today", { status: 429 });
-				const token = random(16);
-				await this.ctx.storage.put("t:" + token, { team: cmd.team, exp: now + 7 * 86400_000, uses: 5 });
-				return Response.json({ token });
+			case "create": { // team link, for someone the worker checked has the team key
+				if (!(await cap("created:" + cmd.team, 20, 86400_000))) return err("Too many team links today", 429);
+				return Response.json({ token: await teamLink(cmd.team, 5) });
 			}
-			case "redeem": {
+			case "redeem": { // team link -> team id
 				if (!cmd.token) break;
-				if (!(await cap("tries", 60, 3600_000))) return new Response("Too many tries, try again later", { status: 429 });
-				const t = await this.ctx.storage.get<{ team?: string; exp: number; uses: number }>("t:" + cmd.token);
-				if (!t || t.exp < now || t.uses <= 0) {
-					if (t) await this.ctx.storage.delete("t:" + cmd.token);
-					return new Response("This team link has expired. Ask for a new one.", { status: 410 });
+				if (!(await cap("tries", 60, 3600_000))) return err("Too many tries, try again later", 429);
+				const t = await st.get<{ team?: string; exp: number; uses: number }>("t:" + cmd.token);
+				if (!t || !t.team || t.exp < now || t.uses <= 0) {
+					if (t) await st.delete("t:" + cmd.token);
+					return err("This team link has expired. Ask for a new one.", 410);
 				}
 				t.uses--;
-				if (t.uses > 0) await this.ctx.storage.put("t:" + cmd.token, t);
-				else await this.ctx.storage.delete("t:" + cmd.token);
-				if (!t.team) return new Response("This team link has expired. Ask for a new one.", { status: 410 });
+				if (t.uses > 0) await st.put("t:" + cmd.token, t);
+				else await st.delete("t:" + cmd.token);
 				return Response.json({ team: t.team });
 			}
 		}
-		return new Response("Bad request", { status: 400 });
+
+		if (cmd.op === "teamCreate") { // 1.3.0 apps send no id: such a team has no owner (nobody can rename it)
+			if (cmd.uid) { const d = await auth(); if (d) return d; }
+			if (!(await cap("teams:" + (cmd.ip || "?"), 3, 86400_000)) || !(await cap("teams", 10, 86400_000)))
+				return err("Too many new teams today, try again tomorrow", 429);
+			const id = random(8);
+			const key = `f1p_${id}${random(24)}`;
+			await st.put("team:" + id, { name: cmd.teamName, webhook: cmd.webhook, key, created: now, owner: me ? cmd.uid : undefined, members: me ? { [cmd.uid]: now } : {} });
+			if (me) { if (!me.teams.includes(id)) me.teams.push(id); await saveMe(); }
+			return Response.json({ id, key });
+		}
+
+		const denied = await auth();
+		if (denied) return denied;
+		const m = me!;
+
+		switch (cmd.op) {
+			case "presence": {
+				m.status = cmd.status || null;
+				m.seen = now;
+				m.friends = (cmd.friends as string[]).slice(0, 300);
+				const teams: string[] = cmd.teams.slice(0, 20);
+				for (const tid of new Set([...m.teams, ...teams])) {
+					const t = await st.get<TeamRec>("team:" + tid);
+					if (!t) continue;
+					t.members ||= {};
+					const was = t.members[cmd.uid];
+					if (teams.includes(tid)) t.members[cmd.uid] = now;
+					else delete t.members[cmd.uid];
+					if (was === undefined || !teams.includes(tid) || now - was > 3600_000) await st.put("team:" + tid, t);
+				}
+				m.teams = teams;
+				await saveMe();
+
+				const people = new Map<string, any>();
+				const person = (id: string, u: User) => {
+					let p = people.get(id);
+					if (!p) {
+						p = { id, name: u.name, seen: u.seen, status: now - u.seen < 90_000 ? u.status || null : null, friend: false, teams: [] };
+						people.set(id, p);
+					}
+					return p;
+				};
+				for (const fid of m.friends) {
+					const f = await user(fid);
+					if (f?.friends.includes(cmd.uid)) person(fid, f).friend = true;
+				}
+				const teamsOut = [];
+				for (const tid of m.teams) {
+					const t = await st.get<TeamRec>("team:" + tid);
+					if (!t) continue;
+					const members = Object.entries(t.members || {}).filter(([id, seen]) => id !== cmd.uid && now - seen < 30 * 86400_000);
+					for (const [id] of members) {
+						const u = await user(id);
+						if (u) person(id, u).teams.push(tid);
+					}
+					teamsOut.push({ id: tid, name: t.name, owner: t.owner === cmd.uid, members: members.length + 1 });
+				}
+				const events = (await st.get<object[]>("inbox:" + cmd.uid)) || [];
+				if (events.length) await st.delete("inbox:" + cmd.uid);
+				return Response.json({ people: [...people.values()], teams: teamsOut, inbox: events });
+			}
+			case "teamRename": {
+				const t = await st.get<TeamRec>("team:" + cmd.team);
+				if (!t) return err("No such team", 404);
+				if (t.owner !== cmd.uid) return err("Only the one who started the team can rename it", 403);
+				t.name = cmd.teamName;
+				await st.put("team:" + cmd.team, t);
+				return new Response("ok");
+			}
+			case "teamLeave": {
+				const t = await st.get<TeamRec>("team:" + cmd.team);
+				if (t?.members?.[cmd.uid] !== undefined) { delete t.members[cmd.uid]; await st.put("team:" + cmd.team, t); }
+				m.teams = m.teams.filter((x) => x !== cmd.team);
+				await saveMe();
+				return new Response("ok");
+			}
+			case "teamInviteFriend": {
+				const t = await st.get<TeamRec>("team:" + cmd.team);
+				if (!t?.members?.[cmd.uid]) return err("You're not in that team", 403);
+				if (!(await mutual(m, cmd.uid, cmd.to))) return err("You can only invite friends", 403);
+				if (!(await cap("teaminv:" + cmd.uid, 30, 86400_000))) return err("Too many invites today", 429);
+				await inbox(cmd.to, { type: "team", token: await teamLink(cmd.team, 1), team: t.name, from: cmd.uid, name: m.name });
+				return new Response("ok");
+			}
+			case "friendLink": {
+				if (!(await cap("fl:" + cmd.uid, 20, 86400_000))) return err("Too many friend links today", 429);
+				const token = random(16);
+				await st.put("fl:" + token, { from: cmd.uid, exp: now + 7 * 86400_000, uses: 10 });
+				await saveMe();
+				return Response.json({ token });
+			}
+			case "friendRedeem": {
+				if (!(await cap("tries", 60, 3600_000))) return err("Too many tries, try again later", 429);
+				const l = await st.get<{ from: string; exp: number; uses: number }>("fl:" + cmd.token);
+				if (!l || l.exp < now || l.uses <= 0) return err("This friend link has expired. Ask for a new one.", 410);
+				if (l.from === cmd.uid) return err("That's your own friend link: send it to a friend", 400);
+				const other = await user(l.from);
+				if (!other) return err("This friend link has expired. Ask for a new one.", 410);
+				l.uses--;
+				await st.put("fl:" + cmd.token, l);
+				if (!m.friends.includes(l.from)) m.friends.push(l.from);
+				if (!other.friends.includes(cmd.uid)) { other.friends.push(cmd.uid); await st.put("u:" + l.from, other); }
+				await saveMe();
+				await inbox(l.from, { type: "friend", id: cmd.uid, name: m.name });
+				return Response.json({ id: l.from, name: other.name });
+			}
+			case "send": { // party invite to friends / teammates, in their app
+				if (!(await cap("send:" + cmd.uid, 60, 3600_000))) return err("Too many invites this hour", 429);
+				let sent = 0;
+				for (const to of (cmd.to as string[]).slice(0, 50)) {
+					if (to === cmd.uid || !((await mutual(m, cmd.uid, to)) || (await sharesTeam(m, to)))) continue;
+					await inbox(to, { type: "party", from: cmd.uid, name: m.name, code: cmd.code, title: cmd.title || "" });
+					sent++;
+				}
+				await saveMe();
+				return Response.json({ sent });
+			}
+		}
+		return err("Bad request");
 	}
 
 	private broadcast(msg: object, tag?: string, skip?: WebSocket) {
@@ -242,8 +402,15 @@ function sameKey(a: string, b: string): boolean {
 }
 
 type Team = { id: string; name: string; webhook: string; key: string };
+type TeamRec = { name: string; webhook: string; key: string; created: number; owner?: string; members?: Record<string, number> };
+type User = { secret: string; name: string; status?: any; seen: number; friends: string[]; teams: string[] };
 const groupRoom = (env: Env) => env.ROOMS.get(env.ROOMS.idFromName("__group"));
 const groupCmd = (env: Env, cmd: object) => groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify(cmd) });
+
+async function sha256(s: string): Promise<string> {
+	const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+	return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 async function teamById(env: Env, id: string): Promise<Team | null> {
 	if (!/^[A-Za-z0-9]{8}$/.test(id)) return null;
@@ -260,26 +427,90 @@ async function teamByKey(env: Env, key: unknown): Promise<Team | null> {
 }
 
 const readJSON = async (req: Request): Promise<any> => { try { return await req.json(); } catch { return null; } };
+const forward = async (res: Response) => (res.ok ? res : new Response(await res.text(), { status: res.status }));
+
+// The fields every signed-in call carries: the app's fixed id, its secret and its display name.
+const who = (body: any) => ({ uid: String(body?.id || ""), secret: String(body?.secret || ""), name: clean(body?.name, 24) });
+
+// What the app reports it's doing, kept to known fields.
+function cleanStatus(s: any) {
+	if (!s || (s.mode !== "host" && s.mode !== "guest")) return null;
+	const code = String(s.code || "").toUpperCase();
+	return { mode: s.mode, code: CODE_RE.test(code) ? code : "", title: clean(s.title, 80), live: !!s.live };
+}
+
+// Presence: report yourself, get your friends' and teammates' status, your teams and your inbox.
+async function people(req: Request, env: Env): Promise<Response> {
+	const body = await readJSON(req);
+	if (!body) return new Response("Bad request", { status: 400 });
+	const friends = (Array.isArray(body.friends) ? body.friends : []).map(String).filter((f: string) => /^[0-9a-f]{12}$/.test(f));
+	const teams: string[] = [];
+	const lost: string[] = []; // keys that no longer work (team gone): the app drops them
+	for (const key of (Array.isArray(body.teams) ? body.teams : []).slice(0, 20)) {
+		const t = await teamByKey(env, key);
+		if (t) teams.push(t.id); else lost.push(String(key));
+	}
+	const res = await groupCmd(env, { op: "presence", ...who(body), status: cleanStatus(body.status), friends, teams });
+	if (!res.ok) return forward(res);
+	return Response.json({ ...((await res.json()) as object), lost }, { headers: { "cache-control": "no-store" } });
+}
 
 // A new team: name + the team's Discord webhook (checked with Discord first). Answers the team key.
 async function teamCreate(req: Request, env: Env): Promise<Response> {
 	const body = await readJSON(req);
-	const name = clean(body?.name, 32);
+	const teamName = clean(body?.teamName ?? body?.name, 32);
 	const webhook = String(body?.webhook || "").trim();
-	if (!name) return new Response("Give your team a name", { status: 400 });
+	if (!teamName) return new Response("Give your team a name", { status: 400 });
 	if (!/^https:\/\/(discord|discordapp|canary\.discord|ptb\.discord)\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(webhook))
 		return new Response("That isn't a Discord webhook URL", { status: 400 });
-	const check = await fetch(webhook);
-	if (!check.ok) return new Response("Discord doesn't know that webhook (deleted?)", { status: 400 });
-	const res = await groupCmd(env, { op: "teamCreate", name, webhook: webhook.replace(/^https:\/\/(discordapp|canary\.discord|ptb\.discord)\.com/, "https://discord.com"), ip: req.headers.get("cf-connecting-ip") || "" });
-	if (!res.ok) return new Response(await res.text(), { status: res.status });
+	if (env.SKIP_WEBHOOK_CHECK !== "1") {
+		const check = await fetch(webhook);
+		if (!check.ok) return new Response("Discord doesn't know that webhook (deleted?)", { status: 400 });
+	}
+	const res = await groupCmd(env, {
+		op: "teamCreate", ...who(body), teamName, ip: req.headers.get("cf-connecting-ip") || "",
+		webhook: webhook.replace(/^https:\/\/(discordapp|canary\.discord|ptb\.discord)\.com/, "https://discord.com"),
+	});
+	if (!res.ok) return forward(res);
 	const { key } = (await res.json()) as { key: string };
-	return Response.json({ key, name });
+	return Response.json({ key, name: teamName });
+}
+
+// Team actions that need both the team key (proof you're in it) and who you are.
+async function teamAction(req: Request, env: Env, op: string): Promise<Response> {
+	const body = await readJSON(req);
+	const team = await teamByKey(env, body?.key);
+	if (!team) return new Response("Unknown team key", { status: 403 });
+	const extra: any = {};
+	if (op === "teamRename") { extra.teamName = clean(body.teamName, 32); if (!extra.teamName) return new Response("Give your team a name", { status: 400 }); }
+	if (op === "teamInviteFriend") extra.to = String(body.to || "");
+	return forward(await groupCmd(env, { op, ...who(body), team: team.id, ...extra }));
 }
 
 async function teamInfo(req: Request, env: Env): Promise<Response> {
 	const team = await teamByKey(env, (await readJSON(req))?.key);
 	return team ? Response.json({ name: team.name }) : new Response("Unknown team key", { status: 403 });
+}
+
+async function friendLink(req: Request, env: Env, origin: string): Promise<Response> {
+	const res = await groupCmd(env, { op: "friendLink", ...who(await readJSON(req)) });
+	if (!res.ok) return forward(res);
+	return Response.json({ url: `${origin}/f1party/friend/${((await res.json()) as { token: string }).token}` });
+}
+
+async function friendRedeem(req: Request, env: Env): Promise<Response> {
+	const body = await readJSON(req);
+	const token = String(body?.token || "");
+	if (!/^[A-Za-z0-9]{12,32}$/.test(token)) return new Response("Bad request", { status: 400 });
+	return forward(await groupCmd(env, { op: "friendRedeem", ...who(body), token }));
+}
+
+async function sendInvites(req: Request, env: Env): Promise<Response> {
+	const body = await readJSON(req);
+	const code = String(body?.code || "").toUpperCase();
+	if (!CODE_RE.test(code)) return new Response("Bad request", { status: 400 });
+	const to = (Array.isArray(body.to) ? body.to : []).map(String).filter((f: string) => /^[0-9a-f]{12}$/.test(f));
+	return forward(await groupCmd(env, { op: "send", ...who(body), to, code, title: clean(body.title, 80) }));
 }
 
 async function postToDiscord(req: Request, env: Env, origin: string): Promise<Response> {
@@ -356,6 +587,25 @@ p{color:#8a909c}a{color:#ff7a72}</style></head><body><main>
 <p>Your team is our group of friends: every party invite goes to our Discord channel. One click and you're in, nothing to paste.</p>
 <a class="btn" href="${app}">Open in F1 Party</a>
 <p>Nothing happens? Get F1 Party from <a href="https://github.com/Jeremy0538/f1party/releases/latest">GitHub</a>, start it once, then click the button again.</p>
+<p>The link works for 7 days.</p>
+</main><script>location.href=${JSON.stringify(app)};</script></body></html>`;
+	return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
+}
+
+function friendPage(token: string): Response {
+	const app = `f1party://friend/${token}`;
+	const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Watch F1 with me</title>
+<meta property="og:title" content="Watch F1 with me in F1 Party">
+<meta property="og:description" content="Add me as a friend: see what I'm watching and join in one click.">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0c0d10;color:#eef0f3;font:15px/1.5 system-ui,sans-serif}
+main{max-width:400px;padding:24px;text-align:center}h1{font-size:22px;margin:0 0 10px}
+a.btn{display:inline-block;background:#e10600;color:#fff;text-decoration:none;font-weight:600;padding:11px 18px;border-radius:7px;margin:8px 0}
+p{color:#8a909c}a{color:#ff7a72}</style></head><body><main>
+<h1>Watch F1 with me</h1>
+<p>F1 Party lets us watch F1 in sync in MultiViewer. This link adds me as your friend, so you see what I'm watching and can join in one click.</p>
+<a class="btn" href="${app}">Open in F1 Party</a>
+<p>No F1 Party yet? <a href="https://github.com/Jeremy0538/f1party/releases/latest">Download it</a>, start it once, then click the button again.</p>
 <p>The link works for 7 days.</p>
 </main><script>location.href=${JSON.stringify(app)};</script></body></html>`;
 	return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
