@@ -1,10 +1,19 @@
-# Builds the F1 Party app for every platform. A tag like v0.2.0 also publishes a GitHub release with the files.
+# Builds the F1 Party app for every platform and publishes a GitHub release.
+# Every push to master releases automatically: the newest vX.Y.Z tag plus one minor (1.5.0 -> 1.6.0).
+# Pushing a tag like v2.0.0 by hand still works and uses that exact version.
+# Pushes that only touch docs/, relay/ or Markdown files do not release.
 name: Build
 
 on:
   push:
+    branches: [master]
     tags: ["v*"]
+    paths-ignore: ["docs/**", "relay/**", "**.md"]
   workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -13,7 +22,29 @@ env:
   WAILS_VERSION: v2.17.1
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.v.outputs.v }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            last=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+            last="${last#v}"; last="${last:-0.0.0}"
+            IFS=. read -r major minor _ <<< "$last"
+            v="$major.$((minor + 1)).0"
+          fi
+          echo "v=$v" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -47,12 +78,11 @@ jobs:
           echo "C:/Program Files (x86)/NSIS" >> "$GITHUB_PATH"
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
-      - name: Version from the tag
-        # A tag v1.2.3 makes the app report 1.2.3, so the update check always sees the new release
-        # (main.go's version is only the fallback for builds without a tag).
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Version
+        # The release version is baked into the app, so the update check always sees the new release
+        # (main.go's version is only the fallback for local builds).
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          v="${{ needs.version.outputs.v }}"
           echo "LDFLAGS=-X main.version=$v" >> "$GITHUB_ENV"
           sed -i.bak "s/\"productVersion\": \"[^\"]*\"/\"productVersion\": \"$v\"/" wails.json && rm -f wails.json.bak
       - name: Build
@@ -71,8 +101,8 @@ jobs:
           path: dist/*
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    if: github.event_name != 'workflow_dispatch'
+    needs: [version, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -83,4 +113,9 @@ jobs:
         run: cd dist && sha256sum * > checksums.txt && cat checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.version.outputs.v }}
+          name: F1 Party ${{ needs.version.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          make_latest: true
           files: dist/*
