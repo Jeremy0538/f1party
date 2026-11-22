@@ -60,7 +60,7 @@
 
 	/* battle mode: a small table of its windows */
 	.battlegrid { display:grid; grid-template-columns:64px minmax(0, 1fr) 112px; gap:6px 10px; align-items:center; margin:2px 0 4px; }
-	.battlegrid .bthead { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
+	.bthead { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
 	.battlegrid select { width:100%; }
 	.battlegrid .setval { padding-left:11px; }
 	.seg { display:inline-flex; padding:3px; gap:2px; background:var(--bg); border:1px solid var(--line-2); border-radius:8px; }
@@ -368,7 +368,15 @@
 	.modal { position:fixed; inset:0; background:rgba(8,9,11,.72); display:flex; align-items:center; justify-content:center; z-index:6; }
 	.modal.wide .box { width:560px; }
 	.setpane { min-height:300px; }
-	.setlbl { min-width:140px; font-size:12px; color:var(--dim); }
+	.setlbl { min-width:130px; font-size:12.5px; color:var(--text); }
+	.setrow select.setwide { width:100%; max-width:360px; }
+	.setstate { font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px; background:#262a31; color:var(--dim); }
+	.setstate.on { background:rgba(33,197,93,.14); color:#4ade80; }
+	.setrow input.grow { flex:1; min-width:0; max-width:300px; }
+	/* setups per kind of session: one table */
+	.setuptable { display:grid; grid-template-columns:84px minmax(0, 1fr) minmax(0, 1fr); gap:8px 10px; align-items:center; margin-top:2px; }
+	.setuptable select { width:100%; }
+	.setkind { font-size:12.5px; }
 	.setrow select { max-width:420px; }
 	/* title on top, buttons at the bottom always in view; only the content between them scrolls */
 	.modal .box { display:flex; flex-direction:column; }
@@ -1427,9 +1435,8 @@ async function openSettings(opts = {}) {
 				hint("Others see this name in the party and in invites.")),
 			group("Party",
 				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host"),
-				hint("As a guest you follow the host's pause, play and skips by yourself, and your onboards stay with the main stream."),
-				people.ownWebhook ? row("Own Discord channel", el("span", { className: "hint", style: "margin:0", textContent: "Set (party invites go there too)" }),
-					btn("Remove", "Stop sending party invites to your own Discord webhook", async (e) => { await post("/api/addlink", { link: "" }); e.target.closest(".setrow")?.remove(); refreshDiscord(); }, "link")) : null))],
+				hint("As a guest you follow the host's pause, play and skips by yourself, and your onboards stay with the main stream.")),
+			ownChannelGroup())],
 		sessions: ["Sessions", null],
 		drivers: ["Drivers", null],
 		screen: ["Screen", el("div", {},
@@ -1448,30 +1455,43 @@ async function openSettings(opts = {}) {
 	tabs.sessions[1] = (() => {
 			const setups = c.setups || [], layouts = c.uf1Layouts || [], uf1For = { ...(c.uf1For || {}) };
 			const pl = c.plugin || {};
-			const openWith = pick("openWith", c.openWith || "@auto", [["@auto", "Automatic per session type"], ["@live", "F1 Live only"],
-				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])]);
+			// the saved choice always stays in the list (also while the plugin or that setup isn't found), so a
+			// Save never changes it by itself
+			const owOpts = [["@auto", "Automatic per session type"], ["@live", "F1 Live only"],
+				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])];
+			const ow = c.openWith || "@auto";
+			if (!owOpts.some(([v]) => v === ow)) owOpts.push([ow, ow === "@streamdeck" ? "Stream Deck plugin (not found)" : "Always: " + ow + " (not found)"]);
+			const openWith = pick("openWith", ow, owOpts);
 			const box = el("div", {},
 				group("Apps",
 					uf1Switch,
 					hint(c.uf1 ? "Optional, next to MultiViewer: flag bars, battle mode and more." : "Ultimate F1 Viewer isn't installed on this computer, so its options are greyed out. Get it under Downloads.")),
 				group("Open sessions with",
-					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout." + (pl.installed ? " The Stream Deck plugin is optional: when it isn't running, F1 Party opens everything itself." : "")),
-					row("Open with", openWith),
-					hint("Automatic per session type: each kind of session opens the setup below. Automatic there picks the setup with that word in its name.")));
+					hint("What opens when you watch a session. For one session: Session → Layout."),
+					el("div", { className: "setrow" }, openWith)));
+			openWith.classList.add("setwide");
+			// one table: a row per kind of session, its MultiViewer setup and Ultimate F1 Viewer layout
+			const cell = (t) => el("span", { className: "bthead", textContent: t });
+			const table = el("div", { className: "setuptable" }, cell("Session"), cell("MultiViewer setup"), uf1(cell("Ultimate F1 Viewer layout")));
 			for (const [k, label, auto] of [["setupRace", "Race", c.autoRace], ["setupQuali", "Qualifying", c.autoQuali], ["setupPractice", "Practice", c.autoPractice]]) {
-				const setupSel = pick(k, c[k], [["", "Automatic" + (auto ? " (" + auto + ")" : ", none found")], ...setups.map((n) => [n, n])]);
+				const setupSel = pick(k, c[k], [["", auto ? "Auto: " + auto : "Auto (none found)"], ...setups.map((n) => [n, n])]);
 				const l = el("select", {});
 				const fill = () => {
 					const name = setupSel.value || auto || "";
 					l.innerHTML = "";
-					l.append(new Option("Same name as the setup", ""), new Option("None", "-"));
+					l.append(new Option("Same as setup", ""), new Option("None", "-"));
 					for (const x of layouts) l.append(new Option(x.name, x.id));
 					l.value = name && uf1For[name] !== undefined ? uf1For[name] : "";
 				};
 				l.onchange = () => { const name = setupSel.value || auto || ""; if (!name) return; if (l.value) uf1For[name] = l.value; else delete uf1For[name]; };
 				setupSel.addEventListener("change", fill); fill();
-				box.append(group(label, row("MultiViewer setup", setupSel), uf1(row("Ultimate F1 Viewer layout", l))));
+				table.append(el("span", { className: "setkind", textContent: label }), setupSel, uf1(l));
 			}
+			const perKind = group("Setup per session",
+				hint("Used with Automatic per session type. Auto picks the setup with that word in its name."), table);
+			const showKinds = () => perKind.classList.toggle("setoff", openWith.value !== "@auto");
+			openWith.addEventListener("change", showKinds); showKinds();
+			box.append(perKind);
 			ids.uf1For = () => uf1For;
 			box.append(group("While opening",
 				check("fitTiming", c.fitTiming, "Fit Live Timing to its window", "Zooms the Live Timing rows to the bottom of the window (at most 40% larger)"),
@@ -1560,6 +1580,32 @@ async function openSettings(opts = {}) {
 				})()));
 		})();
 	tabs.lights[1] = lightsTab(c, { check, pick, row, hint, group, ids });
+	// Your own Discord channel: party invites go there too. Connected: a status and Remove; else a field
+	// for the channel's webhook link. Changes count straight away (not on Save).
+	function ownChannelGroup() {
+		const box = el("div", {});
+		const err = el("p", { className: "error", style: "margin:4px 0 0" });
+		const draw = () => {
+			box.innerHTML = "";
+			if (people.ownWebhook) {
+				box.append(row("Your channel", el("span", { className: "setstate on", textContent: "Connected" }),
+					btn("Remove", "Stop sending party invites to your own Discord channel", async () => {
+						err.textContent = "";
+						try { await post("/api/addlink", { link: "" }); people.ownWebhook = false; draw(); refreshDiscord(); } catch (e) { err.textContent = e.message; }
+					})));
+			} else {
+				const link = el("input", { placeholder: "Discord webhook link of your channel", autocomplete: "off", spellcheck: false, className: "grow" });
+				box.append(row("Your channel", link, btn("Connect", "", async () => {
+					err.textContent = "";
+					if (!link.value.trim()) { err.textContent = "Paste the channel's webhook link first."; return; }
+					try { await post("/api/addlink", { link: link.value.trim() }); people.ownWebhook = true; draw(); refreshDiscord(); } catch (e) { err.textContent = e.message; }
+				})));
+			}
+			box.append(err);
+		};
+		draw();
+		return group("Your Discord channel", hint("Party invites also go to this channel, next to your teams'."), box);
+	}
 	tabs.end[1] = el("div", {},
 		group("End session closes",
 			hint("End session closes the streams and what's ticked here, and puts the lights and the taskbar back. The party stays."),
