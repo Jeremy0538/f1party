@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -34,7 +33,7 @@ func init() {
 			}
 		}
 		v["hue"] = hue
-		if runtime.GOOS == "windows" {
+		if placesSupported() {
 			mv, uf1 := winPlacesSaved()
 			v["places"] = map[string]any{"mv": mv, "uf1": uf1, "on": !loadConfig().PlaceOff}
 		}

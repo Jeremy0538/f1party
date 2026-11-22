@@ -16,14 +16,14 @@ switches in mvapp.go, uf1.go, watch.go, plugin.go, update.go, settings.go and ex
 | Close MultiViewer | taskkill | pkill on the command line | mvapp.go mvQuit, watch.go killApp |
 | Ultimate F1 Viewer | yes | PATH or /opt, untested | uf1.go |
 | Stream Deck plugin found | Elgato and OpenDeck folders | OpenDeck folder only | plugin.go |
-| F1 virtual desktop | yes (own desktop, named) | no, does nothing | desktop_*.go |
+| F1 virtual desktop | yes (own desktop, named) | Hyprland: named workspace "F1"; other desktops: no | desktop_*.go, winplace_linux.go |
 | Taskbar while watching | main screen only or auto-hide | no (no common taskbar) | taskbar_*.go |
-| Save and restore window positions | yes | no | winplace_*.go |
-| Tidy windows, battle mode on top | yes | no | winplace_*.go |
-| Main screen size (pick main feed) | yes | no, picks the feed by name | screen_*.go |
+| Save and restore window positions | yes | Hyprland: floating place and size, or tiled; other desktops: no | winplace_*.go |
+| Tidy windows, battle mode on top | yes | Hyprland: floating windows only; other desktops: no | winplace_*.go |
+| Main screen size (pick main feed) | yes | Hyprland: the monitor at 0,0; other desktops: picks the feed by name | screen_*.go, winplace_linux.go |
 | Tray icon, keep running on close | yes | no, closing quits | tray_*.go |
 | Automatic update | download, checksum, replace | only "new version" notice | update.go |
-| Settings tabs shown | all | Windows-only parts hidden (settings "windows" flag) | settings.go, ui.html |
+| Settings tabs shown | all | desktop and window parts only on Hyprland ("desktops" flag, places), taskbar never | settings.go, extras.go, ui.html |
 
 ## Why Linux is missing the window features
 
@@ -31,22 +31,20 @@ Windows has one window API (user32, virtual desktops, one taskbar). Linux does n
 other apps' windows at all, and every desktop (GNOME, KDE, Hyprland, Sway) has its own way. So a Linux backend has
 to be per desktop, with "do nothing" as the fallback.
 
-## Proposed Linux backend
+## Linux backend (Hyprland done, others open)
 
-One file winplace_linux.go (and desktop_linux.go) that picks a backend once at start:
+winplace_linux.go and hypr_linux.go talk to Hyprland's IPC socket. Every dispatch is sent in the classic syntax
+first; when Hyprland answers that it wants the Lua form (Lua config, Hyprland 0.56+), that form is used from then
+on. Windows are recognised by the program behind them (/proc/PID/exe), not by window class.
 
-1. Hyprland (HYPRLAND_INSTANCE_SIGNATURE set): talk to the hyprctl socket.
-   - F1 desktop = a named workspace "F1" (dispatch workspace name:F1).
-   - Save/restore positions = read clients (class multiviewer / ultimate-f1viewer), store workspace, monitor,
-     x/y/size; restore with movetoworkspacesilent + movewindowpixel/resizewindowpixel (floating windows).
-   - Battle mode on top = pin or alterzorder.
-   - Main screen = the focused or first monitor from hyprctl monitors.
-2. KDE Plasma (Wayland): KWin scripts over D-Bus can move windows and switch virtual desktops. Possible, more work.
-3. X11 (any desktop): wmctrl/xdotool style calls through the X server. Works for older setups.
-4. GNOME Wayland and everything else: no window control; the settings stay hidden like now.
+- F1 desktop = workspace "name:F1" (the Desktop name setting). Close F1 goes back to the workspace F1 Party came
+  from; with "The watching workspace" ticked, windows left on it move along and Hyprland drops the empty workspace.
+- Saved position = monitor name, place and size for a floating window; for a tiled window only "tiled" is kept
+  (wpPlace.Maximized), because the layout decides where it goes.
+- Tidy up = the same edge snapping as Windows (wpSnap in winplace_common.go), for floating windows only.
+- Battle mode on top = alterzorder top on the floating Battle mode window.
 
-The settings page should then show the window options per backend ("windows" flag becomes a list of what works)
-instead of Windows only.
+Still to do: KDE Plasma (KWin scripts over D-Bus), X11 (EWMH), GNOME Wayland stays without window control.
 
 ## Smaller Linux fixes done on this branch
 
