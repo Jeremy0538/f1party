@@ -14,10 +14,11 @@
 		--ui:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
 	}
 	* { box-sizing:border-box; }
-	html { height:100%; background:var(--bg); display:flex; align-items:center; justify-content:center; overflow:hidden; }
-	/* The whole layout is drawn at one size and scaled to the window (see fit() below), so it looks the
-	   same at any window size and display scale. */
-	body { margin:0; width:760px; height:480px; flex:none; color:var(--text); font:13px/1.45 var(--ui); -webkit-font-smoothing:antialiased; overflow:hidden; }
+	html { height:100%; background:var(--bg); overflow:hidden; }
+	/* Everything is drawn at one scale for a 760×480 window (see fit() below), so text and buttons keep their
+	   size relative to the window; the layout itself fills the whole window: the header stays at the top,
+	   the sidebar's foot at the bottom, and lists get the extra room. */
+	body { margin:0; width:760px; height:480px; color:var(--text); font:13px/1.45 var(--ui); -webkit-font-smoothing:antialiased; overflow:hidden; }
 	button, input, select { font:inherit; color:inherit; }
 	.app { height:100%; display:grid; grid-template-rows:auto 1fr; }
 
@@ -37,6 +38,11 @@
 
 	.body { display:grid; grid-template-columns:1fr 310px; min-height:0; border-top:1px solid var(--line); }
 	main { padding:22px 26px; min-height:0; display:flex; flex-direction:column; }
+	/* too much to fit: the page scrolls inside its own column (a thin bar shows only when needed) */
+	main, aside { overflow-y:auto; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; }
+	main::-webkit-scrollbar, aside::-webkit-scrollbar { width:8px; }
+	main::-webkit-scrollbar-thumb, aside::-webkit-scrollbar-thumb { background:#2a2e36; border-radius:4px; }
+	main::-webkit-scrollbar-track, aside::-webkit-scrollbar-track { background:transparent; }
 	aside { padding:20px; border-left:1px solid var(--line); display:flex; flex-direction:column; gap:20px; min-height:0; }
 
 	h1 { font:700 22px/1.15 var(--num); margin:0 0 4px; }
@@ -216,8 +222,8 @@
 	button.accept:hover { background:var(--red-hi); }
 	.members .sent { font-size:11px; color:var(--faint); }
 	/* friends tab */
-	#friends { display:flex; flex-direction:column; min-height:0; height:100%; }
-	.flist { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); overflow:auto; min-height:0; }
+	#friends { display:flex; flex-direction:column; }
+	.flist { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
 	.flist li { display:flex; align-items:center; gap:12px; height:46px; border-bottom:1px solid var(--line); padding:0 2px; }
 	.flist .nm { flex:1; min-width:0; }
 	.flist .nm b { display:block; font-weight:600; }
@@ -397,10 +403,12 @@
 	</div>
 </div>
 <script>
-// Draw at 760×480 and scale to the window, keeping the proportions.
+// One scale from a 760×480 design; the layout then takes the window's full width and height at that scale.
 function fit() {
 	const z = Math.max(0.6, Math.min(innerWidth / 760, innerHeight / 480));
 	document.body.style.zoom = z;
+	document.body.style.width = innerWidth / z + "px";
+	document.body.style.height = innerHeight / z + "px";
 }
 addEventListener("resize", fit); fit();
 
