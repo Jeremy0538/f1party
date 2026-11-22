@@ -23,7 +23,7 @@ func TestTimingOrder(t *testing.T) {
 	if got := tm.byPosition(); !slices.Equal(got, []int{1, 4, 16, 14, 23, 31, 10}) {
 		t.Errorf("byPosition = %v", got)
 	}
-	if got := tm.bestOfRest(defaultTopTeams); !slices.Equal(got, []int{14, 31, 10}) {
+	if got := tm.bestOfRest(defaultTopTeams, nil); !slices.Equal(got, []int{14, 31, 10}) {
 		t.Errorf("bestOfRest = %v", got)
 	}
 	if got := tm.byChampionship(); !slices.Equal(got, []int{4, 1, 16}) {

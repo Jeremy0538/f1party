@@ -58,6 +58,7 @@ func main() {
 	go rememberParty(party)
 	go party.runPlans()
 	go followMainStream()
+	go refreshLineup()
 	go func() { // friend requests in the party
 		for range time.Tick(2 * time.Second) {
 			if party.Snapshot().Mode != "idle" {
@@ -330,6 +331,13 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
 			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed() && !loadConfig().Uf1Off}
+		// what really runs: Ultimate F1 Viewer only when it's up, and how many streams MultiViewer shows
+		_, out["uf1Running"] = uf1Main()
+		if running {
+			if ps, err := players(); err == nil {
+				out["streams"] = len(ps)
+			}
+		}
 		if out["uf1"] == true {
 			c := loadConfig()
 			out["uf1Layouts"], out["uf1For"], out["uf1Auto"] = uf1Layouts(), c.Uf1For, uf1LayoutFor(party.Setup())
@@ -823,10 +831,14 @@ type config struct {
 	RestLive      bool     `json:"restLive,omitempty"`      // keep them up to date during the session
 	TopTeams      []string `json:"topTeams,omitempty"`      // the teams whose onboards always stay
 	TopTeamsSet   bool     `json:"topTeamsSet,omitempty"`   // TopTeams was chosen (also none); else McLaren, Ferrari, Mercedes, Red Bull Racing
+	KeepDrivers   []string `json:"keepDrivers,omitempty"`   // drivers (three-letter code) whose onboards always stay
+	KeepBy        string   `json:"keepBy,omitempty"`        // "drivers": KeepDrivers stay; else (teams) the TopTeams stay
 	BattleOn      bool     `json:"battleOn,omitempty"`      // pick battle mode's drivers in Ultimate F1 Viewer
 	BattleLive    bool     `json:"battleLive,omitempty"`    // (1.5) keep them up to date: now BattleEvery
 	BattleLaps    int      `json:"battleLaps,omitempty"`    // laps between battle mode updates during the race (-1 = only when it opens, 0 = 5)
-	BattleRight   string   `json:"battleRight,omitempty"`   // second battle mode window: "" championship top 3, "p5to8" positions 5 to 8
+	BattleRight   string   `json:"battleRight,omitempty"`   // second battle mode window: "" the championship top, "p5to8" the next places in the race
+	BattleMax1    int      `json:"battleMax1,omitempty"`    // at most this many drivers in the first battle mode window, 1-4 (0 = 4)
+	BattleMax2    int      `json:"battleMax2,omitempty"`    // and in the next ones (0 = 4); fewer when they don't fit
 	// Close F1
 	CloseMVOff   bool `json:"closeMvOff,omitempty"`   // leave MultiViewer open
 	CloseUf1Off  bool `json:"closeUf1Off,omitempty"`  // leave Ultimate F1 Viewer open

@@ -6,7 +6,8 @@ package main
 //   - "best of the rest": the setup's onboards of drivers outside the top teams show the best-placed of
 //     them, kept up to date during the session
 //   - the Ultimate F1 Viewer layout that belongs to the setup, after the timing has loaded
-//   - battle mode in the viewer: left the top 4, right the championship top 3 (or P5-8), kept up to date
+//   - battle mode in the viewer: left the race's top places, right the championship top (or the next places),
+//     as many drivers per window as set, kept up to date
 //   - Live Timing zoomed to fill its window
 //   - Close F1: MultiViewer and the viewer closed, the desktop removed, lights and taskbar back
 
@@ -57,6 +58,94 @@ var defaultTopTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racin
 var knownTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racing", "Aston Martin", "Alpine", "Williams",
 	"Racing Bulls", "Haas F1 Team", "Audi", "Cadillac"}
 
+// knownDrivers: the grid's drivers (2026) by team: the Settings list when there's no line-up from the latest
+// session yet (see lineup.go). Code is the three letters the timing and MultiViewer use.
+type driverInfo struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+	Team string `json:"team"`
+}
+
+var knownDrivers = []driverInfo{
+	{"NOR", "Norris", "McLaren"}, {"PIA", "Piastri", "McLaren"},
+	{"LEC", "Leclerc", "Ferrari"}, {"HAM", "Hamilton", "Ferrari"},
+	{"RUS", "Russell", "Mercedes"}, {"ANT", "Antonelli", "Mercedes"},
+	{"VER", "Verstappen", "Red Bull Racing"}, {"HAD", "Hadjar", "Red Bull Racing"},
+	{"ALO", "Alonso", "Aston Martin"}, {"STR", "Stroll", "Aston Martin"},
+	{"GAS", "Gasly", "Alpine"}, {"COL", "Colapinto", "Alpine"},
+	{"ALB", "Albon", "Williams"}, {"SAI", "Sainz", "Williams"},
+	{"LAW", "Lawson", "Racing Bulls"}, {"LIN", "Lindblad", "Racing Bulls"},
+	{"CAM", "Camara", "Haas F1 Team"}, {"BEA", "Bearman", "Haas F1 Team"},
+	{"HUL", "Hülkenberg", "Audi"}, {"BOR", "Bortoleto", "Audi"},
+	{"PER", "Pérez", "Cadillac"}, {"BOT", "Bottas", "Cadillac"},
+}
+
+// allDrivers: the line-up the Settings show: the open session's (also an older season's) while one is open,
+// else the latest session's, else the built-in one. Chosen drivers who aren't in it come last, without a
+// team (the Settings put them under Other drivers), so they can be kept for older sessions or unticked.
+func allDrivers() []driverInfo {
+	var out []driverInfo
+	if t, ok := timingNow(); ok && len(t.DriverList) >= 10 {
+		for _, d := range t.DriverList {
+			if d.Tla != "" {
+				out = append(out, driverInfo{strings.ToUpper(d.Tla), d.LastName, d.TeamName})
+			}
+		}
+	} else if l := savedLineup(); len(l.Drivers) >= 10 {
+		out = append(out, l.Drivers...)
+	} else {
+		out = append(out, knownDrivers...)
+	}
+	put := func(d driverInfo) {
+		if d.Code == "" {
+			return
+		}
+		for i := range out {
+			if strings.EqualFold(out[i].Code, d.Code) {
+				if d.Team != "" {
+					out[i].Team = d.Team
+				}
+				if d.Name != "" {
+					out[i].Name = d.Name
+				}
+				return
+			}
+		}
+		if d.Name == "" {
+			d.Name = d.Code
+		}
+		out = append(out, d)
+	}
+	for _, code := range keepDrivers() {
+		put(driverInfo{Code: code}) // only adds one that's in neither list; never renames
+	}
+	return out
+}
+
+func keepDrivers() []string { return append([]string{}, loadConfig().KeepDrivers...) }
+
+// keepBy: whether whole teams or single drivers keep their onboards ("teams" unless drivers was chosen).
+func keepBy() string {
+	if loadConfig().KeepBy == "drivers" {
+		return "drivers"
+	}
+	return "teams"
+}
+
+// keptNow: the teams and the drivers whose onboards stay, as the switch in Settings says: one of the two.
+func keptNow() (top, keep []string) {
+	if keepBy() == "drivers" {
+		return nil, keepDrivers()
+	}
+	return topTeams(), nil
+}
+
+// kept: an onboard that always stays: its team is one of the top teams, or its driver is chosen.
+func kept(team, code string, top, keep []string) bool {
+	eq := func(v string) func(string) bool { return func(x string) bool { return v != "" && strings.EqualFold(x, v) } }
+	return slices.ContainsFunc(top, eq(team)) || slices.ContainsFunc(keep, eq(code))
+}
+
 // allTeams: the known teams, the teams in the open session's timing and the chosen ones, without doubles.
 func allTeams() []string {
 	out := append([]string{}, knownTeams...)
@@ -69,6 +158,9 @@ func allTeams() []string {
 		for _, d := range t.DriverList {
 			add(d.TeamName)
 		}
+	}
+	for _, d := range savedLineup().Drivers {
+		add(d.Team)
 	}
 	for _, t := range topTeams() {
 		add(t)
@@ -161,7 +253,7 @@ func openChosenSetup(choice, contentID, sessionType string) error {
 	c := loadConfig()
 	if c.RestOn && kind != "practice" {
 		if t, ok := timingNow(); ok {
-			rest = t.bestOfRest(topTeams())
+			rest = t.bestOfRest(keptNow())
 		}
 	}
 	if err := mvOpenSetupRest(name, contentID, rest); err != nil {
@@ -290,6 +382,9 @@ type timing struct {
 	} `json:"TimingData"`
 	DriverList map[string]struct {
 		TeamName string `json:"TeamName"`
+		Tla        string `json:"Tla"`
+		LastName   string `json:"LastName"`
+		TeamColour string `json:"TeamColour"`
 	} `json:"DriverList"`
 	ChampionshipPrediction struct {
 		Drivers map[string]struct {
@@ -359,13 +454,13 @@ func (t *timing) byChampionship() []int {
 	return out
 }
 
-// bestOfRest: the best-placed drivers outside the top teams (still running), best first.
-func (t *timing) bestOfRest(top []string) []int {
+// bestOfRest: the best-placed drivers outside the top teams and the chosen drivers (still running), best first.
+func (t *timing) bestOfRest(top, keep []string) []int {
 	var out []int
 	for _, n := range t.byPosition() {
 		line := t.TimingData.Lines[strconv.Itoa(n)]
-		team := t.DriverList[strconv.Itoa(n)].TeamName
-		if line.Retired || line.Stopped || slices.ContainsFunc(top, func(x string) bool { return strings.EqualFold(x, team) }) {
+		d := t.DriverList[strconv.Itoa(n)]
+		if line.Retired || line.Stopped || kept(d.TeamName, d.Tla, top, keep) {
 			continue
 		}
 		out = append(out, n)
@@ -381,6 +476,7 @@ type slotPlayer struct {
 	DriverData *struct {
 		DriverNumber *int   `json:"driverNumber"`
 		TeamName     string `json:"teamName"`
+		Tla          string `json:"tla"`
 	} `json:"driverData"`
 	StreamData *struct {
 		ContentID string `json:"contentId"`
@@ -405,14 +501,14 @@ func updateRestSlots(force bool) {
 	var out struct {
 		Players []slotPlayer `json:"players"`
 	}
-	if gql(`{ players { id type state { muted volume } driverData { driverNumber teamName } streamData { contentId } bounds { x y width height } } }`, nil, &out) != nil {
+	if gql(`{ players { id type state { muted volume } driverData { driverNumber teamName tla } streamData { contentId } bounds { x y width height } } }`, nil, &out) != nil {
 		return
 	}
-	top := topTeams()
+	top, keep := keptNow()
 	var slots []slotPlayer
 	for _, p := range out.Players {
 		if p.Type == "OBC" && p.DriverData != nil && p.DriverData.DriverNumber != nil &&
-			!slices.ContainsFunc(top, func(x string) bool { return strings.EqualFold(x, p.DriverData.TeamName) }) {
+			!kept(p.DriverData.TeamName, p.DriverData.Tla, top, keep) {
 			slots = append(slots, p)
 		}
 	}
@@ -429,7 +525,7 @@ func updateRestSlots(force bool) {
 	if !ok {
 		return
 	}
-	wanted := t.bestOfRest(top)
+	wanted := t.bestOfRest(top, keep)
 	if len(wanted) < len(slots) {
 		watchNow.lastWanted, watchNow.changeLap = nil, 0
 		return
@@ -570,22 +666,47 @@ func fitLiveTiming(fit bool) {
 	}
 }
 
-// updateBattle: the first battle mode window (from the left) shows the session's top 4, a second one the
-// championship top 3 (or P5-8). False while its windows haven't loaded their driver list yet.
+// battleMax: the most drivers a battle mode window gets (first window, next ones): 4 unless set lower. A
+// window shows fewer when they don't fit in it.
+func battleMax() (first, next int) {
+	c := loadConfig()
+	m := func(n int) int {
+		if n <= 0 {
+			return 4
+		}
+		return min(4, n)
+	}
+	return m(c.BattleMax1), m(c.BattleMax2)
+}
+
+// updateBattle: the first battle mode window (from the left) shows the top of the race, as many as fit (up
+// to 4). A next window carries on where that one stopped (the next places), or shows the top of the
+// championship. False while its windows haven't loaded their driver list yet.
 func updateBattle() bool {
 	t, ok := timingNow()
 	if !ok {
 		return false
 	}
 	pos := t.byPosition()
-	if len(pos) < 8 {
+	if len(pos) < 2 {
 		return false
 	}
-	right := pos[4:8]
-	if champ := t.byChampionship(); loadConfig().BattleRight != "p5to8" && len(champ) >= 3 {
-		right = champ[:3]
+	champ := t.byChampionship()
+	useChamp := loadConfig().BattleRight != "p5to8" && len(champ) >= 2
+	max1, max2 := battleMax()
+	upTo := func(l []int, from, n int) []int {
+		from = min(from, len(l))
+		return l[from:min(len(l), from+n)]
 	}
-	return uf1SetBattle(pos[:4], right)
+	return uf1SetBattle(func(i, shown int) []int {
+		if i == 0 {
+			return upTo(pos, 0, max1)
+		}
+		if useChamp {
+			return upTo(champ, 0, max2)
+		}
+		return upTo(pos, shown, max2)
+	})
 }
 
 // ---------------------------------------------------------------- Close F1

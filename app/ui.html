@@ -22,20 +22,20 @@
 	button, input, select { font:inherit; color:inherit; }
 	.app { height:100%; display:grid; grid-template-rows:auto 1fr; }
 
-	header { display:flex; align-items:center; gap:10px; padding:14px 20px 12px; }
+	/* the bar at the top: the logo, the pages as tabs, Downloads and Settings on the right */
+	header { display:flex; align-items:center; gap:10px; height:50px; padding:0 16px; border-bottom:1px solid var(--line); flex:none; }
 	header img { width:26px; height:26px; }
-	header b { font:700 15px/1 var(--num); letter-spacing:.03em; }
 	header .ver { display:none; } /* the version is under Settings → Updates */
-	header .update { margin-left:auto; font-size:12px; color:#fff; background:var(--red); padding:3px 9px; border-radius:999px; text-decoration:none; }
+	header .update { margin-left:auto; order:0; font-size:12px; color:#fff; background:var(--red); padding:3px 9px; border-radius:999px; text-decoration:none; }
+	header .gear { margin-left:auto; }
 	header .update:not(.hidden) ~ .gear { margin-left:8px; }
 	button.gear { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; margin-left:auto; color:var(--dim); border-color:transparent; background:none; }
 	button.gear:hover { color:var(--text); background:#1c1f25; }
 	/* a red dot: something waits there (an update) */
 	button.gear { position:relative; }
-	button.gear.hasdot::after, .settabs button.hasdot::after { content:""; position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); box-shadow:0 0 0 2px var(--bg); }
+	button.gear.hasdot::after { content:""; position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); box-shadow:0 0 0 2px var(--bg); }
 	button.gear.hasdot::after { top:4px; right:4px; }
-	.settabs button { position:relative; }
-	.settabs button.hasdot::after { top:5px; right:3px; box-shadow:none; }
+	.setnav button.hasdot::after { content:""; position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); }
 	button.gear svg { width:17px; height:17px; }
 	.inparty { font-size:11px; color:var(--ok); border:1px solid rgba(34,197,94,.4); border-radius:999px; padding:2px 8px; white-space:nowrap; }
 	.setrow { display:flex; align-items:center; gap:10px; min-height:34px; }
@@ -49,9 +49,24 @@
 	.setmaster { margin:4px 0; padding:8px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.03); }
 	.setmaster label { font-weight:700; font-size:13.5px; }
 	.setsub { margin:6px 0 0 14px; padding-left:12px; border-left:2px solid var(--line-2); }
-	.teamgrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2px 12px; }
-	.teamgrid label { display:flex; align-items:center; gap:8px; min-height:28px; cursor:pointer; font-size:12.5px; }
-	.teamgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
+	/* Fixed onboards: a card per team in its colour */
+	.tcards, .dcards { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin-top:4px; }
+	.tcard { display:flex; align-items:center; gap:8px; min-height:34px; padding:0 10px; border:1px solid var(--line-2); border-left:3px solid var(--tc); border-radius:8px; background:rgba(255,255,255,.02); cursor:pointer; font-size:12.5px; }
+	.dcard { padding:7px 10px 5px; border:1px solid var(--line-2); border-top:3px solid var(--tc); border-radius:8px; background:rgba(255,255,255,.02); }
+	.dcard.other { border-top-style:dashed; }
+	.dteam { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.dcard label { display:flex; align-items:center; gap:8px; min-height:25px; cursor:pointer; font-size:12.5px; }
+	.tcard input, .dcard input { width:15px; height:15px; accent-color:var(--red); margin:0; flex:none; }
+	/* a two-way switch: Teams | Drivers */
+
+	/* battle mode: a small table of its windows */
+	.battlegrid { display:grid; grid-template-columns:64px minmax(0, 1fr) 112px; gap:6px 10px; align-items:center; margin:2px 0 4px; }
+	.bthead { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
+	.battlegrid select { width:100%; }
+	.battlegrid .setval { padding-left:11px; }
+	.seg { display:inline-flex; padding:3px; gap:2px; background:var(--bg); border:1px solid var(--line-2); border-radius:8px; }
+	.seg button { height:26px; padding:0 14px; border:0; border-radius:6px; background:none; color:var(--dim); font-size:12.5px; }
+	.seg button[aria-checked="true"] { background:#262a31; color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
 	.setoff label, .setoff select, .setoff input { cursor:not-allowed; }
 	/* Start together countdown */
 	.countdown { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(8,9,11,.88); z-index:5; }
@@ -63,6 +78,9 @@
 
 	.body { display:grid; grid-template-columns:1fr 380px; min-height:0; border-top:1px solid var(--line); }
 	main { padding:22px 26px; min-height:0; display:flex; flex-direction:column; }
+	.body.solo { grid-template-columns:1fr; }
+	.body.solo aside { display:none; }
+	.body.solo main > div { margin:0 auto; }
 	/* a wide window: the left column keeps to the left edge at a readable width, the room goes in between */
 	main > div { width:100%; max-width:600px; }
 	/* too much to fit: the page scrolls inside its own column (a thin bar shows only when needed) */
@@ -121,6 +139,12 @@
 	.startcard .hint { margin:4px 0 0; }
 	.startcard button.wide { width:100%; height:44px; margin-top:12px; }
 	#start .lead b { color:var(--text); }
+	/* your name on the start screen */
+	.me { display:flex; align-items:center; gap:10px; margin:0 0 18px; }
+	.me .metext { display:flex; flex-direction:column; gap:1px; min-width:0; }
+	.me .melbl { font-size:11px; color:var(--dim); }
+	.me b { font-size:14px; }
+	.me button { margin-left:auto; height:28px; padding:0 11px; font-size:12px; }
 
 	/* in a party */
 	#party { display:flex; flex-direction:column; min-height:0; height:100%; }
@@ -165,22 +189,30 @@
 	.sess .sesshead button.link { font-size:12px; flex:none; }
 	/* tabs in the header */
 	/* tabs: one bar; Party is the main tab (icon, bold, red when open), a line apart from the rest */
-	.tabs { display:flex; align-items:center; gap:2px; margin-left:18px; padding:3px; background:var(--panel); border:1px solid var(--line-2); border-radius:9px; }
-	.tabs button { height:28px; padding:0 12px; font-size:12.5px; font-weight:500; border:0; border-radius:6px; background:none; color:var(--dim); }
-	.tabs button:hover { background:#1c1f25; color:var(--text); }
-	.tabs button[aria-selected="true"] { background:#262a31; color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
-	.tabs .sep { width:1px; height:16px; background:var(--line-2); margin:0 5px; flex:none; }
-	#tabparty { display:inline-flex; align-items:center; gap:6px; font-weight:700; color:var(--text); letter-spacing:.02em; }
-	#tabparty svg { width:14px; height:14px; flex:none; }
+	.tabs { display:flex; align-items:stretch; gap:4px; margin-left:14px; height:100%; }
+	.tabs button { display:inline-flex; align-items:center; gap:7px; height:100%; padding:0 10px; font-size:13px; font-weight:500; border:0; border-radius:0; background:none; color:var(--dim); }
+	.tabs button svg { width:15px; height:15px; flex:none; }
+	.tabs button:hover { background:none; color:var(--text); }
+	.tabs button[aria-selected="true"] { color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
+	/* Party is the main page: bold, a red button while it's open, a line apart from the rest */
+	#tabparty { align-self:center; height:32px; padding:0 13px; border-radius:8px; font-weight:700; letter-spacing:.02em; color:var(--text); }
 	#tabparty[aria-selected="true"] { background:var(--red); color:#fff; box-shadow:none; }
 	#tabparty[aria-selected="true"]:hover { background:var(--red-hi); }
+	.tabs .sep { align-self:center; width:1px; height:18px; background:var(--line-2); margin:0 6px; flex:none; }
 	.tabs .badge { display:inline-block; min-width:6px; height:6px; border-radius:50%; background:var(--red); margin-left:6px; vertical-align:2px; }
 	/* calendar */
 	#cal { display:flex; flex-direction:column; min-height:0; height:100%; }
-	.calhead { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+	/* the weekend: a card with its name, place, round and dates, then the next session's countdown */
+	.calcard { margin-bottom:12px; padding:10px 12px; background:var(--panel); border:1px solid var(--line-2); border-radius:10px; }
+	.calhead { display:flex; align-items:center; gap:10px; }
+	.calsoon { display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:9px; border-top:1px solid var(--line); font-size:12px; color:var(--dim); }
+	.calsoon:empty { display:none; }
+	.calsoon b { color:var(--text); font-weight:600; }
+	.calsoon .in { margin-left:auto; font:600 12.5px/1 var(--num); font-variant-numeric:tabular-nums; color:var(--text); }
+	.calsoon .live { color:var(--red-hi); font-weight:700; }
 	.calhead .t { flex:1; min-width:0; }
 	.calhead h1 { margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-	.calhead .d { display:block; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.calhead .d { display:block; font-size:12px; color:var(--dim); line-height:1.4; }
 	.calhead button.calpick { overflow:hidden; }
 	.calhead button { width:32px; padding:0; font-size:15px; }
 	.calhead button.calarrow { width:36px; height:36px; flex:none; display:flex; align-items:center; justify-content:center; }
@@ -192,7 +224,7 @@
 	.calhead .calpick .nmrow { display:flex; align-items:center; gap:6px; min-width:0; }
 	.calhead .calpick svg { width:16px; height:16px; flex:none; color:var(--dim); transition:transform .15s; }
 	.calhead .calpick[aria-expanded="true"] svg { transform:rotate(180deg); }
-	.seasonpanel { position:absolute; left:0; right:0; top:58px; bottom:0; overflow:auto; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:5; }
+	.seasonpanel { position:absolute; left:0; right:0; top:66px; bottom:0; overflow:auto; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:5; }
 	.seasonpanel { scrollbar-width:thin; scrollbar-color:#2c313a transparent; }
 	.seasonpanel::-webkit-scrollbar { width:8px; }
 	.seasonpanel::-webkit-scrollbar-thumb { background:#2c313a; border-radius:4px; }
@@ -211,8 +243,17 @@
 	.seasonpanel .races b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.seasonpanel .races span { font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; }
 	.seasonpanel .msg { font-size:12px; color:var(--dim); padding:6px 2px; }
-	.sessions { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
-	.sessions li { display:flex; align-items:center; gap:12px; padding:0 2px; height:42px; border-bottom:1px solid var(--line); }
+	/* the sessions by day: the time first, the next one marked */
+	.sessions { list-style:none; margin:0; padding:0; }
+	.sessions li { display:flex; align-items:center; gap:12px; padding:0 8px; height:40px; border:1px solid transparent; border-radius:8px; }
+	/* a day: its name left, its date right, a line under it; the sessions of that day below */
+	.sessions li.day { height:auto; margin:16px 0 4px; padding:0 2px 6px; border:0; border-bottom:1px solid var(--line-2); border-radius:0; justify-content:space-between; }
+	.sessions li.day:first-child { margin-top:2px; }
+	.sessions li.day b { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text); }
+	.sessions li.day span { font-size:11.5px; color:var(--dim); }
+	.sessions li.next { background:rgba(225,6,0,.07); border-color:rgba(225,6,0,.35); }
+	.sessions li.done .nm b, .sessions li.done .tm { color:var(--dim); }
+	.sessions .tm { width:42px; flex:none; font:600 13px/1 var(--num); font-variant-numeric:tabular-nums; }
 	.sessions .nm { flex:1; min-width:0; }
 	.sessions .nm b { display:block; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.sessions .nm span { font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; }
@@ -230,7 +271,7 @@
 	.calhead button.notifbtn { display:inline-grid; place-items:center; color:var(--dim); }
 	.calhead button.notifbtn.on { color:var(--warn); }
 	.calhead button.notifbtn svg { width:16px; height:16px; display:block; }
-	.notifpanel { position:absolute; right:0; top:52px; width:390px; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:12px 14px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:4; }
+	.notifpanel { position:absolute; right:0; top:62px; width:390px; max-width:100%; box-sizing:border-box; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:12px 14px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:4; }
 	.notifpanel > b { display:block; font-weight:600; margin-bottom:10px; }
 	.notifyrow { display:flex; align-items:center; gap:10px; }
 	.notifyrow .label { margin:0; }
@@ -253,6 +294,12 @@
 	/* Downloads menu */
 	button.dl { height:auto; padding:0; border:0; background:none; color:var(--dim); font-size:12px; font-weight:500; text-decoration:underline; text-underline-offset:2px; }
 	button.dl:hover { color:var(--text); background:none; }
+	.dllist { display:flex; flex-direction:column; gap:6px; }
+	.dlrow { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.02); }
+	.dlrow .dlname { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+	.dlrow .dlname b { font-weight:600; font-size:12.5px; }
+	.dlrow .dlname span { font-size:11.5px; color:var(--dim); }
+	.dlrow button { height:28px; font-size:12px; flex:none; }
 	.dlmenu { position:absolute; right:0; bottom:24px; width:max-content; min-width:250px; text-align:left; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:4; }
 	.dlmenu a { display:flex; justify-content:space-between; align-items:center; gap:24px; white-space:nowrap; padding:7px 9px; border-radius:6px; font-size:12px; color:var(--text); text-decoration:none; }
 	.dlmenu a:hover { background:#20242b; }
@@ -353,19 +400,35 @@
 	button.primary:hover { background:var(--red-hi); }
 	.modal { position:fixed; inset:0; background:rgba(8,9,11,.72); display:flex; align-items:center; justify-content:center; z-index:6; }
 	.modal.wide .box { width:560px; }
-	.settabs { display:flex; gap:2px; flex-wrap:wrap; padding:3px; margin:0 0 12px; background:var(--bg); border:1px solid var(--line-2); border-radius:9px; }
-	.settabs button { height:28px; padding:0 11px; font-size:12px; border:0; border-radius:6px; background:none; color:var(--dim); }
-	.settabs button[aria-selected="true"] { background:#262a31; color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
 	.setpane { min-height:300px; }
-	.setlbl { min-width:140px; font-size:12px; color:var(--dim); }
+	.setlbl { min-width:130px; font-size:12.5px; color:var(--text); }
+	.setrow select.setwide { width:100%; max-width:360px; }
+	.setstate { font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px; background:#262a31; color:var(--dim); }
+	.setstate.on { background:rgba(33,197,93,.14); color:#4ade80; }
+	.setrow input.grow { flex:1; min-width:0; max-width:300px; }
+	/* setups per kind of session: one table */
+	.setuptable { display:grid; grid-template-columns:84px minmax(0, 1fr) minmax(0, 1fr); gap:8px 10px; align-items:center; margin-top:2px; }
+	.setuptable select { width:100%; }
+	.setkind { font-size:12.5px; }
 	.setrow select { max-width:420px; }
 	/* title on top, buttons at the bottom always in view; only the content between them scrolls */
 	.modal .box { display:flex; flex-direction:column; }
 	#modalbody { flex:1 1 auto; min-height:0; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; margin:0 -18px; padding:0 18px; }
 	.modal .box > .row { flex:none; padding-top:12px; border-top:1px solid var(--line); }
 	/* sticky tab bar: a band in the window's colour around and below it, so nothing scrolls into view behind its corners or the gap under it */
-	.settabswrap { position:sticky; top:0; z-index:1; background:var(--panel); margin:0 -18px 4px; padding:0 18px 8px; }
-	.settabswrap .settabs { margin:0; }
+	/* Settings: a menu on the left, the subject's settings next to it */
+	.modal.wide.side .box { width:min(700px, 86vw); height:min(520px, 80%); }
+	/* the menu stays put, only the settings on the right scroll */
+	.modal.side #modalbody { overflow:hidden; display:flex; }
+	.setlayout { flex:1; display:grid; grid-template-columns:156px minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:20px; min-height:0; }
+	.setnav { display:flex; flex-direction:column; gap:2px; padding:2px 14px 2px 0; border-right:1px solid var(--line-2); overflow-y:auto; scrollbar-width:none; }
+	.setnav button { position:relative; display:flex; align-items:center; gap:10px; width:100%; height:34px; padding:0 10px; border:0; border-radius:7px; background:none; color:var(--dim); font-size:13px; text-align:left; justify-content:flex-start; }
+	.setnav button svg { width:16px; height:16px; flex:none; }
+	.setnav button:hover { background:#1f232a; color:var(--text); }
+	.setnav button[aria-selected="true"] { background:#262a31; color:var(--text); box-shadow:inset 3px 0 0 var(--red); }
+	.setnav button.hasdot::after { top:50%; right:10px; margin-top:-3.5px; box-shadow:none; }
+	.setnavgap { flex:1; min-height:16px; border-bottom:1px solid var(--line-2); margin:0 4px 6px; }
+	.setlayout .setpane { min-height:0; overflow-y:auto; padding:2px 8px 8px 0; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; }
 	.modal .box { width:380px; max-height:86%; overflow:hidden; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
 	.modal .box > b { display:block; font-size:15px; margin-bottom:10px; }
 	.pick { display:flex; flex-direction:column; gap:2px; }
@@ -408,6 +471,8 @@
 	/* who's in the party: one row per person, status under the name */
 	/* the party: one box with who you are, the code and its buttons, End party as a cross */
 	.asktext { margin:8px 0 0; color:var(--dim); line-height:1.5; }
+	.sess #together { width:100%; height:40px; margin:12px 0 4px; }
+	.ptop #sync { flex:none; font-size:12px; padding:0 2px; }
 	.pcard { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:14px 16px 16px; margin-bottom:12px; }
 	.ptop { display:flex; align-items:center; gap:10px; }
 	.ptop .boxtitle { white-space:nowrap; }
@@ -501,14 +566,13 @@
 </div>
 <div class="app">
 	<header>
-		<img src="/logo.png" alt="">
-		<b>F1 PARTY</b>
+		<img src="/logo.png" alt="F1 Party">
 		<nav class="tabs" role="tablist">
 			<button role="tab" id="tabparty" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M17 2l-5 5-5-5"/></svg>Party</button>
 			<span class="sep" aria-hidden="true"></span>
-			<button role="tab" id="tabcal" aria-selected="false">Calendar</button>
-			<button role="tab" id="tabfriends" aria-selected="false">Friends</button>
-			<button role="tab" id="tabteams" aria-selected="false">Teams</button>
+			<button role="tab" id="tabcal" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Calendar</button>
+			<button role="tab" id="tabfriends" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.4c1.8.8 3 2.7 3 5.6"/></svg>Friends</button>
+			<button role="tab" id="tabteams" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.3"/><circle cx="19" cy="10" r="2.3"/><path d="M6.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5M1.5 18.5c0-2.2 1.4-3.8 3.5-3.8M22.5 18.5c0-2.2-1.4-3.8-3.5-3.8"/></svg>Teams</button>
 		</nav>
 		<a class="update hidden" id="update"></a>
 		<span class="ver" id="ver"></span>
@@ -518,8 +582,11 @@
 	<div class="body">
 		<main>
 			<div id="start">
-				<h1>Watch together</h1>
-				<p class="lead">You watch as <b id="asname">…</b> · <button class="link" id="namechange">Change</button></p>
+				<h1>Host or join a party</h1>
+				<div class="me">
+					<span class="av" id="asav"></span>
+					<div class="metext"><span class="melbl">Your name</span><b id="asname">…</b></div>
+				</div>
 				<section class="pcard startcard">
 					<span class="boxtitle">Host</span>
 					<p class="hint">Start a party and share its code with your friends.</p>
@@ -542,6 +609,7 @@
 					<div class="ptop">
 						<span class="boxtitle" id="roleline">Your party</span><span id="rolebadge"></span>
 						<span class="pstatus" id="pstatus"><span class="dot" id="dot"></span><span id="status">…</span></span>
+						<button class="link hidden" id="sync">Sync</button>
 						<button class="ib" id="leave" title="End the party" aria-label="End the party"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
 					</div>
 					<div class="pmid">
@@ -553,8 +621,6 @@
 					</div>
 					<div class="feedline"><span id="feed"></span><span class="gap" id="gap"></span></div>
 				</section>
-				<div class="row pacts"><button class="primary hidden" id="together">Start together</button><button id="sync">Sync</button>
-					<label class="autosync hidden" id="autosyncrow" title="Follow the host by itself: their pause, play and skips, and your onboards stay with the main stream. Off: only when you click Sync to host."><input type="checkbox" id="autosync" checked> Auto-sync</label></div>
 				<div class="note" id="note"></div>
 				<div class="error" id="syncerr"></div>
 				<section class="card mcard">
@@ -593,6 +659,7 @@
 				<div class="error" id="dcerr"></div>
 			</div>
 			<div id="cal" class="hidden" role="tabpanel">
+				<div class="calcard">
 				<div class="calhead">
 					<button id="calprev" class="calarrow" aria-label="Previous weekend" title="Previous weekend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
 					<button class="calpick" id="calpick" aria-haspopup="true" aria-expanded="false" aria-controls="seasonpanel" title="Every season and race">
@@ -601,6 +668,8 @@
 					</button>
 					<button id="notifbtn" class="notifbtn" aria-haspopup="true" aria-expanded="false" aria-controls="notifpanel" title="Notifications" aria-label="Notifications"></button>
 					<button id="calnext" class="calarrow" aria-label="Next weekend" title="Next weekend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+				</div>
+				<div class="calsoon" id="calsoon"></div>
 				</div>
 				<div class="seasonpanel hidden" id="seasonpanel" role="dialog" aria-label="Seasons and races">
 					<div class="years" id="seasonyears" role="group" aria-label="Season"></div>
@@ -630,12 +699,12 @@
 		</main>
 
 		<aside>
-			<section class="box setupbox">
+			<section class="box setupbox" id="setupbox">
 				<div class="boxhead">
 					<span class="boxtitle">Setup</span>
 					<span class="mvstate"><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
 					<span class="mvacts">
-						<button class="hidden" id="mvstart">Start</button><button class="hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
+						<button class="hidden" id="mvstart">Start</button><button class="hidden" id="mvclose" title="Closes MultiViewer and the rest, as set under Settings → End session">Close</button><button class="hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
 					</span>
 				</div>
 				<div class="boxsub" id="setupapps"></div>
@@ -649,6 +718,7 @@
 					<span class="sublbl">Layout</span>
 					<div class="row"><select id="setup" class="grow" aria-label="Layout for this session"></select><button id="setupopen">Open</button></div>
 				</div>
+				<button class="primary wide hidden" id="together" title="The five lights for everyone, then the whole party plays from here at the same moment">Start together</button>
 				<div class="sesspart jumpspart">
 					<span class="sublbl">Go to</span>
 					<div class="jumps">
@@ -664,15 +734,6 @@
 				</div>
 				<div class="error" id="sesserr"></div>
 			</section>
-			<div class="foot">
-				<button class="dl" id="dlbtn" aria-haspopup="true" aria-expanded="false" aria-controls="dlmenu">Downloads</button>
-				<div class="dlmenu hidden" id="dlmenu" role="menu">
-					<a role="menuitem" data-url="https://multiviewer.app/download">MultiViewer <span id="dlmv"></span></a>
-					<a role="menuitem" data-url="https://github.com/MRAJEKO/UF1-Viewer-with-F1MV/releases/latest">Ultimate F1 Viewer <span id="dluf1"></span></a>
-					<a role="menuitem" data-url="https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control">F1 Race Control (Stream Deck) <span id="dlsd"></span></a>
-					<a role="menuitem" data-url="https://github.com/Jeremy0538/f1party/releases/latest">F1 Party <span>Share with friends</span></a>
-				</div>
-			</div>
 		</aside>
 	</div>
 </div>
@@ -718,7 +779,6 @@ let myCode = "", mode = "idle", savedName = "", webhookSet = false, pluginDownlo
 // your name lives in Settings → General; host and join use the saved one
 $("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", {}); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
-$("namechange").onclick = () => { setTab = "general"; openSettings(); };
 // the join code boxes: one character each, on to the next as you type, back with Backspace, paste fills them all
 (() => {
 	const boxes = [...document.querySelectorAll("#codeboxes .cbox")];
@@ -775,7 +835,6 @@ $("together").onclick = async () => {
 	}
 	b.disabled = false;
 };
-$("autosync").onchange = async () => { await post("/api/autosync", { on: $("autosync").checked }); refresh(); };
 $("update").onclick = async () => {
 	if (!updateAuto) return openURL(updateURL);
 	try { await post("/api/update"); } catch (e) { $("update").textContent = e.message; }
@@ -825,12 +884,27 @@ function updatesTab(group, hint) {
 }
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 // Downloads menu: opens above the link, closes on a pick, a click elsewhere or Escape
-function showDownloads(on) { $("dlmenu").classList.toggle("hidden", !on); $("dlbtn").setAttribute("aria-expanded", String(on)); }
-$("dlbtn").onclick = (e) => { e.stopPropagation(); showDownloads($("dlmenu").classList.contains("hidden")); };
-document.querySelectorAll("#dlmenu a").forEach((a) => a.onclick = (e) => { e.stopPropagation(); openURL(a.dataset.url); showDownloads(false); });
-document.addEventListener("click", () => showDownloads(false));
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") showDownloads(false); });
-const installed = (id, yes) => { $(id).textContent = yes ? "✓ Installed" : "Download"; $(id).className = yes ? "ok" : ""; };
+// Downloads (Settings → Downloads): the apps F1 Party works with, and F1 Party itself to share
+const DOWNLOADS = [
+	["mv", "MultiViewer", "Plays the F1 TV streams; F1 Party drives it.", "https://multiviewer.app/download"],
+	["uf1", "Ultimate F1 Viewer", "Optional: flag bars, battle mode and more.", "https://github.com/MRAJEKO/UF1-Viewer-with-F1MV/releases/latest"],
+	["sd", "F1 Race Control (Stream Deck)", "Optional: F1 Party on your Stream Deck keys.", "https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control"],
+	["party", "F1 Party", "Send it to friends so they can join.", "https://github.com/Jeremy0538/f1party/releases/latest"],
+];
+const installed = () => {}; // (the old Downloads menu's marks; the Downloads page reads mvNow itself)
+function downloadsTab(group, hint) {
+	const m = mvNow || {}, pl = m.plugin || {};
+	const have = { mv: m.installed, uf1: m.uf1, sd: pl.installed, party: true };
+	const list = el("div", { className: "dllist" });
+	for (const [k, name, what, url] of DOWNLOADS) {
+		const state = k === "party" ? el("span", { className: "setstate", textContent: "Share" })
+			: el("span", { className: "setstate" + (have[k] ? " on" : ""), textContent: have[k] ? "Installed" : "Not installed" });
+		list.append(el("div", { className: "dlrow" },
+			el("div", { className: "dlname" }, el("b", { textContent: name }), el("span", { textContent: what })),
+			state, btn(have[k] && k !== "party" ? "Open page" : "Download", url, () => openURL(url))));
+	}
+	return el("div", {}, group("Downloads", hint("The apps F1 Party works with. Downloads open in your browser."), list));
+}
 
 // ---- Friends and teams (people.go). Refreshed every few seconds while the Friends or Teams tab is open.
 let people = { friends: [], teams: [], invites: [], teamInvites: [], ownWebhook: false };
@@ -1044,7 +1118,7 @@ function ask(title, text, okText = "OK", cancelText = "Cancel") {
 new MutationObserver(() => {
 	const m = $("modal");
 	if (!m.classList.contains("hidden")) return;
-	if (m.classList.contains("wide")) m.classList.remove("wide");
+	if (m.classList.contains("wide")) m.classList.remove("wide", "side");
 	for (const b of m.querySelectorAll("[data-wiz]")) b.remove(); // the setup guide's Back and Next
 	$("modalcancel").style.marginRight = "";
 }).observe($("modal"), { attributes: true, attributeFilter: ["class"] });
@@ -1152,7 +1226,9 @@ async function refreshMV() {
 	installed("dlmv", m.installed); installed("dluf1", m.uf1); installed("dlsd", pl.installed);
 	$("mvdot").className = "dot " + (m.running ? "ok" : "bad");
 	$("mvstate").textContent = m.running ? "Running" : (m.installed ? "Not running" : "Not installed");
-	$("setupapps").textContent = !m.running ? "" : m.setupsReady || !(m.setups || []).length ? "MultiViewer" + (m.uf1 ? " · Ultimate F1 Viewer" : "") : "MultiViewer runs without setup support";
+	$("setupapps").textContent = !m.running ? ""
+		: !(m.setupsReady || !(m.setups || []).length) ? "MultiViewer runs without setup support"
+		: "MultiViewer" + (m.uf1Running ? " · Ultimate F1 Viewer" : "") + (m.streams === 0 ? " · no streams open" : "");
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
 	if (m.running !== mvWasRunning) { mvWasRunning = m.running; refreshSession(); }
@@ -1179,13 +1255,14 @@ async function refresh() {
 	try { s = await (await fetch("/api/status")).json(); }
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
 	savedName = s.name || ""; $("asname").textContent = savedName || "Guest";
+	{ const a = avatar(savedName || "Guest"); $("asav").style.background = a.style.background; $("asav").textContent = a.textContent; }
 	$("ver").textContent = s.version;
 	welcome(s.welcome);
 	if (s.open === "cal") showTab("cal");
 	const up = s.update;
 	$("update").classList.toggle("hidden", !up);
 	$("settingsbtn").classList.toggle("hasdot", !!up);
-	document.querySelector('.settabs button[data-k="updates"]')?.classList.toggle("hasdot", !!up);
+	document.querySelector('.setnav button[data-k="updates"]')?.classList.toggle("hasdot", !!up);
 	if (up) {
 		updateURL = up.url; updateAuto = !!up.auto && !up.error;
 		$("update").textContent = up.busy || up.error || "Update to " + up.version;
@@ -1200,7 +1277,7 @@ async function refresh() {
 	}
 	const inParty = s.mode !== "idle";
 	myCode = inParty ? s.code : "";
-	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
+	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); refreshSession(); }
 	$("start").classList.toggle("hidden", inParty || tab !== "party");
 	$("party").classList.toggle("hidden", !inParty || tab !== "party");
 	if (!inParty) return;
@@ -1218,19 +1295,23 @@ async function refresh() {
 	}
 	if (($("note").textContent || "") !== (s.note || "")) refreshDiscord(); // e.g. a group invite link just set up Discord
 	$("note").textContent = s.note || "";
-	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync everyone";
 	$("sync").title = s.mode === "guest" ? "Jump to the host and take your onboards along" : "Everyone, and your own onboards, to your main stream";
 	$("pstatus").title = s.status || "";
 	$("leave").title = s.mode === "host" ? "End the party" : "Leave the party";
 	$("leave").setAttribute("aria-label", $("leave").title);
-	$("together").classList.toggle("hidden", s.mode !== "host");
-	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
-	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
-	// the host's usual status says what the heading already does: keep it short next to it
-	// only what matters here: the session box on the right already says whether a session is open
-	let stTxt = /^Hosting: guests follow/.test(s.status || "") ? ((s.members || []).length > 1 ? "Guests follow you" : "") : (s.status || "");
-	if (s.mode === "host" && !s.mvOnline) stTxt = "";
+	// The status only when it matters: someone out of step (with a Sync button), or no connection. Whether a
+	// session is open, and starting it, is the session box's job on the right.
+	const inSync = (st) => /^In sync/.test(st || "");
+	const behind = s.mode === "host"
+		? (s.members || []).filter((m) => m.role === "guest" && !inSync(m.status))
+		: (!inSync(s.status) && s.feed ? [{ name: "you" }] : []);
+	let stTxt = "";
+	if (!s.connected) stTxt = "Connecting…";
+	else if (s.mode === "host" && behind.length) stTxt = behind.length === 1 ? behind[0].name + " isn't in sync" : behind.length + " people aren't in sync";
+	else if (s.mode === "guest" && s.feed && !inSync(s.status)) stTxt = s.status || "Not in sync";
+	else if (s.mode === "guest" && !s.feed) stTxt = s.status || "";
 	$("status").textContent = stTxt;
+	$("sync").classList.toggle("hidden", !(s.connected && behind.length));
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
 	const ok = s.mvOnline && s.connected;
@@ -1297,7 +1378,13 @@ async function refreshSession() {
 	const v = sessData;
 	const hosting = mode === "host";
 	// also without a party or session while MultiViewer runs: End session is how F1 closes
-	$("sess").classList.toggle("hidden", !v && !hosting && !mvWasRunning);
+	// not in a party and nothing open: no Session box (Setup has Close for the apps then)
+	$("sess").classList.toggle("hidden", !v && mode === "idle");
+	$("mvclose").classList.toggle("hidden", !(mode === "idle" && !v && mvWasRunning));
+	// not in a party: the Setup box only while MultiViewer runs (to see it and close it)
+	$("setupbox").classList.toggle("hidden", mode === "idle" && !v && !mvWasRunning);
+	// nothing on the right: one column, no split
+	document.querySelector(".body").classList.toggle("solo", $("sess").classList.contains("hidden") && $("setupbox").classList.contains("hidden"));
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v && !v.stopped ? "Change" : "Select";
 	$("sesschange").title = v ? "Pick another session in the calendar: the whole party switches to it" : "Pick a session in the calendar to watch together";
@@ -1305,6 +1392,7 @@ async function refreshSession() {
 	document.querySelector(".sess .jumpspart").classList.toggle("hidden", !v || !!v.stopped);
 	// End session: with a session open (host: for everyone, guest: just you); Watch again after a guest's end
 	$("sessend").classList.toggle("hidden", v ? !!v.stopped : !mvWasRunning);
+	$("together").classList.toggle("hidden", !hosting || !v || !!v.stopped);
 	$("sesslayout").classList.toggle("hidden", !v || !!v.stopped);
 	if (!v) delete $("setup").dataset.touched;
 	$("sessend").title = hosting ? "Close this session for everyone; the party stays" : "Stop watching this session; the party stays";
@@ -1347,7 +1435,20 @@ $("sesschange").onclick = () => showTab("cal");
 // Settings (gear at the top right): tabs per subject, groups with a heading and a line between them.
 // Everything is optional. Ultimate F1 Viewer has its own switch; its options are greyed out while it's off
 // or not installed. The taskbar is Windows only; desktops and window positions Windows and Hyprland.
-let setTab = "general";
+let setTab = "party";
+// subjects that were renamed: older What's new entries still point at them
+const oldTabs = { general: "party", windows: "screen", close: "end" };
+const ico = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const setIcons = {
+	party: ico('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.6 0 4.5 1.9 4.5 5"/>'),
+	sessions: ico('<rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M10 8.5v5l4.5-2.5z"/><path d="M8 21h8"/>'),
+	drivers: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 14v7M10 12H3.2M14 12h6.8"/>'),
+	screen: ico('<rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M8 21h8M12 16.5V21"/>'),
+	lights: ico('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.4 1.1 2.2h5c0-.8.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/>'),
+	end: ico('<path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/>'),
+	updates: ico('<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'),
+	downloads: ico('<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 21h16"/>'),
+};
 $("settingsbtn").onclick = () => openSettings();
 addEventListener("focus", () => post("/api/update/check").catch(() => {}));
 // opts.wizard: the first-start guide, one tab per step with Back and Next; opts.tab: open on that tab.
@@ -1369,106 +1470,218 @@ async function openSettings(opts = {}) {
 	const uf1 = (node) => { uf1Parts.push(node); return node; };
 	const uf1Usable = () => !!c.uf1 && (!uf1Switch || uf1Switch.input.checked);
 	let uf1Switch = null;
+	const uf1After = []; // parts with their own switch inside an Ultimate F1 Viewer part: they look again after it
 	const syncUf1 = () => { const on = uf1Usable();
-		for (const n of uf1Parts) { n.classList.toggle("setoff", !on); for (const i of n.querySelectorAll("input, select, button")) i.disabled = !on; } };
+		for (const n of uf1Parts) { n.classList.toggle("setoff", !on); for (const i of n.querySelectorAll("input, select, button")) i.disabled = !on; }
+		for (const f of uf1After) f(); };
 
 	uf1Switch = check("uf1On", c.uf1 && c.uf1On !== false, "Use Ultimate F1 Viewer", "Opens its layout with each setup, battle mode and the rest");
 	if (!c.uf1) { uf1Switch.input.disabled = true; uf1Switch.classList.add("setoff"); }
 	uf1Switch.input.addEventListener("change", syncUf1);
 
 	const tabs = {
-		general: ["General", el("div", {},
-			group("You",
-				row("Your name", text("name", c.name || "", { maxLength: 24, placeholder: "Name", style: "width:180px" })),
+		party: ["You and party", el("div", {},
+			group("Your name",
+				row("Name", text("name", c.name || "", { maxLength: 24, placeholder: "Name", style: "width:180px" })),
 				hint("Others see this name in the party and in invites.")),
-			group("Apps",
-				uf1Switch,
-				hint(c.uf1 ? "Optional: next to MultiViewer for flag bars, battle mode and more." : "Ultimate F1 Viewer isn't installed on this computer, so its options are greyed out. Get it under Downloads.")),
+			group("Party",
+				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host"),
+				hint("As a guest you follow the host's pause, play and skips by yourself, and your onboards stay with the main stream.")),
+			ownChannelGroup())],
+		sessions: ["Sessions", null],
+		drivers: ["Drivers", null],
+		screen: ["Screen", el("div", {},
 			group("Desktop",
 				desk ? check("desktop", c.desktop, "Open everything on its own desktop", win ? "MultiViewer, setups and Ultimate F1 Viewer open on this virtual desktop; made when it isn't there yet" : "MultiViewer, setups and Ultimate F1 Viewer open on this Hyprland workspace") : hint("Desktops work on Windows and Hyprland."),
 				desk ? row(desk && !win ? "Workspace name" : "Desktop name", text("desktopName", c.desktopName || "F1", { maxLength: 40, style: "width:140px" })) : null),
 			group("Taskbar while watching",
 				win ? row("Taskbar", pick("taskbar", c.taskbar, [["", "Leave it as it is"], ["main", "Only on the main monitor"], ["autohide", "Hide automatically"]])) : hint("The taskbar setting is Windows only."),
 				win ? hint("Put back as it was when the party or the session ends, or F1 Party closes.") : null),
-			group("Party",
-				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host"),
-				people.ownWebhook ? row("Own Discord channel", el("span", { className: "hint", style: "margin:0", textContent: "Set (party invites go there too)" }),
-					btn("Remove", "Stop sending party invites to your own Discord webhook", async (e) => { await post("/api/addlink", { link: "" }); e.target.closest(".setrow")?.remove(); refreshDiscord(); }, "link")) : null))],
-		sessions: ["Sessions", (() => {
+			// the window groups sit next to the others (one line between each), not in a box of their own
+			...((w) => (w.tagName === "DIV" ? [...w.childNodes] : [w]))(windowsTab(c, { check, row, hint, group, uf1, ids })))],
+		lights: ["Lights", null],
+		end: ["End session", null],
+		updates: ["Updates", null],
+		downloads: ["Downloads", null],
+	};
+	tabs.sessions[1] = (() => {
 			const setups = c.setups || [], layouts = c.uf1Layouts || [], uf1For = { ...(c.uf1For || {}) };
 			const pl = c.plugin || {};
-			const openWith = pick("openWith", c.openWith || "@auto", [["@auto", "Automatic per session type"], ["@live", "F1 Live only"],
-				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])]);
+			// the saved choice always stays in the list (also while the plugin or that setup isn't found), so a
+			// Save never changes it by itself
+			const owOpts = [["@auto", "Automatic per session type"], ["@live", "F1 Live only"],
+				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])];
+			const ow = c.openWith || "@auto";
+			if (!owOpts.some(([v]) => v === ow)) owOpts.push([ow, ow === "@streamdeck" ? "Stream Deck plugin (not found)" : "Always: " + ow + " (not found)"]);
+			const openWith = pick("openWith", ow, owOpts);
 			const box = el("div", {},
+				group("Apps",
+					uf1Switch,
+					hint(c.uf1 ? "Optional, next to MultiViewer: flag bars, battle mode and more." : "Ultimate F1 Viewer isn't installed on this computer, so its options are greyed out. Get it under Downloads.")),
 				group("Open sessions with",
-					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout." + (pl.installed ? " The Stream Deck plugin is optional: when it isn't running, F1 Party opens everything itself." : "")),
-					row("Open with", openWith),
-					hint("Automatic per session type: each kind of session opens the setup below. Automatic there picks the setup with that word in its name.")));
+					hint("What opens when you watch a session. For one session: Session → Layout."),
+					el("div", { className: "setrow" }, openWith)));
+			openWith.classList.add("setwide");
+			// one table: a row per kind of session, its MultiViewer setup and Ultimate F1 Viewer layout
+			const cell = (t) => el("span", { className: "bthead", textContent: t });
+			const table = el("div", { className: "setuptable" }, cell("Session"), cell("MultiViewer setup"), uf1(cell("Ultimate F1 Viewer layout")));
 			for (const [k, label, auto] of [["setupRace", "Race", c.autoRace], ["setupQuali", "Qualifying", c.autoQuali], ["setupPractice", "Practice", c.autoPractice]]) {
-				const setupSel = pick(k, c[k], [["", "Automatic" + (auto ? " (" + auto + ")" : ", none found")], ...setups.map((n) => [n, n])]);
+				const setupSel = pick(k, c[k], [["", auto ? "Auto: " + auto : "Auto (none found)"], ...setups.map((n) => [n, n])]);
 				const l = el("select", {});
 				const fill = () => {
 					const name = setupSel.value || auto || "";
 					l.innerHTML = "";
-					l.append(new Option("Same name as the setup", ""), new Option("None", "-"));
+					l.append(new Option("Same as setup", ""), new Option("None", "-"));
 					for (const x of layouts) l.append(new Option(x.name, x.id));
 					l.value = name && uf1For[name] !== undefined ? uf1For[name] : "";
 				};
 				l.onchange = () => { const name = setupSel.value || auto || ""; if (!name) return; if (l.value) uf1For[name] = l.value; else delete uf1For[name]; };
 				setupSel.addEventListener("change", fill); fill();
-				box.append(group(label, row("MultiViewer setup", setupSel), uf1(row("Ultimate F1 Viewer layout", l))));
+				table.append(el("span", { className: "setkind", textContent: label }), setupSel, uf1(l));
 			}
+			const perKind = group("Setup per session",
+				hint("Used with Automatic per session type. Auto picks the setup with that word in its name."), table);
+			const showKinds = () => perKind.classList.toggle("setoff", openWith.value !== "@auto");
+			openWith.addEventListener("change", showKinds); showKinds();
+			box.append(perKind);
 			ids.uf1For = () => uf1For;
 			box.append(group("While opening",
 				check("fitTiming", c.fitTiming, "Fit Live Timing to its window", "Zooms the Live Timing rows to the bottom of the window (at most 40% larger)"),
 				uf1(check("uf1CloseFirst", c.uf1CloseFirst, "Close the open Ultimate F1 Viewer windows first"))));
 			return box;
-		})()],
-		drivers: ["Drivers", (() => {
-			// teams whose onboards always stay: tick boxes, the rest of the setup's onboards follow the order
+		})();
+	tabs.drivers[1] = (() => {
+			// Fixed onboards: whole teams or single drivers, one or the other (a switch); only the chosen list
+			// shows. Each team in its colour; drivers in a card per team, team mates together. The line-up is
+			// the open session's, else the latest session's; chosen drivers who aren't in it: Other drivers.
 			const keep = new Set((c.topTeams || []).map((t) => t.toLowerCase()));
-			const grid = el("div", { className: "teamgrid" });
-			const boxes = [];
+			const keepD = new Set((c.keepDrivers || []).map((d) => d.toUpperCase()));
+			const colours = c.teamColours || {};
+			const colourOf = (t) => colours[t] || Object.entries(colours).find(([k]) => k.toLowerCase() === (t || "").toLowerCase())?.[1] || "#5a5f68";
+			const teamGrid = el("div", { className: "tcards" }), driverGrid = el("div", { className: "dcards" });
+			const boxes = [], dboxes = [];
 			for (const t of c.teams || []) {
 				const i = el("input", { type: "checkbox", checked: keep.has(t.toLowerCase()) });
 				boxes.push([t, i]);
-				grid.append(el("label", {}, i, el("span", { textContent: t })));
+				const card = el("label", { className: "tcard" }, i, el("span", { textContent: t }));
+				card.style.setProperty("--tc", colourOf(t));
+				teamGrid.append(card);
 			}
+			// the drivers' teams in the teams' order (a team only the open session has goes after them), then
+			// Other drivers
+			const order = (c.teams || []).map((t) => t.toLowerCase());
+			const byTeam = new Map();
+			for (const d of c.drivers || []) { const k = d.team || ""; if (!byTeam.has(k)) byTeam.set(k, []); byTeam.get(k).push(d); }
+			const rank = (t) => { if (!t) return 1e9; const k = order.indexOf(t.toLowerCase()); return k < 0 ? 1e6 : k; };
+			for (const t of [...byTeam.keys()].sort((a, b) => rank(a) - rank(b))) {
+				const card = el("div", { className: "dcard" + (t ? "" : " other") }, el("div", { className: "dteam", textContent: t || "Other drivers" }));
+				card.style.setProperty("--tc", t ? colourOf(t) : "#3a3f48");
+				for (const d of byTeam.get(t)) {
+					const i = el("input", { type: "checkbox", checked: keepD.has(d.code) });
+					dboxes.push([d.code, i]);
+					card.append(el("label", { title: d.code }, i, el("span", { textContent: d.name })));
+				}
+				driverGrid.append(card);
+			}
+			let by = c.keepBy === "drivers" ? "drivers" : "teams";
+			const seg = el("div", { className: "seg", role: "radiogroup" });
+			const showBy = () => {
+				for (const b of seg.children) b.setAttribute("aria-checked", String(b.dataset.v === by));
+				teamGrid.classList.toggle("hidden", by !== "teams"); driverGrid.classList.toggle("hidden", by !== "drivers");
+			};
+			for (const [v, t] of [["teams", "Teams"], ["drivers", "Drivers"]]) {
+				const b = btn(t, "", () => { by = v; showBy(); }); b.dataset.v = v; b.setAttribute("role", "radio"); seg.append(b);
+			}
+			showBy();
+			ids.keepBy = () => by;
 			ids.topTeams = () => boxes.filter(([, i]) => i.checked).map(([t]) => t);
+			ids.keepDrivers = () => dboxes.filter(([, i]) => i.checked).map(([d]) => d);
 			return el("div", {},
 				group("Best of the rest",
-					hint("Your setup has onboards of some teams that always stay, and other onboards that F1 Party fills with the best-placed drivers of all other teams."),
+					hint("Your setup has fixed onboards (below), and other onboards that F1 Party fills with the best-placed of all other drivers."),
 					check("restOn", c.restOn, "Fill those onboards when a setup opens"),
-					check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits."),
-					el("div", { className: "setlbl", style: "margin:8px 0 4px", textContent: "These teams' onboards always stay:" }),
-					grid),
-				uf1(group("Battle mode",
-					hint("For races, in Ultimate F1 Viewer's battle mode windows. Your layout can have one or more; they're filled from left to right."),
-					check("battleOn", c.battleOn, "Pick the drivers automatically"),
-					row("First window", el("span", { className: "hint", style: "margin:0", textContent: "Top 4 of the race" })),
-					row("Second window (if any)", pick("battleRight", c.battleRight, [["", "Championship top 3"], ["p5to8", "Positions 5 to 8"]])),
-					row("Update", pick("battleLaps", String(c.battleLaps ?? 5), [["0", "Only when the layout opens"], ["1", "Every lap"], ["2", "Every 2 laps"], ["5", "Every 5 laps"], ["10", "Every 10 laps"]])))));
-		})()],
-		lights: ["Lights", lightsTab(c, { check, pick, row, hint, group, ids })],
-		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
-		updates: ["Updates", updatesTab(group, hint)],
-		close: ["Close", el("div", {},
-			group("End session closes",
-				hint("End session closes the streams and what's ticked here, and puts the lights and the taskbar back. The party stays."),
-				check("closeMv", c.closeMv !== false, "MultiViewer"),
-				uf1(check("closeUf1", c.closeUf1 !== false, "Ultimate F1 Viewer")),
-				desk ? check("closeDesktop", c.closeDesktop, win ? "The watching desktop" : "The watching workspace", win ? "Anything else still on it moves to the desktop next to it" : "Anything else still on it moves back to the workspace you came from") : null))],
-	};
-	const bar = el("div", { className: "settabs", role: "tablist" }), pane = el("div", { className: "setpane" });
-	const show = (k) => { setTab = k; for (const b of bar.children) b.setAttribute("aria-selected", String(b.dataset.k === k));
-		for (const [key, [, node]] of Object.entries(tabs)) node.classList.toggle("hidden", key !== k); };
+					check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits.")),
+				group("Fixed onboards",
+					hint("These onboards stay in your setup; best of the rest fills the others. Choose whole teams or single drivers."),
+					el("div", { className: "setrow" }, seg),
+					teamGrid, driverGrid),
+				uf1((() => {
+					// one switch; what it picks sits below it, as a small table: window, what it shows, at most
+					const master = check("battleOn", c.battleOn, "Pick the drivers automatically");
+					master.classList.add("setmaster");
+					const src = pick("battleRight", c.battleRight || "", [["p5to8", "Next places in the race"], ["", "Top of the championship"]]);
+					const most = (key, v) => pick(key, String(v || 4), [["1", "1 driver"], ["2", "2 drivers"], ["3", "3 drivers"], ["4", "4 drivers"]]);
+					const note = el("p", { className: "hint sethint" });
+					const explain = () => { note.textContent = src.value === "p5to8"
+						? "The second window carries on where the first stopped: with 2 drivers in the first, it starts at P3."
+						: "The second window shows the championship top, whatever the first one shows."; };
+					src.addEventListener("change", explain); explain();
+					const cell = (t) => el("span", { className: "bthead", textContent: t });
+					const table = el("div", { className: "battlegrid" },
+						cell("Window"), cell("Shows"), cell("At most"),
+						el("span", { textContent: "First" }), el("span", { className: "setval", textContent: "Top of the race" }), most("battleMax1", c.battleMax1),
+						el("span", { textContent: "Second" }), src, most("battleMax2", c.battleMax2));
+					const sub = el("div", { className: "setsub" }, table, note,
+						row("Update", pick("battleLaps", String(c.battleLaps ?? 5), [["0", "Only when the layout opens"], ["1", "Every lap"], ["2", "Every 2 laps"], ["5", "Every 5 laps"], ["10", "Every 10 laps"]])));
+					const sync = () => { const on = master.input.checked && uf1Usable();
+						sub.classList.toggle("setoff", !on); for (const i of sub.querySelectorAll("select")) i.disabled = !on; };
+					master.input.addEventListener("change", sync); uf1After.push(sync);
+					return group("Battle mode",
+						hint("For races. Ultimate F1 Viewer's battle mode windows fill from left to right, and each one shows as many drivers as fit in it."),
+						master, sub);
+				})()));
+		})();
+	tabs.lights[1] = lightsTab(c, { check, pick, row, hint, group, ids });
+	// Your own Discord channel: party invites go there too. Connected: a status and Remove; else a field
+	// for the channel's webhook link. Changes count straight away (not on Save).
+	function ownChannelGroup() {
+		const box = el("div", {});
+		const err = el("p", { className: "error", style: "margin:4px 0 0" });
+		const draw = () => {
+			box.innerHTML = "";
+			if (people.ownWebhook) {
+				box.append(row("Your channel", el("span", { className: "setstate on", textContent: "Connected" }),
+					btn("Remove", "Stop sending party invites to your own Discord channel", async () => {
+						err.textContent = "";
+						try { await post("/api/addlink", { link: "" }); people.ownWebhook = false; draw(); refreshDiscord(); } catch (e) { err.textContent = e.message; }
+					})));
+			} else {
+				const link = el("input", { placeholder: "Discord webhook link of your channel", autocomplete: "off", spellcheck: false, className: "grow" });
+				box.append(row("Your channel", link, btn("Connect", "", async () => {
+					err.textContent = "";
+					if (!link.value.trim()) { err.textContent = "Paste the channel's webhook link first."; return; }
+					try { await post("/api/addlink", { link: link.value.trim() }); people.ownWebhook = true; draw(); refreshDiscord(); } catch (e) { err.textContent = e.message; }
+				})));
+			}
+			box.append(err);
+		};
+		draw();
+		return group("Your Discord channel", hint("Party invites also go to this channel, next to your teams'."), box);
+	}
+	tabs.end[1] = el("div", {},
+		group("End session closes",
+			hint("End session closes the streams and what's ticked here, and puts the lights and the taskbar back. The party stays."),
+			check("closeMv", c.closeMv !== false, "MultiViewer"),
+			uf1(check("closeUf1", c.closeUf1 !== false, "Ultimate F1 Viewer")),
+			desk ? check("closeDesktop", c.closeDesktop, win ? "The F1 desktop" : "The F1 workspace", win ? "Anything else still on it moves to the desktop next to it" : "Anything else still on it moves back to the workspace you came from") : null));
+	tabs.updates[1] = updatesTab(group, hint);
+	tabs.downloads[1] = downloadsTab(group, hint);
+	// The menu on the left: one subject per item, Updates apart at the bottom.
+	const bar = el("nav", { className: "setnav", role: "tablist" }), pane = el("div", { className: "setpane" });
+	const show = (k) => { setTab = k; for (const b of bar.querySelectorAll("button")) b.setAttribute("aria-selected", String(b.dataset.k === k));
+		for (const [key, [, node]] of Object.entries(tabs)) node.classList.toggle("hidden", key !== k);
+		pane.scrollTop = 0; $("modalbody").scrollTop = 0; };
 	for (const [k, [label, node]] of Object.entries(tabs)) {
-		const b = btn(label, "", () => show(k)); b.dataset.k = k; b.setAttribute("role", "tab"); bar.append(b);
-		if (k === "updates" && $("settingsbtn").classList.contains("hasdot")) { b.classList.add("hasdot"); b.title = "There's an update"; }
+		const b = btn("", "", () => show(k)); b.dataset.k = k; b.setAttribute("role", "tab");
+		b.innerHTML = setIcons[k] || ""; b.append(el("span", { textContent: label }));
+		if (k === "updates") { bar.append(el("div", { className: "setnavgap" })); if ($("settingsbtn").classList.contains("hasdot")) { b.classList.add("hasdot"); b.title = "There's an update"; } }
+		bar.append(b);
 		pane.append(node);
 	}
-	if (opts.tab && tabs[opts.tab]) setTab = opts.tab;
-	show(tabs[setTab] ? setTab : "general");
+	const want = oldTabs[opts.tab] || opts.tab;
+	if (want && tabs[want]) setTab = want;
+	setTab = oldTabs[setTab] || setTab;
+	show(tabs[setTab] ? setTab : "party");
 	syncUf1();
 	$("modal").classList.add("wide");
 	const save = async () => {
@@ -1476,19 +1689,24 @@ async function openSettings(opts = {}) {
 		for (const [k, f] of Object.entries(ids)) out[k] = f();
 		if (!c.uf1) delete out.uf1On; // not installed: keep what was set
 		if (out.battleLaps !== undefined) out.battleLaps = parseInt(out.battleLaps, 10) || 0;
+		for (const k of ["battleMax1", "battleMax2"]) if (out[k] !== undefined) out[k] = parseInt(out[k], 10) || 4;
 		await post("/api/settings", out);
 		refresh(); refreshMV();
 	};
-	if (!opts.wizard) { dialog("Settings", el("div", {}, el("div", { className: "settabswrap" }, bar), pane), "Save", save); return; }
-	// The guide: every tab that applies here, in order; Finish saves everything at once.
-	const steps = Object.keys(tabs).filter((k) => k !== "updates" && (k !== "windows" || c.places || c.windows !== false));
+	if (!opts.wizard) {
+		dialog("Settings", el("div", { className: "setlayout" }, bar, pane), "Save", save);
+		$("modal").classList.add("side");
+		return;
+	}
+	// The guide: every subject in order, without Updates; Finish saves everything at once.
+	const steps = Object.keys(tabs).filter((k) => k !== "updates" && k !== "downloads");
 	const intro = {
-		general: "Welcome to F1 Party! Let's go through the settings once, so everything works the way you like. You can change all of it later under the gear at the top right.",
+		party: "Welcome to F1 Party! Let's go through the settings once, so everything works the way you like. You can change all of it later under the gear at the top right.",
 		sessions: "How a session opens: with one of your MultiViewer setups, the Stream Deck plugin, or just F1 Live.",
 		drivers: "Which onboards F1 Party fills in by itself.",
+		screen: "Where F1 opens: its own desktop, the taskbar while you watch, and where MultiViewer and Ultimate F1 Viewer go.",
 		lights: "Philips Hue lights in the colour of the flag on track. Skip this if you don't have them.",
-		windows: "Where MultiViewer and Ultimate F1 Viewer open on your screen.",
-		close: "What the red Close button in the Setup box closes when you're done watching.",
+		end: "What End session closes when you're done watching.",
 	};
 	const bars = el("div", { className: "steps" }), introP = el("p", { className: "hint sethint" });
 	const back = btn("Back", "", () => go(i - 1)), next = btn("Next", "", () => go(i + 1), "primary");
@@ -1597,7 +1815,7 @@ function windowsTab(c, h) {
 	const st = el("p", { className: "hint sethint" });
 	const saved = (yes) => el("span", { className: "hint", style: "margin:0", textContent: yes ? "Saved" : "Not saved yet" });
 	return el("div", {},
-		h.group("Positions",
+		h.group("Window positions",
 			h.hint("Put MultiViewer and Ultimate F1 Viewer where you want them, then save: they open there from now on."),
 			h.row("MultiViewer", saved(pl.mv)),
 			h.uf1(h.row("Ultimate F1 Viewer", saved(pl.uf1))),
@@ -1610,11 +1828,17 @@ function windowsTab(c, h) {
 }
 $("sessend").onclick = async () => {
 	const msg = mode === "host" ? "End this session for everyone? Their streams close too, the party stays."
-		: mode === "guest" ? "Stop watching this session? You stay in the party." : "End this session? MultiViewer and the rest close (Settings → Close).";
+		: mode === "guest" ? "Stop watching this session? You stay in the party." : "End this session? MultiViewer and the rest close (Settings → End session).";
 	if (!(await ask("End session?", msg, "End session"))) return;
 	$("sesserr").textContent = "";
 	try { await post("/api/session/end"); } catch (e) { $("sesserr").textContent = e.message; }
 	refreshSession(); refresh();
+};
+$("mvclose").onclick = async () => {
+	if (!(await ask("Close the apps?", "MultiViewer and the rest close, as set under Settings → End session.", "Close"))) return;
+	$("mverr").textContent = "";
+	try { await post("/api/session/end"); } catch (e) { $("mverr").textContent = e.message; }
+	refreshMV(); refreshSession();
 };
 $("sessagain").onclick = async () => { await post("/api/session/again"); refreshSession(); refresh(); };
 const jump = (to) => async () => { $("sesserr").textContent = ""; try { await post("/api/session/jump", { to }); } catch (e) { $("sesserr").textContent = e.message; } refreshSession(); };
@@ -1671,6 +1895,21 @@ $("calnext").onclick = () => { if (calData?.next) { calMeeting = calData.next; p
 const dayFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
 const timeFmt = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 const whenFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+const dayLongFmt = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" });
+const weekdayFmt = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
+const dayDateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" });
+// In the weekend card: the next session and how long until it (or LIVE). Nothing once the weekend is over.
+function renderCalNext(w) {
+	const box = $("calsoon"); box.innerHTML = "";
+	const next = w.sessions.find((x) => x.status === "live" || x.status === "soon");
+	box.classList.toggle("hidden", !next);
+	if (!next) return;
+	if (next.status === "live") { box.append(el("span", { className: "live", textContent: "LIVE" }), el("b", { textContent: next.name })); return; }
+	const m = Math.max(0, Math.floor((new Date(next.start) - Date.now()) / 60000));
+	const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = m % 60;
+	const left = d ? `${d}d ${h}h ${mi}m` : h ? `${h}h ${mi}m` : `${mi} min`;
+	box.append("Next", el("b", { textContent: next.name }), el("span", { className: "in", textContent: "in " + left }));
+}
 function inTime(ms) {
 	const m = Math.round(ms / 60000);
 	if (m < 60) return "in " + m + " min";
@@ -1710,24 +1949,38 @@ async function refreshCal() {
 	} catch (e) { $("calerr").textContent = e.message; return; }
 	const w = d.weekend; calData = w; calMeeting = w.meeting.key; notifyOK = d.notifications !== false;
 	$("calname").textContent = (w.meeting.name || "").replace("Grand Prix", "GP");
+	renderCalNext(w);
 	const ms = new Date(w.meeting.start), me = new Date(w.meeting.end);
 	// short: "20–22 Nov 2026", or "30 Nov – 2 Dec 2026" across two months
 	const mon = (d) => d.toLocaleDateString("en-GB", { month: "short" });
 	const span = ms.getMonth() === me.getMonth() ? `${ms.getDate()}–${me.getDate()} ${mon(me)}` : `${ms.getDate()} ${mon(ms)} – ${me.getDate()} ${mon(me)}`;
-	$("caldates").textContent = `${w.meeting.location} · ${span} ${me.getFullYear()}`;
+	// the dates are in the day headings below; the year only when it isn't this one
+	$("caldates").textContent = `${w.meeting.location}${w.round ? " · Round " + w.round + " of " + w.rounds : ""}${me.getFullYear() !== new Date().getFullYear() ? " · " + me.getFullYear() : ""}`;
+	$("caldates").title = `${span} ${me.getFullYear()}`;
 	$("calprev").disabled = !w.prev; $("calnext").disabled = !w.next;
 	const guest = mode === "guest", hosting = mode === "host", ul = $("calsessions");
 	const pickWord = sessData && !sessData.stopped ? "Switch" : "Select";
 	if (document.activeElement && ul.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return; // picking a time
 	ul.innerHTML = "";
 	const now = Date.now();
+	const next = w.sessions.find((x) => x.status === "live" || x.status === "soon");
+	let lastDay = "";
 	for (const x of w.sessions) {
 		const start = new Date(x.start), end = new Date(x.end);
+		// a heading per day: "Friday 27 Nov"
+		const day = dayLongFmt.format(start);
+		if (day !== lastDay) {
+			lastDay = day;
+			ul.append(el("li", { className: "day" }, el("b", { textContent: weekdayFmt.format(start) }), el("span", { textContent: dayDateFmt.format(start) })));
+		}
 		const li = document.createElement("li");
+		if (x === next) li.classList.add("next");
+		if (x.status === "done") li.classList.add("done");
+		const tm = Object.assign(document.createElement("span"), { className: "tm", textContent: timeFmt.format(start) });
 		const nm = document.createElement("div"); nm.className = "nm";
 		const b = document.createElement("b"); b.textContent = x.name;
-		const sp = document.createElement("span"); sp.textContent = `${dayFmt.format(start)} · ${timeFmt.format(start)}`;
-		nm.append(b, sp);
+		nm.append(b);
+		li.append(tm);
 		const st = document.createElement("span"); st.className = "st";
 		const acts = document.createElement("div"); acts.className = "acts";
 		if (x.plan) {

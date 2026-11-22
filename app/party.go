@@ -252,11 +252,7 @@ func (p *Party) StartTogether() error {
 		return errNotConnected
 	}
 	if !mvRunning() {
-		p.SetNote("Starting MultiViewer…")
-		if err := mvStartReady(); err != nil && !mvRunning() {
-			return err
-		}
-		p.SetNote("")
+		return errNoSession // nothing open: pick a session first (never start the apps for nothing)
 	}
 	ps, err := players()
 	if err != nil {

@@ -6,11 +6,13 @@ package main
 
 import (
 	"runtime"
+	"slices"
 	"strings"
 )
 
 // settingsView: everything the Settings tabs show.
 func settingsView() map[string]any {
+	refreshLineup() // the latest session's line-up for Fixed onboards (quick: only every 6 hours)
 	c := loadConfig()
 	name := c.DesktopName
 	if name == "" {
@@ -20,6 +22,7 @@ func settingsView() map[string]any {
 	for _, s := range mvSetups() {
 		setups = append(setups, s.Name)
 	}
+	bm1, bm2 := battleMax()
 	v := map[string]any{
 		"windows": runtime.GOOS == "windows",
 		"desktops": desktopsSupported(),
@@ -33,7 +36,9 @@ func settingsView() map[string]any {
 		"fitTiming": c.FitTiming,
 		// Drivers
 		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(), "teams": allTeams(),
+		"keepDrivers": keepDrivers(), "drivers": allDrivers(), "keepBy": keepBy(), "teamColours": teamColours(),
 		"battleOn": c.BattleOn, "battleLaps": battleLaps(), "battleRight": c.BattleRight,
+		"battleMax1": bm1, "battleMax2": bm2,
 		// Close F1
 		"closeMv": !c.CloseMVOff, "closeUf1": !c.CloseUf1Off, "closeDesktop": c.CloseDesktop,
 	}
@@ -67,9 +72,13 @@ type settingsIn struct {
 	RestOn        *bool
 	RestLive      *bool
 	TopTeams      []string
+	KeepDrivers   []string
+	KeepBy        *string
 	BattleOn      *bool
 	BattleLaps    *int
 	BattleRight   *string
+	BattleMax1    *int
+	BattleMax2    *int
 	CloseMv       *bool
 	CloseUf1      *bool
 	CloseDesktop  *bool
@@ -138,6 +147,20 @@ func applySettings(in settingsIn, party *Party) {
 				}
 			}
 		}
+		if in.KeepBy != nil {
+			c.KeepBy = ""
+			if *in.KeepBy == "drivers" {
+				c.KeepBy = "drivers"
+			}
+		}
+		if in.KeepDrivers != nil {
+			c.KeepDrivers = nil
+			for _, d := range in.KeepDrivers {
+				if d = strings.ToUpper(clip(d, 3)); d != "" && len(c.KeepDrivers) < 30 && !slices.Contains(c.KeepDrivers, d) {
+					c.KeepDrivers = append(c.KeepDrivers, d)
+				}
+			}
+		}
 		set(&c.BattleOn, in.BattleOn, false)
 		if in.BattleLaps != nil {
 			c.BattleLaps, c.BattleLive = max(0, min(20, *in.BattleLaps)), false
@@ -150,6 +173,12 @@ func applySettings(in settingsIn, party *Party) {
 			if *in.BattleRight == "p5to8" {
 				c.BattleRight = "p5to8"
 			}
+		}
+		if in.BattleMax1 != nil {
+			c.BattleMax1 = max(1, min(4, *in.BattleMax1))
+		}
+		if in.BattleMax2 != nil {
+			c.BattleMax2 = max(1, min(4, *in.BattleMax2))
 		}
 		set(&c.CloseMVOff, in.CloseMv, true)
 		set(&c.CloseUf1Off, in.CloseUf1, true)
