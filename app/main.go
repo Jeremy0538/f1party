@@ -307,8 +307,8 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		var in struct{ Webhook string }
 		json.NewDecoder(r.Body).Decode(&in)
 		in.Webhook = strings.TrimSpace(in.Webhook)
-		if in.Webhook != "" && !validWebhook(in.Webhook) {
-			http.Error(w, "That isn't a Discord webhook URL (it starts with https://discord.com/api/webhooks/)", 400)
+		if in.Webhook != "" && !validDiscordDest(in.Webhook) {
+			http.Error(w, "That isn't a Discord webhook URL (https://discord.com/api/webhooks/…) or a group key (f1p_…)", 400)
 			return
 		}
 		updateConfig(func(c *config) { c.Webhook = in.Webhook })

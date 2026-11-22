@@ -695,6 +695,9 @@ func announcePlan(webhook, name string, pl *plan) error {
 	if pl.Replay {
 		what += " (replay)"
 	}
+	if isGroupKey(webhook) {
+		return postGroup(webhook, map[string]any{"kind": "plan", "name": name, "code": pl.Code, "title": what, "at": pl.At})
+	}
 	text := fmt.Sprintf("🗓️ **%s** plans an F1 Party\n📺 **%s**\n⏰ <t:%d:F> (<t:%d:R>)\nCode: **%s**", name, what, pl.At, pl.At, pl.Code)
 	if link := joinLink(pl.Code); link != "" {
 		text += fmt.Sprintf(" · [Join the party](<%s>) (from the start time)", link)
@@ -704,6 +707,9 @@ func announcePlan(webhook, name string, pl *plan) error {
 }
 
 func remindPlan(webhook, name string, pl *plan) error {
+	if isGroupKey(webhook) {
+		return postGroup(webhook, map[string]any{"kind": "remind", "name": name, "code": pl.Code, "title": pl.Title, "at": pl.At})
+	}
 	text := fmt.Sprintf("⏰ **%s** starts <t:%d:R>: %s's F1 Party\nCode: **%s**", pl.Title, pl.At, name, pl.Code)
 	if link := joinLink(pl.Code); link != "" {
 		text += fmt.Sprintf(" · [Join the party](<%s>)", link)
