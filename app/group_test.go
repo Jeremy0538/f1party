@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestGroupToken(t *testing.T) {
 	for in, want := range map[string]string{
@@ -47,5 +51,16 @@ func TestFriendLinkToken(t *testing.T) {
 	}
 	if teamID("f1p_AbCdEfGh123456789012345678901234") != "AbCdEfGh" {
 		t.Error("teamID")
+	}
+}
+
+// The Friends tab walks these lists: they must be [] in JSON, never null, also with no friends or teams.
+func TestPeopleViewEmptyLists(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	b, _ := json.Marshal(peopleView())
+	for _, k := range []string{`"friends":[]`, `"teams":[]`, `"invites":[]`, `"teamInvites":[]`} {
+		if !strings.Contains(string(b), k) {
+			t.Errorf("%s missing in %s", k, b)
+		}
 	}
 }
