@@ -330,6 +330,13 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
 			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed() && !loadConfig().Uf1Off}
+		// what really runs: Ultimate F1 Viewer only when it's up, and how many streams MultiViewer shows
+		_, out["uf1Running"] = uf1Main()
+		if running {
+			if ps, err := players(); err == nil {
+				out["streams"] = len(ps)
+			}
+		}
 		if out["uf1"] == true {
 			c := loadConfig()
 			out["uf1Layouts"], out["uf1For"], out["uf1Auto"] = uf1Layouts(), c.Uf1For, uf1LayoutFor(party.Setup())

@@ -1153,7 +1153,9 @@ async function refreshMV() {
 	installed("dlmv", m.installed); installed("dluf1", m.uf1); installed("dlsd", pl.installed);
 	$("mvdot").className = "dot " + (m.running ? "ok" : "bad");
 	$("mvstate").textContent = m.running ? "Running" : (m.installed ? "Not running" : "Not installed");
-	$("setupapps").textContent = !m.running ? "" : m.setupsReady || !(m.setups || []).length ? "MultiViewer" + (m.uf1 ? " · Ultimate F1 Viewer" : "") : "MultiViewer runs without setup support";
+	$("setupapps").textContent = !m.running ? ""
+		: !(m.setupsReady || !(m.setups || []).length) ? "MultiViewer runs without setup support"
+		: "MultiViewer" + (m.uf1Running ? " · Ultimate F1 Viewer" : "") + (m.streams === 0 ? " · no streams open" : "");
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
 	if (m.running !== mvWasRunning) { mvWasRunning = m.running; refreshSession(); }
