@@ -135,7 +135,7 @@ func startControl(party *Party, h controlHooks) {
 			http.Error(w, "not in a party", 400)
 			return
 		}
-		party.Leave()
+		endParty(party) // as the window's button: also forgotten, so a restart doesn't rejoin it
 		writeJSON(w, map[string]string{})
 	})
 	mux.HandleFunc("POST /control/watch", func(w http.ResponseWriter, r *http.Request) {
