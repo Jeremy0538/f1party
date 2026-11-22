@@ -4,7 +4,7 @@ package main
 // time you pick. Planning posts a Discord announcement with the time (Discord shows it in everyone's own time
 // zone) and the party code, a reminder follows 15 minutes before, and at the time the app hosts the party with
 // that code, opens the session and (for a replay) starts a minute before the session with the five lights.
-// Plans only run while F1 Party runs (the tray is enough).
+// Plans only run while F1 Party runs.
 
 import (
 	"encoding/json"

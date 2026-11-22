@@ -143,7 +143,7 @@ func main() {
 			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
 		OnStartup: func(ctx context.Context) {
 			appCtx = ctx
-			restartAfterUpdate = func() { markQuitting(); wruntime.Quit(appCtx) }
+			restartAfterUpdate = func() { wruntime.Quit(appCtx) }
 			setupNotifications(ctx, show)
 			startTray(show, func() { wruntime.Quit(appCtx) })
 			switch {
@@ -154,14 +154,6 @@ func main() {
 			default:
 				go rejoinLast(party)
 			}
-		},
-		// With the tray icon up, closing the window hides it and the party keeps running.
-		OnBeforeClose: func(ctx context.Context) bool {
-			if keepRunningOnClose() {
-				wruntime.WindowHide(ctx)
-				return true
-			}
-			return false
 		},
 		OnShutdown: func(context.Context) { stopTray() },
 		SingleInstanceLock: &options.SingleInstanceLock{
