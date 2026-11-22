@@ -109,7 +109,7 @@
 	.codechars { display:flex; gap:6px; min-width:0; }
 	.codechars span, input.cbox { width:40px; height:48px; flex:none; display:grid; place-items:center; padding:0; border-radius:8px;
 		border:1px solid var(--line-2); background:#0f1114; font:700 24px/1 var(--num); text-align:center; text-transform:uppercase; color:var(--text); }
-	.codechars.big span { width:44px; height:54px; font-size:28px; user-select:all; }
+	.codechars.big span { flex:1 1 0; width:auto; max-width:46px; min-width:0; height:54px; font-size:28px; user-select:all; } /* shrink to fit next to the buttons */
 	.codechars.fill { gap:8px; margin-top:10px; }
 	/* the box you type in: red edge with a soft glow and a blinking bar at the bottom as the cursor */
 	input.cbox { caret-color:transparent; }
