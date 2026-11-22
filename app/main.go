@@ -1,8 +1,9 @@
-// F1 Party: watch MultiViewer for F1 in sync with friends. One small program per platform; it opens a
-// local page in the browser and talks to the MultiViewer running on the same computer.
+// F1 Party: watch MultiViewer for F1 in sync with friends. A small desktop app (Wails: the system's own
+// web view, no browser needed) that talks to the MultiViewer running on the same computer.
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	_ "embed"
 	"encoding/json"
@@ -10,25 +11,33 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
+	goruntime "runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var version = "0.1.0"
+var version = "1.0.0"
 
 // Overridable for testing against `wrangler dev`: F1PARTY_RELAY=ws://localhost:8787/f1party/ws
 var relayURL = envOr("F1PARTY_RELAY", "wss://jeremyklootwijk.nl/f1party/ws")
 
-var uiAddr = "127.0.0.1:" + envOr("F1PARTY_PORT", "47821")
-
 //go:embed ui.html
 var uiHTML []byte
+
+//go:embed logo64.png
+var logoPNG []byte
 
 func envOr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -38,20 +47,173 @@ func envOr(k, def string) string {
 }
 
 func main() {
-	pageURL := "http://" + uiAddr + "/"
-	ln, err := net.Listen("tcp", uiAddr)
-	if err != nil { // already running: just show it
-		fmt.Println("F1 Party is already running, opening it…")
-		openBrowser(pageURL)
+	afterUpdate(os.Args[1:])
+	cfg := loadConfig()
+	party := NewParty(cfg.Name, cfg.Setup)
+	go party.watchUpdates()
+	go party.watchPresence()
+	go rememberParty(party)
+	go party.runPlans()
+	go func() { // friend requests in the party
+		for range time.Tick(2 * time.Second) {
+			if party.Snapshot().Mode != "idle" {
+				party.checkFriends()
+			}
+		}
+	}()
+
+	var appCtx context.Context
+	show := func() {
+		if appCtx != nil {
+			wruntime.WindowShow(appCtx)
+			wruntime.WindowUnminimise(appCtx)
+			wruntime.Show(appCtx)
+		}
+	}
+	// hostAndInvite: host a party (or keep the one hosted now) and post the invite. With resync (the Stream Deck's
+	// Sync key held), a host that already runs a party first has everyone sync to them.
+	hostAndInvite := func(resync bool) (string, error) {
+		s := party.Snapshot()
+		resynced := false
+		switch s.Mode {
+		case "guest":
+			return "", errors.New("you're a guest in a party; leave it first")
+		case "idle":
+			name := cleanName(loadConfig().Name)
+			party.Start("host", newCode(), name)
+			s = party.Snapshot()
+		case "host":
+			if resync {
+				// already hosting: everyone syncs to you, then the invite goes out again
+				resynced = party.ResyncAll() == nil
+				party.SetNote("Everyone synced to you")
+			}
+		}
+		if wh := loadConfig().Webhook; wh != "" {
+			watching := mvSessionName()
+			if f := party.Snapshot().Feed; watching != "" && f != nil {
+				if f.Live {
+					watching += " · LIVE"
+				} else {
+					watching += " · replay"
+				}
+			}
+			if err := sendInvite(wh, s.Name, s.Code, watching); err != nil {
+				party.SetNote(err.Error())
+				return s.Code, err
+			}
+			if resynced {
+				party.SetNote("Everyone synced to you · invite sent again")
+			} else {
+				party.SetNote("Invite sent to Discord")
+			}
+		}
+		return s.Code, nil
+	}
+	startControl(party, func() (string, error) { return hostAndInvite(true) }, show)
+	hostArg := func(args []string) bool {
+		for _, a := range args {
+			if a == "--host" {
+				return true
+			}
+		}
+		return false
+	}
+	// f1party://join/CODE (an invite link): join that party under your saved name.
+	joinArg := func(args []string) {
+		for _, a := range args {
+			if code := joinCode(a); code != "" {
+				if s := party.Snapshot(); s.Code == code {
+					return
+				}
+				party.Start("guest", code, cleanName(loadConfig().Name))
+				return
+			}
+		}
+	}
+
+	err := wails.Run(&options.App{
+		Title:            "F1 Party",
+		Width:            780,
+		Height:           530,
+		MinWidth:         600,
+		MinHeight:        420,
+		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
+		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
+			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
+		OnStartup: func(ctx context.Context) {
+			appCtx = ctx
+			restartAfterUpdate = func() { markQuitting(); wruntime.Quit(appCtx) }
+			setupNotifications(ctx, show)
+			startTray(show, func() { wruntime.Quit(appCtx) })
+			switch {
+			case hostArg(os.Args[1:]):
+				go hostAndInvite(true)
+			case hasJoinArg(os.Args[1:]):
+				go joinArg(os.Args[1:])
+			default:
+				go rejoinLast(party)
+			}
+		},
+		// With the tray icon up, closing the window hides it and the party keeps running.
+		OnBeforeClose: func(ctx context.Context) bool {
+			if keepRunningOnClose() {
+				wruntime.WindowHide(ctx)
+				return true
+			}
+			return false
+		},
+		OnShutdown: func(context.Context) { stopTray() },
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "nl.jeremyklootwijk.f1party",
+			OnSecondInstanceLaunch: func(d options.SecondInstanceData) { // already running: bring it to the front
+				show()
+				if hostArg(d.Args) {
+					go hostAndInvite(true)
+				}
+				go joinArg(d.Args)
+			},
+		},
+		Windows: &windows.Options{Theme: windows.Dark},
+		Mac:     &mac.Options{Appearance: mac.NSAppearanceNameDarkAqua, About: &mac.AboutInfo{Title: "F1 Party", Message: "Version " + version}},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// setupNotifications turns on system notifications (Windows toasts, macOS and Linux notifications) for the
+// calendar; clicking one brings the window up.
+func setupNotifications(ctx context.Context, show func()) {
+	if err := wruntime.InitializeNotifications(ctx); err != nil || !wruntime.IsNotificationAvailable(ctx) {
+		log.Printf("notifications: not available (%v)", err)
 		return
 	}
-	cfg := loadConfig()
-	party := NewParty(cfg.Name)
+	brandNotifications()
+	wruntime.OnNotificationResponse(ctx, func(wruntime.NotificationResult) { show() })
+	n := 0
+	sendNotification = func(title, body string) error {
+		if goruntime.GOOS == "darwin" {
+			if ok, _ := wruntime.RequestNotificationAuthorization(ctx); !ok {
+				return errors.New("notifications aren't allowed for F1 Party")
+			}
+		}
+		n++
+		return wruntime.SendNotification(ctx, wruntime.NotificationOptions{
+			ID: fmt.Sprintf("f1party-%d-%d", time.Now().Unix(), n), Title: title, Body: body})
+	}
+}
 
+// newHandler serves the UI and its small JSON API. It is only reachable from the app's own window.
+func newHandler(party *Party, quit func(), openURL func(string), copyText func(string) error, hostAndInvite func(bool) (string, error)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(uiHTML)
+	})
+	mux.HandleFunc("GET /logo.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(logoPNG)
 	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, party.Snapshot())
@@ -60,7 +222,7 @@ func main() {
 		var in struct{ Name string }
 		json.NewDecoder(r.Body).Decode(&in)
 		name := cleanName(in.Name)
-		saveConfig(config{Name: name})
+		updateConfig(func(c *config) { c.Name = name })
 		code := newCode()
 		party.Start("host", code, name)
 		writeJSON(w, map[string]string{"code": code})
@@ -79,43 +241,251 @@ func main() {
 			return
 		}
 		name := cleanName(in.Name)
-		saveConfig(config{Name: name})
+		updateConfig(func(c *config) { c.Name = name })
 		party.Start("guest", code, name)
 		writeJSON(w, map[string]string{"code": code})
 	})
 	mux.HandleFunc("POST /api/leave", func(w http.ResponseWriter, r *http.Request) {
-		party.Leave()
+		endParty(party)
 		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// MultiViewer itself: running, setup support (debug port), its setups and the one chosen here.
+	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
+		running := mvRunning()
+		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
+			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed()}
+		writeJSON(w, out)
+	})
+	mux.HandleFunc("POST /api/mv/start", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, mvStart())
+	})
+	mux.HandleFunc("POST /api/mv/restart", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, mvRestart())
+	})
+	mux.HandleFunc("POST /api/setup", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Name string }
+		json.NewDecoder(r.Body).Decode(&in)
+		party.SetSetup(in.Name)
+		updateConfig(func(c *config) { c.Setup = in.Name })
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/setup/open", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Name string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.Name == "" {
+			http.Error(w, "Choose a setup first", 400)
+			return
+		}
+		contentID, sessionType := "", ""
+		if s := party.Snapshot(); s.Mode == "guest" {
+			contentID, sessionType = party.HostSession()
+		}
+		if in.Name == setupStreamDeck {
+			if contentID == "" {
+				sessionType = mvSessionType()
+			}
+			replyErr(w, pluginOpen(sessionKind(sessionType), contentID))
+			return
+		}
+		replyErr(w, mvOpenSetup(in.Name, contentID))
+	})
+	mux.HandleFunc("POST /api/openurl", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ URL string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if !allowedURL(in.URL) {
+			http.Error(w, "forbidden", 403)
+			return
+		}
+		openURL(in.URL)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Discord invites: whether a webhook is set (never the URL itself), set or clear it, send one now.
+	mux.HandleFunc("GET /api/discord", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]bool{"webhookSet": loadConfig().Webhook != ""})
+	})
+	mux.HandleFunc("POST /api/discord", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Webhook string }
+		json.NewDecoder(r.Body).Decode(&in)
+		in.Webhook = strings.TrimSpace(in.Webhook)
+		if in.Webhook != "" && !validWebhook(in.Webhook) {
+			http.Error(w, "That isn't a Discord webhook URL (it starts with https://discord.com/api/webhooks/)", 400)
+			return
+		}
+		updateConfig(func(c *config) { c.Webhook = in.Webhook })
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/invite", func(w http.ResponseWriter, r *http.Request) {
+		if party.Snapshot().Mode != "host" {
+			http.Error(w, "Host a party first", 400)
+			return
+		}
+		_, err := hostAndInvite(false)
+		replyErr(w, err)
+	})
+	mux.HandleFunc("POST /api/copycode", func(w http.ResponseWriter, r *http.Request) {
+		code := party.Snapshot().Code
+		if code == "" {
+			http.Error(w, "Not in a party", 400)
+			return
+		}
+		replyErr(w, copyText(code))
+	})
+	mux.HandleFunc("POST /api/start", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.StartTogether())
+	})
+	// The session MultiViewer shows, and jumping to a moment in it (the host takes the party along).
+	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"session": party.Session()})
+	})
+	mux.HandleFunc("POST /api/session/jump", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ To string }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, party.Jump(in.To))
+	})
+	// The F1 calendar and planned watch parties.
+	mux.HandleFunc("GET /api/calendar", func(w http.ResponseWriter, r *http.Request) {
+		meeting, _ := strconv.Atoi(r.URL.Query().Get("meeting"))
+		wk, err := calendarWeekend(meeting)
+		if err != nil {
+			http.Error(w, err.Error(), 503)
+			return
+		}
+		c := loadConfig()
+		writeJSON(w, map[string]any{"weekend": wk, "webhookSet": c.Webhook != "", "notify": c.Notify, "leads": notifyLeads(c),
+			"notifications": sendNotification != nil})
+	})
+	mux.HandleFunc("GET /api/calendar/season", func(w http.ResponseWriter, r *http.Request) {
+		y, _ := strconv.Atoi(r.URL.Query().Get("year"))
+		s, err := season(y)
+		if err != nil {
+			http.Error(w, err.Error(), 503)
+			return
+		}
+		writeJSON(w, s)
+	})
+	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Session int }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, party.WatchNow(in.Session, cleanName(loadConfig().Name)))
+	})
+	mux.HandleFunc("POST /api/calendar/plan", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Session int
+			At      int64
+		}
+		json.NewDecoder(r.Body).Decode(&in)
+		pl, err := Plan(in.Session, in.At, cleanName(loadConfig().Name))
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		writeJSON(w, pl)
+	})
+	mux.HandleFunc("POST /api/calendar/notify", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Mode string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if err := SetNotify(in.Mode); err != nil {
+			replyErr(w, err)
+			return
+		}
+		// one right away, so you see what they look like (and macOS asks for permission now)
+		if sendNotification != nil && in.Mode != notifyOff {
+			what := map[string]string{notifyRace: "every race", notifyMain: "every race and qualifying", notifyAll: "every session"}[in.Mode]
+			go sendNotification("Notifications are on", "F1 Party lets you know before "+what+" starts.")
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/calendar/leads", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Leads []int }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, SetNotifyLeads(in.Leads))
+	})
+	mux.HandleFunc("POST /api/calendar/bell", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Session int }
+		json.NewDecoder(r.Body).Decode(&in)
+		writeJSON(w, map[string]bool{"on": ToggleNotify(in.Session)})
+	})
+	// Friends: ask someone in the party (or accept their request), the list, remove one.
+	mux.HandleFunc("POST /api/friend/ask", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.ID == "" {
+			http.Error(w, "unknown member", 400)
+			return
+		}
+		party.AskFriend(in.ID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("GET /api/friends", func(w http.ResponseWriter, r *http.Request) {
+		fs := loadFriends()
+		if fs == nil {
+			fs = []Friend{}
+		}
+		writeJSON(w, map[string]any{"friends": fs})
+	})
+	mux.HandleFunc("POST /api/friend/remove", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		RemoveFriend(in.ID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/calendar/unplan", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		Unplan(in.ID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.SyncNow())
+	})
+	mux.HandleFunc("POST /api/update", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.InstallUpdate())
 	})
 	mux.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
-		go func() { time.Sleep(200 * time.Millisecond); os.Exit(0) }()
+		go func() { time.Sleep(200 * time.Millisecond); quit() }()
 	})
+	return mux
+}
 
-	// Only this computer's browser may drive it: reject requests whose Host isn't our own address
-	// (DNS-rebinding guard) and cross-site posts.
-	guard := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != uiAddr {
-			http.Error(w, "forbidden", 403)
-			return
-		}
-		if o := r.Header.Get("Origin"); r.Method == "POST" && o != "" && o != "http://"+uiAddr {
-			http.Error(w, "forbidden", 403)
-			return
-		}
-		mux.ServeHTTP(w, r)
-	})
-
-	fmt.Printf("F1 Party %s is running at %s\nKeep this window open while you watch. Close it to stop.\n", version, pageURL)
-	if os.Getenv("F1PARTY_NOBROWSER") == "" {
-		go func() { time.Sleep(300 * time.Millisecond); openBrowser(pageURL) }()
+func replyErr(w http.ResponseWriter, err error) {
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
 	}
-	log.Fatal(http.Serve(ln, guard))
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func hasJoinArg(args []string) bool {
+	for _, a := range args {
+		if joinCode(a) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// joinCode: the party code in an f1party://join/CODE link, or "".
+func joinCode(arg string) string {
+	rest, ok := strings.CutPrefix(strings.ToLower(arg), "f1party://join/")
+	if !ok {
+		return ""
+	}
+	code := strings.ToUpper(strings.Trim(rest, "/ "))
+	for _, r := range code {
+		if !((r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return ""
+		}
+	}
+	if len(code) < 4 || len(code) > 8 {
+		return ""
+	}
+	return code
 }
 
 func cleanName(s string) string {
@@ -140,24 +510,121 @@ func newCode() string {
 	return string(b)
 }
 
-func openBrowser(u string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", u)
-	case "darwin":
-		cmd = exec.Command("open", u)
-	default:
-		cmd = exec.Command("xdg-open", u)
-	}
-	if err := cmd.Start(); err != nil {
-		fmt.Println("Open this address in your browser:", u)
+type config struct {
+	Name           string     `json:"name"`
+	Setup          string     `json:"setup,omitempty"`        // MultiViewer setup opened on joining
+	Webhook        string     `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
+	DiscordAppID   string     `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
+	Last           *lastParty `json:"last,omitempty"`
+	Plans          []plan     `json:"plans,omitempty"`    // planned watch parties
+	MemberID       string     `json:"memberId,omitempty"` // this app's fixed id (friends know it by this)
+	Friends        []Friend   `json:"friends,omitempty"`
+	NotifyLeads    []int      `json:"notifyLeads"`              // minutes before a session to notify (nil = 15)
+	Notify         string     `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
+	NotifySessions []int      `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
+}
+
+// lastParty: the party this app was in, kept up to date while in it and cleared by Leave.
+type lastParty struct {
+	Code string `json:"code"`
+	Host bool   `json:"host,omitempty"`
+	At   int64  `json:"at"` // unix seconds, last seen in it
+}
+
+// rejoinWindow: how long after closing the app it still goes back into the party on its own.
+const rejoinWindow = 3 * time.Hour
+
+// rememberParty keeps the current party in the config (every 15 s), so a restart can rejoin it.
+func rememberParty(party *Party) {
+	var end partyEnd
+	for range time.Tick(15 * time.Second) {
+		s := party.Snapshot()
+		if s.Mode == "idle" || s.Code == "" {
+			end = partyEnd{}
+			continue
+		}
+		if end.due(s.Code, mvRunning(), time.Now()) {
+			endParty(party)
+			if sendNotification != nil {
+				_ = sendNotification("Party ended", "MultiViewer was closed, so F1 Party left the party.")
+			}
+			end = partyEnd{}
+			continue
+		}
+		updateConfig(func(c *config) {
+			// back as a guest after a restart: still remember that this was our party to host
+			wasHost := c.Last != nil && c.Last.Code == s.Code && c.Last.Host
+			c.Last = &lastParty{Code: s.Code, Host: s.Mode == "host" || wasHost, At: time.Now().Unix()}
+		})
 	}
 }
 
-type config struct {
-	Name string `json:"name"`
+// partyEnd: done watching means MultiViewer closed for a few minutes after it ran in this party. The party
+// then ends, so the window can stay in the tray for calendar notifications without a finished party open.
+type partyEnd struct {
+	code string    // the party being watched
+	seen bool      // MultiViewer ran during it
+	gone time.Time // since when MultiViewer is closed
 }
+
+func (e *partyEnd) due(code string, mvUp bool, now time.Time) bool {
+	if code != e.code {
+		*e = partyEnd{code: code}
+	}
+	switch {
+	case mvUp:
+		e.seen, e.gone = true, time.Time{}
+	case !e.seen:
+	case e.gone.IsZero():
+		e.gone = now
+	case now.Sub(e.gone) >= partyEndAfter:
+		return true
+	}
+	return false
+}
+
+// partyEndAfter: how long MultiViewer may be closed before the party ends (a restart of MultiViewer takes less).
+const partyEndAfter = 3 * time.Minute
+
+// endParty: leave on purpose, so a restart doesn't rejoin.
+func endParty(party *Party) {
+	party.Leave()
+	updateConfig(func(c *config) { c.Last = nil })
+}
+
+// rejoinLast: on start-up, back into the last party if the app closed less than rejoinWindow ago.
+func rejoinLast(party *Party) {
+	c := loadConfig()
+	if c.Last == nil || c.Last.Code == "" || time.Since(time.Unix(c.Last.At, 0)) > rejoinWindow {
+		return
+	}
+	if party.Snapshot().Mode != "idle" {
+		return
+	}
+	party.Rejoin(c.Last.Code, cleanName(c.Name), c.Last.Host)
+}
+
+// updateConfig changes some settings and keeps the others.
+// One change at a time: several parts of the app update the settings (the party every 15 s, the calendar,
+// the window), and two at once would each write back what they read and lose the other's change.
+func updateConfig(f func(c *config)) {
+	configMu.Lock()
+	defer configMu.Unlock()
+	c, err := readConfig()
+	for try := 0; err != nil && try < 5; try++ { // held open for a moment: try again
+		time.Sleep(100 * time.Millisecond)
+		c, err = readConfig()
+	}
+	if err != nil {
+		// never write over settings that couldn't be read: that would wipe the webhook, setup, plans...
+		log.Printf("settings not saved, the file can't be read: %v", err)
+		return
+	}
+	f(&c)
+	saveConfig(c)
+}
+
+var configMu sync.Mutex
 
 func configPath() (string, error) {
 	dir, err := os.UserConfigDir()
@@ -168,13 +635,26 @@ func configPath() (string, error) {
 }
 
 func loadConfig() config {
-	var c config
-	if p, err := configPath(); err == nil {
-		if b, err := os.ReadFile(p); err == nil {
-			json.Unmarshal(b, &c)
-		}
-	}
+	c, _ := readConfig()
 	return c
+}
+
+// readConfig: the settings, or an error when the file is there but can't be read (held open, damaged).
+// No file yet is no error: that is a fresh start.
+func readConfig() (config, error) {
+	var c config
+	p, err := configPath()
+	if err != nil {
+		return c, err
+	}
+	b, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return c, nil
+	}
+	if err != nil {
+		return c, err
+	}
+	return c, json.Unmarshal(b, &c)
 }
 
 func saveConfig(c config) {
@@ -185,6 +665,14 @@ func saveConfig(c config) {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil && !errors.Is(err, os.ErrExist) {
 		return
 	}
+	// written next to it and then swapped in, so nobody ever reads a half-written file
 	b, _ := json.Marshal(c)
-	os.WriteFile(p, b, 0o644)
+	tmp := p + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) != nil {
+		return
+	}
+	if os.Rename(tmp, p) != nil { // the file held open for a moment (a virus scanner): write it in place
+		os.Remove(tmp)
+		_ = os.WriteFile(p, b, 0o644)
+	}
 }

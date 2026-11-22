@@ -1,3 +1,5 @@
 dist/
 relay/node_modules/
 relay/.wrangler/
+app/build/bin/
+app/frontend/

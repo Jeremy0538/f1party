@@ -1,0 +1,21 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "F1 Party",
+  "outputfilename": "F1Party",
+  "author": {
+    "name": "Jeremy Klootwijk"
+  },
+  "info": {
+    "companyName": "F1 Party",
+    "productName": "F1 Party",
+    "productVersion": "1.0.0",
+    "comments": "Watch MultiViewer in sync with friends",
+    "protocols": [
+      {
+        "scheme": "f1party",
+        "description": "F1 Party invite link",
+        "role": "Viewer"
+      }
+    ]
+  }
+}
