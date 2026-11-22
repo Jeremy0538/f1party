@@ -1,8 +1,9 @@
 package main
 
-// Updates: checks the latest GitHub release now and then. On Windows the app updates itself: it downloads the
-// new F1Party-windows.exe, checks it against the release's checksums.txt, puts it in place of the running
-// exe and starts again (and rejoins the party it was in). Elsewhere the update is a link to the release.
+// Updates: checks the latest GitHub release now and then. On Windows and Linux the app updates itself: it
+// downloads the new F1Party-windows.exe or F1Party-linux, checks it against the release's checksums.txt, puts
+// it in place of the running program and starts again (and rejoins the party it was in). On Linux only when
+// F1 Party may write its own folder (not for a package install in /usr). Elsewhere the update is a link.
 
 import (
 	"bufio"
@@ -27,11 +28,10 @@ const releasesAPI = "https://api.github.com/repos/Jeremy0538/f1party/releases/la
 // ReleasesPage is where the update link points (also allowed by /api/openurl).
 const ReleasesPage = "https://github.com/Jeremy0538/f1party/releases/latest"
 
-// The release files the Windows self-update uses.
-const (
-	updateExe       = "F1Party-windows.exe"
-	updateChecksums = "checksums.txt"
-)
+// The release files the self-update uses.
+const updateChecksums = "checksums.txt"
+
+var updateExe = map[string]string{"windows": "F1Party-windows.exe", "linux": "F1Party-linux"}[runtime.GOOS]
 
 type Update struct {
 	Version string `json:"version"`
@@ -46,7 +46,6 @@ type Update struct {
 var updating atomic.Bool
 
 func (p *Party) watchUpdates() {
-	first := true
 	check := func() {
 		c := &http.Client{Timeout: 10 * time.Second}
 		req, _ := http.NewRequest("GET", releasesAPI, nil)
@@ -84,29 +83,50 @@ func (p *Party) watchUpdates() {
 				u.sums = a.URL
 			}
 		}
-		u.Auto = runtime.GOOS == "windows" && u.exe != "" && u.sums != ""
+		u.Auto = updateExe != "" && u.exe != "" && u.sums != "" && selfWritable()
 		p.mu.Lock()
-		if p.update == nil || p.update.Version != u.Version {
+		// a new version, or the same one whose files are there now (the release is published before its
+		// files are all uploaded)
+		if p.update == nil || p.update.Version != u.Version || (u.Auto && !p.update.Auto && p.update.Busy == "") {
 			p.update = u
 		}
 		idle := p.st.Mode == "idle"
 		p.mu.Unlock()
-		// Right after starting and not in a party: update straight away.
-		if first && idle && u.Auto {
+		// Not in a party: update straight away (in a party the button waits for a click).
+		if idle && u.Auto {
 			go p.InstallUpdate()
 		}
 	}
 	check()
-	first = false
-	for range time.Tick(6 * time.Hour) {
+	t := time.NewTicker(20 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+		case <-updateCheckNow:
+		}
 		check()
+	}
+}
+
+// updateCheckNow: check for an update right away (the window came to the front); at most once a minute.
+var updateCheckNow = make(chan struct{}, 1)
+var updateCheckedAt atomic.Int64
+
+func checkUpdateSoon() {
+	if now := time.Now().Unix(); now-updateCheckedAt.Load() >= 60 {
+		updateCheckedAt.Store(now)
+		select {
+		case updateCheckNow <- struct{}{}:
+		default:
+		}
 	}
 }
 
 // restartAfterUpdate is set by main: quit this app (the new one is already starting).
 var restartAfterUpdate func()
 
-// InstallUpdate (Windows): download, check, swap and restart. Runs in the background; progress shows on the
+// InstallUpdate (Windows, Linux): download, check, swap and restart. Runs in the background; progress shows on the
 // update button.
 func (p *Party) InstallUpdate() error {
 	p.mu.Lock()
@@ -128,12 +148,12 @@ func (p *Party) InstallUpdate() error {
 	go func() {
 		defer updating.Store(false)
 		set("Downloading…", "")
-		if err := swapExe(u); err != nil {
+		self, err := swapExe(u)
+		if err != nil {
 			set("", "Update failed: "+err.Error())
 			return
 		}
 		set("Restarting…", "")
-		self, _ := os.Executable()
 		cmd := exec.Command(self, "--after-update")
 		cmd.Dir = filepath.Dir(self)
 		detach(cmd)
@@ -148,32 +168,57 @@ func (p *Party) InstallUpdate() error {
 	return nil
 }
 
-// swapExe downloads the new exe next to the running one, checks its SHA-256, and swaps them: the running exe
-// becomes .old (Windows lets a running exe be renamed) and is removed on the next start.
-func swapExe(u *Update) error {
-	want, err := expectedSum(u.sums, updateExe)
-	if err != nil {
-		return err
-	}
+// selfPath: the running program's file (through a symlink such as ~/.local/bin/f1party).
+func selfPath() (string, error) {
 	self, err := os.Executable()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if s, err := filepath.EvalSymlinks(self); err == nil {
 		self = s
+	}
+	return self, nil
+}
+
+// selfWritable: the program's folder can take the new version (not a package install in /usr).
+func selfWritable() bool {
+	self, err := selfPath()
+	if err != nil {
+		return false
+	}
+	f, err := os.CreateTemp(filepath.Dir(self), ".F1Party.check")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
+}
+
+// swapExe downloads the new program next to the running one, checks its SHA-256, and swaps them: the running
+// one becomes .old (Windows lets a running exe be renamed, Linux keeps running the old file) and is removed on
+// the next start. Returns the path to start the new version from (on Linux os.Executable now names the .old).
+func swapExe(u *Update) (string, error) {
+	want, err := expectedSum(u.sums, updateExe)
+	if err != nil {
+		return "", err
+	}
+	self, err := selfPath()
+	if err != nil {
+		return "", err
 	}
 	dir := filepath.Dir(self)
 	tmp := filepath.Join(dir, ".F1Party.new.exe")
 	f, err := os.Create(tmp)
 	if err != nil {
-		return fmt.Errorf("can't write to %s (run the installer from the release page instead)", dir)
+		return "", fmt.Errorf("can't write to %s (run the installer from the release page instead)", dir)
 	}
 	c := &http.Client{Timeout: 5 * time.Minute}
 	res, err := c.Get(u.exe)
 	if err != nil {
 		f.Close()
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
 	defer res.Body.Close()
 	h := sha256.New()
@@ -181,23 +226,27 @@ func swapExe(u *Update) error {
 	f.Close()
 	if err != nil || res.StatusCode != 200 {
 		os.Remove(tmp)
-		return fmt.Errorf("download failed (%d)", res.StatusCode)
+		return "", fmt.Errorf("download failed (%d)", res.StatusCode)
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != want {
 		os.Remove(tmp)
-		return errors.New("the download doesn't match the release's checksum")
+		return "", errors.New("the download doesn't match the release's checksum")
+	}
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		os.Remove(tmp)
+		return "", err
 	}
 	old := self + ".old"
 	os.Remove(old)
 	if err := os.Rename(self, old); err != nil {
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
 	if err := os.Rename(tmp, self); err != nil {
 		os.Rename(old, self) // put the running version back
-		return err
+		return "", err
 	}
-	return nil
+	return self, nil
 }
 
 // expectedSum reads the line for name from the release's checksums.txt ("<sha256>  <name>").

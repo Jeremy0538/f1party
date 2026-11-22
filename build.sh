@@ -6,5 +6,9 @@ set -euo pipefail
 cd "$(dirname "$0")/app"
 tags=""
 [ "$(uname -s)" = Linux ] && tags="-tags webkit2_41"
-wails build -clean -trimpath $tags
+# The version the app shows: the newest release tag plus one minor, as the next release will be called
+# (the release workflow sets the real one).
+last=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1); last=${last#v}; last=${last:-0.0.0}
+IFS=. read -r major minor _ <<< "$last"
+wails build -clean -trimpath $tags -ldflags "-X main.version=$major.$((minor + 1)).0"
 ls -la build/bin

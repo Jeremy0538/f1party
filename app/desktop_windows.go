@@ -10,6 +10,7 @@ package main
 import (
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -123,12 +124,18 @@ func ctrlWin(arrow uintptr) {
 // toF1Desktop goes to the desktop for watching (setting, "F1" by default) and sets the taskbar the way the
 // settings say. Without that desktop a new one is made and named (Task View may show the name only after the
 // next sign-in; F1 Party finds it by it right away). Returns once Windows shows that desktop.
+//
+// One at a time: setups, streams and Ultimate F1 Viewer all call this, often at once, and each used to make
+// its own new desktop. The desktop made here is remembered by id too (its name may not be readable yet), and
+// no second one is made within 20 seconds of the first.
 func toF1Desktop() {
 	c := loadConfig()
 	taskbarForWatching()
 	if c.DesktopOff {
 		return
 	}
+	vdMu.Lock()
+	defer vdMu.Unlock()
 	name := strings.TrimSpace(c.DesktopName)
 	if name == "" {
 		name = f1DesktopName
@@ -136,13 +143,17 @@ func toF1Desktop() {
 	ids, cur := desktops()
 	target := -1
 	for i, id := range ids {
-		if strings.EqualFold(strings.TrimSpace(desktopName(id)), name) {
+		if id == vdMade || strings.EqualFold(strings.TrimSpace(desktopName(id)), name) {
 			target = i
 			break
 		}
 	}
 	if target < 0 {
-		newDesktop(name, len(ids))
+		if time.Since(vdMadeAt) < 20*time.Second {
+			return // just made one that doesn't show in the list yet: don't make another
+		}
+		vdMadeAt = time.Now()
+		vdMade = newDesktop(name, len(ids))
 		return
 	}
 	if target == cur {
@@ -165,10 +176,18 @@ func toF1Desktop() {
 	}
 }
 
-// newDesktop makes a desktop at the end (Windows switches to it) and writes its name where Windows keeps it.
-func newDesktop(name string, had int) {
+// vdMu: one desktop switch at a time. vdMade: the id of the desktop made here (and when).
+var (
+	vdMu     sync.Mutex
+	vdMade   string
+	vdMadeAt time.Time
+)
+
+// newDesktop makes a desktop at the end (Windows switches to it), writes its name where Windows keeps it and
+// returns its id ("" when it didn't show up).
+func newDesktop(name string, had int) string {
 	if had == 0 {
-		return // no desktop list to read: leave the desktops alone
+		return "" // no desktop list to read: leave the desktops alone
 	}
 	keyEvent(vkLControl, 0)
 	keyEvent(vkLWin, keyExtended)
@@ -185,9 +204,10 @@ func newDesktop(name string, had int) {
 				k.Close()
 			}
 			time.Sleep(300 * time.Millisecond)
-			return
+			return ids[len(ids)-1]
 		}
 	}
+	return ""
 }
 
 // leaveF1Desktop (Close F1): back to the first desktop; with remove, the watching desktop is removed when it
@@ -214,6 +234,9 @@ func leaveF1Desktop(remove bool) {
 		keyEvent(vkLControl, keyUp)
 		time.Sleep(500 * time.Millisecond)
 		ids, cur = desktops()
+		vdMu.Lock()
+		vdMade = ""
+		vdMu.Unlock()
 	}
 	for i := 0; i < cur; i++ {
 		ctrlWin(vkLeft)

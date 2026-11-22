@@ -237,6 +237,14 @@ func afterSetup(setup, contentID string) {
 	}()
 }
 
+// placeSoon: a stream opened without a setup still gets the saved window places, once its window is there.
+func placeSoon() {
+	go func() {
+		time.Sleep(6 * time.Second)
+		afterSetupWindows()
+	}()
+}
+
 // afterSetupWindows: the windows tidied up (window placement, when available on this system).
 var afterSetupWindows = func() {}
 

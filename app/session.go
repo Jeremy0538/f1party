@@ -190,7 +190,7 @@ func (p *Party) Jump(to string) error {
 		track, ok2 := trackNow()
 		local, ok3 := feed.Time()
 		if !ok1 || !ok2 || !ok3 {
-			return errors.New("the session's start time isn't known yet (MultiViewer's live timing hasn't loaded)")
+			return errors.New("the start time comes with the live timing, which hasn't loaded yet")
 		}
 		target := local + (start-float64(startLead.Milliseconds())-track)/1000
 		if target < 0 {

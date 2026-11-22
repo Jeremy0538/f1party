@@ -245,8 +245,19 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		w.Header().Set("Content-Type", "image/png")
 		w.Write(logoPNG)
 	})
+	mux.HandleFunc("POST /api/update/check", func(w http.ResponseWriter, r *http.Request) {
+		checkUpdateSoon()
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, party.Snapshot())
+		s := party.Snapshot()
+		s.Welcome = welcomeFor(loadConfig())
+		writeJSON(w, s)
+	})
+	// The setup guide or the what's new window was shown: not again (until the next version).
+	mux.HandleFunc("POST /api/welcome/done", func(w http.ResponseWriter, r *http.Request) {
+		updateConfig(func(c *config) { c.SetupDone, c.SeenVersion = true, version })
+		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/host", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Name string }
@@ -735,6 +746,8 @@ func newCode() string {
 
 type config struct {
 	Name           string         `json:"name"`
+	SetupDone      bool           `json:"setupDone,omitempty"`    // the first-start guide was gone through
+	SeenVersion    string         `json:"seenVersion,omitempty"`  // the version whose "what's new" was shown
 	Setup          string         `json:"setup,omitempty"`        // how sessions open: "" automatic per session type, "@live" F1 Live only, "@streamdeck", or a setup
 	Webhook        string         `json:"webhook,omitempty"`      // own Discord webhook for party invites (a team key here is moved to Teams)
 	TeamName       string         `json:"teamName,omitempty"`     // (1.3.0) name of the team key kept in Webhook

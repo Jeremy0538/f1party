@@ -22,7 +22,7 @@ switches in mvapp.go, uf1.go, watch.go, plugin.go, update.go, settings.go and ex
 | Tidy windows, battle mode on top | yes | Hyprland: floating windows only; other desktops: no | winplace_*.go |
 | Main screen size (pick main feed) | yes | Hyprland: the monitor at 0,0; other desktops: picks the feed by name | screen_*.go, winplace_linux.go |
 | Tray icon, keep running on close | yes | no, closing quits | tray_*.go |
-| Automatic update | download, checksum, replace | only "new version" notice | update.go |
+| Automatic update | download, checksum, replace | same, when F1 Party may write its own folder (not a /usr package install) | update.go |
 | Settings tabs shown | all | desktop and window parts only on Hyprland ("desktops" flag, places), taskbar never | settings.go, extras.go, ui.html |
 
 ## Why Linux is missing the window features
@@ -55,5 +55,5 @@ Still to do: KDE Plasma (KWin scripts over D-Bus), X11 (EWMH), GNOME Wayland sta
 ## Still open
 
 - Ultimate F1 Viewer on Linux has never been tested. When it was opened by hand (without the debug port) F1 Party now closes and restarts it on every platform, as it did on Windows.
-- Automatic update on Linux: possible for the plain binary (replace the file, restart), not for package installs.
+
 - Tray on Linux: Wails v2 and systray both want the main thread; would need the StatusNotifier D-Bus protocol directly.

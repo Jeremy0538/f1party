@@ -113,6 +113,13 @@ func pluginOpen(kind, contentID string) error {
 		json.NewDecoder(res.Body).Decode(&e)
 		return fmt.Errorf("Stream Deck plugin: %s", e.Error)
 	}
+	// The plugin makes its own F1 desktop and opens the windows; the taskbar and the saved window places are
+	// F1 Party's, the same as when it opens a setup itself.
+	taskbarForWatching()
+	go func() {
+		time.Sleep(12 * time.Second)
+		afterSetupWindows()
+	}()
 	return nil
 }
 
