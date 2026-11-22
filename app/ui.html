@@ -1151,7 +1151,7 @@ $("settingsbtn").onclick = async () => {
 					check("battleOn", c.battleOn, "Pick the drivers automatically"),
 					row("First window", el("span", { className: "hint", style: "margin:0", textContent: "Top 4 of the race" })),
 					row("Second window (if any)", pick("battleRight", c.battleRight, [["", "Championship top 3"], ["p5to8", "Positions 5 to 8"]])),
-					row("Update", pick("battleEvery", String(c.battleEvery || 0), [["0", "Only when the layout opens"], ["15", "Every 15 seconds"], ["30", "Every 30 seconds"], ["60", "Every minute"], ["120", "Every 2 minutes"]])))));
+					row("Update", pick("battleLaps", String(c.battleLaps ?? 5), [["0", "Only when the layout opens"], ["1", "Every lap"], ["2", "Every 2 laps"], ["5", "Every 5 laps"], ["10", "Every 10 laps"]])))));
 		})()],
 		lights: ["Lights", lightsTab(c, { check, pick, row, hint, group, ids })],
 		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
@@ -1176,7 +1176,7 @@ $("settingsbtn").onclick = async () => {
 		const out = {};
 		for (const [k, f] of Object.entries(ids)) out[k] = f();
 		if (!c.uf1) delete out.uf1On; // not installed: keep what was set
-		if (out.battleEvery !== undefined) out.battleEvery = parseInt(out.battleEvery, 10) || 0;
+		if (out.battleLaps !== undefined) out.battleLaps = parseInt(out.battleLaps, 10) || 0;
 		await post("/api/settings", out);
 		refresh(); refreshMV();
 	});

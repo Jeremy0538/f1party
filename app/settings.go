@@ -31,7 +31,7 @@ func settingsView() map[string]any {
 		"fitTiming": c.FitTiming,
 		// Drivers
 		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(), "teams": allTeams(),
-		"battleOn": c.BattleOn, "battleEvery": int(battleEvery().Seconds()), "battleRight": c.BattleRight,
+		"battleOn": c.BattleOn, "battleLaps": battleLaps(), "battleRight": c.BattleRight,
 		// Close F1
 		"closeMv": !c.CloseMVOff, "closeUf1": !c.CloseUf1Off, "closeDesktop": c.CloseDesktop,
 	}
@@ -64,7 +64,7 @@ type settingsIn struct {
 	RestLive      *bool
 	TopTeams      []string
 	BattleOn      *bool
-	BattleEvery   *int
+	BattleLaps    *int
 	BattleRight   *string
 	CloseMv       *bool
 	CloseUf1      *bool
@@ -126,8 +126,11 @@ func applySettings(in settingsIn, party *Party) {
 			}
 		}
 		set(&c.BattleOn, in.BattleOn, false)
-		if in.BattleEvery != nil {
-			c.BattleEvery, c.BattleLive = max(0, min(600, *in.BattleEvery)), false
+		if in.BattleLaps != nil {
+			c.BattleLaps, c.BattleLive = max(0, min(20, *in.BattleLaps)), false
+			if c.BattleLaps == 0 {
+				c.BattleLaps = -1 // only when the layout opens
+			}
 		}
 		if in.BattleRight != nil {
 			c.BattleRight = ""

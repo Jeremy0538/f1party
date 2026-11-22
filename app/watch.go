@@ -54,16 +54,16 @@ func allTeams() []string {
 	return out
 }
 
-// battleEvery: how often battle mode follows the race (0 = only when its layout opens).
-func battleEvery() time.Duration {
-	c := loadConfig()
-	if c.BattleEvery > 0 {
-		return time.Duration(c.BattleEvery) * time.Second
+// battleLaps: every how many laps battle mode follows the race (0 = only when its layout opens; 5 unless set).
+func battleLaps() int {
+	switch n := loadConfig().BattleLaps; {
+	case n < 0:
+		return 0
+	case n == 0:
+		return 5
+	default:
+		return n
 	}
-	if c.BattleLive {
-		return 30 * time.Second
-	}
-	return 0
 }
 
 func topTeams() []string {
@@ -219,7 +219,8 @@ var afterSetupWindows = func() {}
 
 // watchLoop keeps the best of the rest and battle mode current during the session.
 func watchLoop() {
-	var restAt, battleAt time.Time
+	var restAt time.Time
+	battleLap := 0 // lap of the last battle mode update
 	for {
 		time.Sleep(5 * time.Second)
 		c := loadConfig()
@@ -230,9 +231,16 @@ func watchLoop() {
 		watchNow.mu.Lock()
 		race, active := watchNow.kind == "race", watchNow.active
 		watchNow.mu.Unlock()
-		if every := battleEvery(); active && race && c.BattleOn && every > 0 && time.Since(battleAt) >= every {
-			battleAt = time.Now()
-			updateBattle()
+		if every := battleLaps(); active && race && c.BattleOn && every > 0 {
+			if t, ok := timingNow(); ok {
+				switch lap := t.LapCount.CurrentLap; {
+				case lap < battleLap: // another race, or a replay went back
+					battleLap = lap
+				case lap >= battleLap+every:
+					battleLap = lap
+					updateBattle()
+				}
+			}
 		}
 	}
 }
