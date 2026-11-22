@@ -394,7 +394,7 @@
 	.mlist .nm b { font-weight:500; font-size:13px; line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.mlist .nm .st { display:flex; align-items:center; font-size:11.5px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.mlist .nm .st .dot { width:6px; height:6px; margin-right:6px; flex:none; }
-	.mlist .you { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:999px; border:1px solid #3a404a; font-size:10px; line-height:1; color:var(--dim); flex:none; }
+	.mlist .you { font-size:12px; line-height:20px; color:var(--dim); flex:none; margin-left:-3px; }
 	.mlist .drift { font-size:12px; font-variant-numeric:tabular-nums; color:var(--dim); min-width:44px; text-align:right; }
 	.mlist .drift.ok { color:var(--ok); } .mlist .drift.warn { color:var(--warn); } .mlist .drift.bad { color:var(--bad); }
 	.toast { position:fixed; left:50%; bottom:24px; transform:translate(-50%, 12px); opacity:0; pointer-events:none; z-index:1000;
@@ -1125,8 +1125,8 @@ function renderMembers(s) {
 		const host = m.role === "host";
 		const synced = m.status === "In sync" || m.status === "In sync (live)";
 		const top = el("span", { className: "top" }, el("b", { textContent: m.name }));
+		if (m.me) top.append(el("span", { className: "you", textContent: "(you)" }));
 		if (host) { const h = el("span", { className: "hostbadge", title: "Host: everyone follows their stream" }); h.innerHTML = CROWN + "<span>HOST</span>"; top.append(h); }
-		if (m.me) top.append(el("span", { className: "you", textContent: "you" }));
 		const what = host ? (s.feed || m.me ? "Hosting" : m.status || "Hosting") : synced ? "Watching along" : (m.status || "Joining…");
 		const dotCls = host || synced ? "ok" : /can't|error|offline/i.test(what) ? "bad" : "warn";
 		const st = el("span", { className: "st" }, el("span", { className: "dot " + dotCls }), el("span", { textContent: what }));
