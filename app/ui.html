@@ -123,10 +123,16 @@
 	.sess .sesshead .name { flex:1; min-width:0; }
 	.sess .sesshead button.link { font-size:12px; flex:none; }
 	/* tabs in the header */
-	.tabs { display:flex; gap:4px; margin-left:18px; }
-	.tabs button { height:26px; padding:0 11px; font-size:12px; border-color:transparent; background:none; color:var(--dim); }
-	.tabs button:hover { background:#181b20; color:var(--text); }
-	.tabs button[aria-selected="true"] { background:#181b20; border-color:var(--line-2); color:var(--text); }
+	/* tabs: one bar; Party is the main tab (icon, bold, red when open), a line apart from the rest */
+	.tabs { display:flex; align-items:center; gap:2px; margin-left:18px; padding:3px; background:var(--panel); border:1px solid var(--line-2); border-radius:9px; }
+	.tabs button { height:28px; padding:0 12px; font-size:12.5px; font-weight:500; border:0; border-radius:6px; background:none; color:var(--dim); }
+	.tabs button:hover { background:#1c1f25; color:var(--text); }
+	.tabs button[aria-selected="true"] { background:#262a31; color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
+	.tabs .sep { width:1px; height:16px; background:var(--line-2); margin:0 5px; flex:none; }
+	#tabparty { display:inline-flex; align-items:center; gap:6px; font-weight:700; color:var(--text); letter-spacing:.02em; }
+	#tabparty svg { width:14px; height:14px; flex:none; }
+	#tabparty[aria-selected="true"] { background:var(--red); color:#fff; box-shadow:none; }
+	#tabparty[aria-selected="true"]:hover { background:var(--red-hi); }
 	.tabs .badge { display:inline-block; min-width:6px; height:6px; border-radius:50%; background:var(--red); margin-left:6px; vertical-align:2px; }
 	/* calendar */
 	#cal { display:flex; flex-direction:column; min-height:0; height:100%; }
@@ -323,7 +329,8 @@
 		<img src="/logo.png" alt="">
 		<b>F1 PARTY</b>
 		<nav class="tabs" role="tablist">
-			<button role="tab" id="tabparty" aria-selected="true">Party</button>
+			<button role="tab" id="tabparty" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M17 2l-5 5-5-5"/></svg>Party</button>
+			<span class="sep" aria-hidden="true"></span>
 			<button role="tab" id="tabcal" aria-selected="false">Calendar</button>
 			<button role="tab" id="tabfriends" aria-selected="false">Friends</button>
 			<button role="tab" id="tabteams" aria-selected="false">Teams</button>
