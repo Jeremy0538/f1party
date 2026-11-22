@@ -6,6 +6,7 @@
 //   GET /f1party/health
 //   GET /f1party/join/CODE   (a page that opens f1party://join/CODE: the clickable link in Discord invites)
 //   POST /f1party/post       (group Discord invites: {key, kind, ...}; see postToDiscord)
+//   POST /f1party/group/invite {key} -> {url}   GET /f1party/group/TOKEN (page)   POST /f1party/group/redeem {token} -> {key}
 //
 // Messages (JSON):
 //   any   -> relay  {t:"ping", c}                        relay -> same  {t:"pong", c, s}
@@ -32,6 +33,10 @@ export default {
 		const join = path.match(/^\/join\/([A-Za-z0-9]{4,8})$/);
 		if (join) return joinPage(join[1].toUpperCase());
 		if (path === "/post" && req.method === "POST") return postToDiscord(req, env, url.origin);
+		if (path === "/group/invite" && req.method === "POST") return groupInvite(req, env, url.origin);
+		if (path === "/group/redeem" && req.method === "POST") return groupRedeem(req, env);
+		const groupLink = path.match(/^\/group\/([A-Za-z0-9]{12,32})$/);
+		if (groupLink) return groupPage(groupLink[1]);
 		if (path !== "/ws") return new Response("Not found", { status: 404 });
 		if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
 		const room = (url.searchParams.get("room") || "").toUpperCase();
@@ -45,6 +50,7 @@ type Attachment = { role: "host" | "guest"; name: string; drift?: number; status
 export class Room extends DurableObject<Env> {
 	async fetch(req: Request): Promise<Response> {
 		const url = new URL(req.url);
+		if (url.pathname === "/internal/group") return this.groupTokens(await req.json());
 		if (url.pathname === "/internal/allow") return this.allowPost(url.searchParams.get("kind") || "", url.searchParams.get("needHost") === "1");
 		const role = url.searchParams.get("role") === "host" ? "host" : "guest";
 		const name = (url.searchParams.get("name") || "Guest").slice(0, 32);
@@ -132,6 +138,40 @@ export class Room extends DurableObject<Env> {
 		return new Response("ok");
 	}
 
+	// Group invite links (only in the "__group" object): token -> {exp, uses}. Creating is capped at 20 a
+	// day, redeeming at 60 tries an hour, so tokens can't be guessed or farmed.
+	private async groupTokens(cmd: { op: string; token?: string }): Promise<Response> {
+		const now = Date.now();
+		const cap = async (name: string, max: number, windowMs: number) => {
+			const recent = ((await this.ctx.storage.get<number[]>(name)) || []).filter((t) => now - t < windowMs);
+			if (recent.length >= max) return false;
+			recent.push(now);
+			await this.ctx.storage.put(name, recent);
+			return true;
+		};
+		if (cmd.op === "create") {
+			if (!(await cap("created", 20, 86400_000))) return new Response("Too many invite links today", { status: 429 });
+			const bytes = crypto.getRandomValues(new Uint8Array(12));
+			const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+			const token = Array.from(bytes, (b) => abc[b % abc.length]).join("") + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => abc[b % abc.length]).join("");
+			await this.ctx.storage.put("t:" + token, { exp: now + 7 * 86400_000, uses: 5 });
+			return Response.json({ token });
+		}
+		if (cmd.op === "redeem" && cmd.token) {
+			if (!(await cap("tries", 60, 3600_000))) return new Response("Too many tries, try again later", { status: 429 });
+			const t = await this.ctx.storage.get<{ exp: number; uses: number }>("t:" + cmd.token);
+			if (!t || t.exp < now || t.uses <= 0) {
+				if (t) await this.ctx.storage.delete("t:" + cmd.token);
+				return new Response("This invite link has expired. Ask for a new one.", { status: 410 });
+			}
+			t.uses--;
+			if (t.uses > 0) await this.ctx.storage.put("t:" + cmd.token, t);
+			else await this.ctx.storage.delete("t:" + cmd.token);
+			return new Response("ok");
+		}
+		return new Response("Bad request", { status: 400 });
+	}
+
 	private broadcast(msg: object, tag?: string, skip?: WebSocket) {
 		const data = JSON.stringify(msg);
 		for (const ws of this.ctx.getWebSockets(tag)) {
@@ -185,7 +225,7 @@ function sameKey(a: string, b: string): boolean {
 }
 
 async function postToDiscord(req: Request, env: Env, origin: string): Promise<Response> {
-	if (!env.GROUP_KEY || !env.DISCORD_WEBHOOK) return new Response("Group invites aren't set up on this relay", { status: 503 });
+	if (!env.GROUP_KEY || !env.DISCORD_WEBHOOK) return new Response("Teams aren't set up on this relay", { status: 503 });
 	let body: any;
 	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
 	if (typeof body?.key !== "string" || !sameKey(body.key, env.GROUP_KEY)) return new Response("Wrong group key", { status: 403 });
@@ -222,4 +262,49 @@ async function postToDiscord(req: Request, env: Env, origin: string): Promise<Re
 	});
 	if (!res.ok) return new Response("Discord: " + res.status, { status: 502 });
 	return new Response("ok");
+}
+
+// Group invite links: someone who has the group key makes a link (valid 7 days, 5 uses); opening it starts
+// F1 Party (f1party://group/TOKEN), which trades the token here for the key. The link never holds the key.
+const groupRoom = (env: Env) => env.ROOMS.get(env.ROOMS.idFromName("__group"));
+
+async function groupInvite(req: Request, env: Env, origin: string): Promise<Response> {
+	if (!env.GROUP_KEY) return new Response("Teams aren't set up on this relay", { status: 503 });
+	let body: any;
+	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
+	if (typeof body?.key !== "string" || !sameKey(body.key, env.GROUP_KEY)) return new Response("Wrong group key", { status: 403 });
+	const res = await groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify({ op: "create" }) });
+	if (!res.ok) return new Response(await res.text(), { status: res.status });
+	const { token } = (await res.json()) as { token: string };
+	return Response.json({ url: `${origin}/f1party/group/${token}` });
+}
+
+async function groupRedeem(req: Request, env: Env): Promise<Response> {
+	if (!env.GROUP_KEY) return new Response("Teams aren't set up on this relay", { status: 503 });
+	let body: any;
+	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
+	const token = String(body?.token || "");
+	if (!/^[A-Za-z0-9]{12,32}$/.test(token)) return new Response("Bad request", { status: 400 });
+	const res = await groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify({ op: "redeem", token }) });
+	if (!res.ok) return new Response(await res.text(), { status: res.status });
+	return Response.json({ key: env.GROUP_KEY }, { headers: { "cache-control": "no-store" } });
+}
+
+function groupPage(token: string): Response {
+	const app = `f1party://group/${token}`;
+	const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Join our F1 Party team</title>
+<meta property="og:title" content="Join our F1 Party team">
+<meta property="og:description" content="One click puts you in our team: party invites go to our Discord channel.">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0c0d10;color:#eef0f3;font:15px/1.5 system-ui,sans-serif}
+main{max-width:400px;padding:24px;text-align:center}h1{font-size:22px;margin:0 0 10px}
+a.btn{display:inline-block;background:#e10600;color:#fff;text-decoration:none;font-weight:600;padding:11px 18px;border-radius:7px;margin:8px 0}
+p{color:#8a909c}a{color:#ff7a72}</style></head><body><main>
+<h1>Join our F1 Party team</h1>
+<p>Your team is our group of friends: every party invite goes to our Discord channel. One click and you're in, nothing to paste.</p>
+<a class="btn" href="${app}">Open in F1 Party</a>
+<p>Nothing happens? Get F1 Party from <a href="https://github.com/Jeremy0538/f1party/releases/latest">GitHub</a>, start it once, then click the button again.</p>
+<p>The link works for 7 days.</p>
+</main><script>location.href=${JSON.stringify(app)};</script></body></html>`;
+	return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
 }

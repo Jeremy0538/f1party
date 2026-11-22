@@ -132,6 +132,21 @@ func main() {
 		}
 	}
 
+	// f1party://group/TOKEN (a group invite link): set up the group's Discord invites.
+	groupArg := func(args []string) bool {
+		for _, a := range args {
+			if t := groupToken(a); t != "" {
+				if err := redeemGroupInvite(t); err != nil {
+					party.SetNote("Team link: " + err.Error())
+				} else {
+					party.SetNote("You joined the team: party invites now go to the team's Discord channel")
+				}
+				return true
+			}
+		}
+		return false
+	}
+
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
 		Width:            780,
@@ -151,6 +166,8 @@ func main() {
 				go hostAndInvite(true)
 			case hasJoinArg(os.Args[1:]):
 				go joinArg(os.Args[1:])
+			case hasGroupArg(os.Args[1:]):
+				go func() { groupArg(os.Args[1:]); rejoinLast(party) }()
 			default:
 				go rejoinLast(party)
 			}
@@ -172,6 +189,7 @@ func main() {
 					go hostAndInvite(true)
 				}
 				go joinArg(d.Args)
+				go groupArg(d.Args)
 			},
 		},
 		Windows: &windows.Options{Theme: windows.Dark},
@@ -301,14 +319,28 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	// Discord invites: whether a webhook is set (never the URL itself), set or clear it, send one now.
 	mux.HandleFunc("GET /api/discord", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]bool{"webhookSet": loadConfig().Webhook != ""})
+		wh := loadConfig().Webhook
+		writeJSON(w, map[string]bool{"webhookSet": wh != "", "group": isGroupKey(wh)})
+	})
+	// Group invite link: made by the relay, copied for pasting in Discord.
+	mux.HandleFunc("POST /api/groupinvite", func(w http.ResponseWriter, r *http.Request) {
+		link, err := newGroupInvite()
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		if err := copyText(link); err != nil {
+			http.Error(w, "Couldn't copy the link: "+link, 500)
+			return
+		}
+		writeJSON(w, map[string]string{"url": link})
 	})
 	mux.HandleFunc("POST /api/discord", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Webhook string }
 		json.NewDecoder(r.Body).Decode(&in)
 		in.Webhook = strings.TrimSpace(in.Webhook)
 		if in.Webhook != "" && !validDiscordDest(in.Webhook) {
-			http.Error(w, "That isn't a Discord webhook URL (https://discord.com/api/webhooks/…) or a group key (f1p_…)", 400)
+			http.Error(w, "That isn't a team key (f1p_…) or a Discord webhook URL (https://discord.com/api/webhooks/…)", 400)
 			return
 		}
 		updateConfig(func(c *config) { c.Webhook = in.Webhook })
@@ -459,6 +491,15 @@ func replyErr(w http.ResponseWriter, err error) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func hasGroupArg(args []string) bool {
+	for _, a := range args {
+		if groupToken(a) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func hasJoinArg(args []string) bool {
