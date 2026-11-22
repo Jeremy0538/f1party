@@ -343,7 +343,8 @@
 	#modalbody { flex:1 1 auto; min-height:0; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; margin:0 -18px; padding:0 18px; }
 	.modal .box > .row { flex:none; padding-top:12px; border-top:1px solid var(--line); }
 	/* sticky tab bar: a band in the window's colour around and below it, so nothing scrolls into view behind its corners or the gap under it */
-	.settabs { position:sticky; top:0; z-index:1; box-shadow:0 0 0 6px var(--panel), 0 12px 0 6px var(--panel); }
+	.settabswrap { position:sticky; top:0; z-index:1; background:var(--panel); margin:0 -18px 4px; padding:0 18px 8px; }
+	.settabswrap .settabs { margin:0; }
 	.modal .box { width:380px; max-height:86%; overflow:hidden; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
 	.modal .box > b { display:block; font-size:15px; margin-bottom:10px; }
 	.pick { display:flex; flex-direction:column; gap:2px; }
@@ -1328,7 +1329,7 @@ async function openSettings(opts = {}) {
 		await post("/api/settings", out);
 		refresh(); refreshMV();
 	};
-	if (!opts.wizard) { dialog("Settings", el("div", {}, bar, pane), "Save", save); return; }
+	if (!opts.wizard) { dialog("Settings", el("div", {}, el("div", { className: "settabswrap" }, bar), pane), "Save", save); return; }
 	// The guide: every tab that applies here, in order; Finish saves everything at once.
 	const steps = Object.keys(tabs).filter((k) => k !== "windows" || c.places || c.windows !== false);
 	const intro = {
