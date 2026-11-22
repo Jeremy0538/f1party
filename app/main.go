@@ -835,7 +835,7 @@ type config struct {
 	BattleOn      bool     `json:"battleOn,omitempty"`      // pick battle mode's drivers in Ultimate F1 Viewer
 	BattleLive    bool     `json:"battleLive,omitempty"`    // (1.5) keep them up to date: now BattleEvery
 	BattleLaps    int      `json:"battleLaps,omitempty"`    // laps between battle mode updates during the race (-1 = only when it opens, 0 = 5)
-	BattleRight   string   `json:"battleRight,omitempty"`   // second battle mode window: "" championship top 3, "p5to8" positions 5 to 8
+	BattleRight   string   `json:"battleRight,omitempty"`   // second battle mode window: "" the championship top, "p5to8" the next places in the race
 	// Close F1
 	CloseMVOff   bool `json:"closeMvOff,omitempty"`   // leave MultiViewer open
 	CloseUf1Off  bool `json:"closeUf1Off,omitempty"`  // leave Ultimate F1 Viewer open

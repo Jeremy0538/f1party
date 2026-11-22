@@ -6,7 +6,8 @@ package main
 //   - "best of the rest": the setup's onboards of drivers outside the top teams show the best-placed of
 //     them, kept up to date during the session
 //   - the Ultimate F1 Viewer layout that belongs to the setup, after the timing has loaded
-//   - battle mode in the viewer: left the top 4, right the championship top 3 (or P5-8), kept up to date
+//   - battle mode in the viewer: left the race's top places, right the championship top (or the next places),
+//     as many drivers per window as set, kept up to date
 //   - Live Timing zoomed to fill its window
 //   - Close F1: MultiViewer and the viewer closed, the desktop removed, lights and taskbar back
 
@@ -654,22 +655,33 @@ func fitLiveTiming(fit bool) {
 	}
 }
 
-// updateBattle: the first battle mode window (from the left) shows the session's top 4, a second one the
-// championship top 3 (or P5-8). False while its windows haven't loaded their driver list yet.
+// battleMax: the most drivers a battle mode window gets; it shows fewer when they don't fit in it.
+const battleMax = 4
+
+// updateBattle: the first battle mode window (from the left) shows the top of the race, as many as fit (up
+// to 4). A next window carries on where that one stopped (the next places), or shows the top of the
+// championship. False while its windows haven't loaded their driver list yet.
 func updateBattle() bool {
 	t, ok := timingNow()
 	if !ok {
 		return false
 	}
 	pos := t.byPosition()
-	if len(pos) < 8 {
+	if len(pos) < 2 {
 		return false
 	}
-	right := pos[4:8]
-	if champ := t.byChampionship(); loadConfig().BattleRight != "p5to8" && len(champ) >= 3 {
-		right = champ[:3]
+	champ := t.byChampionship()
+	useChamp := loadConfig().BattleRight != "p5to8" && len(champ) >= 2
+	upTo := func(l []int, from int) []int {
+		from = min(from, len(l))
+		return l[from:min(len(l), from+battleMax)]
 	}
-	return uf1SetBattle(pos[:4], right)
+	return uf1SetBattle(func(i, shown int) []int {
+		if i > 0 && useChamp {
+			return upTo(champ, 0)
+		}
+		return upTo(pos, shown)
+	})
 }
 
 // ---------------------------------------------------------------- Close F1

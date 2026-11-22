@@ -13,6 +13,7 @@ type newsItem struct {
 
 var whatsNew = []newsItem{
 	{"1.13.0", "Best of the rest: choose which onboards always stay by team or by driver.", "drivers"},
+	{"1.13.0", "Battle mode: each window gets as many drivers as fit (up to 4), and the second window carries on where the first stopped.", "drivers"},
 	{"1.13.0", "Settings has a menu on the left: You and party, Sessions, Drivers, Screen, Lights and End session, with Updates at the bottom.", "party"},
 	{"1.12.0", "One End session button: it closes the streams, MultiViewer and Ultimate F1 Viewer, the watching desktop, lights and taskbar (as set). The party stays; End party leaves it.", "close"},
 	{"1.12.0", "Your other streams follow the main stream: pause, skip or rewind it and they do the same, and they sync again when you play.", ""},
