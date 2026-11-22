@@ -41,6 +41,8 @@ type FeedState struct {
 	Resync int `json:"resync,omitempty"`
 	// Friends: the members the host sent a friend request (first characters of their ids).
 	Friends []string `json:"friends,omitempty"`
+	// Ended: the host closed the session on purpose ("End session"); guests close theirs too. The party stays.
+	Ended bool `json:"ended,omitempty"`
 }
 
 type Member struct {
@@ -96,6 +98,8 @@ type Party struct {
 	hostWhen time.Time
 
 	setup     string // MultiViewer setup a guest opens on joining ("" = none)
+	ended     bool   // host: "End session" closed the session; told to guests until another one is open
+	skip      string // guest: content id this guest stopped watching ("End session"); the party goes on
 	setupBusy bool   // the Open button is starting MultiViewer and opening a setup: the guest loop waits
 	setupDone string // content id the Open button opened a setup for: the guest loop doesn't open it again
 	forceSync bool   // guest: correct the drift now, whatever its size
@@ -266,6 +270,7 @@ func (p *Party) Start(mode, code, name string) {
 	p.cancel = cancel
 	p.st = Status{Mode: mode, Code: code, Name: name, Status: "Connecting…", Version: version}
 	p.samples, p.host = nil, nil
+	p.ended, p.skip = false, ""
 	p.hostOffAt, p.countdownAt = time.Time{}, 0
 	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
 	p.hostSince = time.Time{}
@@ -498,6 +503,12 @@ func (p *Party) hostLoop(ctx context.Context) {
 			p.hostRequests(ps, feed.StreamData.ContentID)
 		}
 		fs := FeedState{T: "state", None: true}
+		p.mu.Lock()
+		if feed != nil {
+			p.ended = false
+		}
+		fs.Ended = p.ended
+		p.mu.Unlock()
 		if feed != nil {
 			if id := feed.StreamData.ContentID; id != typeFor {
 				typeFor, sessionType, typeAt = id, "", time.Time{} // another session: don't send the old type
@@ -559,6 +570,9 @@ func (p *Party) hostLoop(ctx context.Context) {
 			if feed == nil {
 				s.Feed = nil
 				s.Status = "Open F1 Live in MultiViewer"
+				if fs.Ended {
+					s.Status = "Session ended: pick another one in the calendar"
+				}
 			} else {
 				s.Feed = &FeedInfo{Title: fs.Title, Time: fs.Time, Paused: fs.Paused, Live: fs.Live}
 				if s.Connected {
@@ -579,7 +593,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 		}
 		// send on any discontinuity (pause/play, seek, new stream) right away, otherwise once a second
 		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title ||
-			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync ||
+			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync || fs.Ended != lastSent.Ended ||
 			strings.Join(fs.Friends, ",") != strings.Join(lastSent.Friends, ",")
 		if !changed && !fs.None && !fs.Paused && lastSent.At > 0 {
 			expected := lastSent.Time + (fs.At-lastSent.At)/1000
@@ -724,6 +738,12 @@ func (p *Party) guestLoop(ctx context.Context) {
 			}
 		case host == nil || !clockOK || time.Since(hostWhen) > 10*time.Second:
 			status = "Waiting for the host's stream"
+		case host.None && host.Ended:
+			status = "The host ended the session"
+			if hostContent != "" {
+				mvCloseOthers("", setup != "")
+				hostContent, setupFor, pluginUntil, pluginRetry, creatingAt = "", "", time.Time{}, time.Time{}, time.Time{}
+			}
 		case host.None:
 			status = "The host has no stream open"
 		}
@@ -744,6 +764,16 @@ func (p *Party) guestLoop(ctx context.Context) {
 				report()
 			}
 			hostContent, switchAt = host.ContentID, time.Now()
+			continue
+		}
+		p.mu.Lock()
+		skipped := p.skip != "" && p.skip == host.ContentID
+		p.mu.Unlock()
+		if skipped {
+			// "End session": this guest stopped watching; the next session the host opens brings it back
+			p.set(func(s *Status) { s.Feed = nil })
+			status = "You stopped watching this session"
+			report()
 			continue
 		}
 		feed := mainFeed(ps, host.ContentID)
@@ -1072,6 +1102,42 @@ func (p *Party) takeOverHost() bool {
 		p.SetNote("The host left, so you're hosting now")
 	}()
 	return true
+}
+
+// closeSession closes every stream and timing window (a variable so tests never touch a real MultiViewer).
+var closeSession = func() { mvCloseOthers("", true) }
+
+// EndSession: stop watching the session without leaving the party. The host closes it for everyone (the
+// party stays, ready for the next session from the calendar); a guest stops watching just for themself
+// until the host opens another session, or until WatchAgain.
+func (p *Party) EndSession() error {
+	switch p.Snapshot().Mode {
+	case "guest":
+		id, _ := p.HostSession()
+		if id == "" {
+			return errors.New("the host has no session open")
+		}
+		p.mu.Lock()
+		p.skip = id
+		p.mu.Unlock()
+		closeSession()
+	case "host":
+		closeSession()
+		p.mu.Lock()
+		p.ended = true // after closing: the host loop clears it as soon as a stream is open again
+		p.mu.Unlock()
+		p.SetNote("Session ended for everyone; the party stays. Pick another session in the calendar.")
+	default:
+		closeSession()
+	}
+	return nil
+}
+
+// WatchAgain (guest): undo "End session": the host's session opens again.
+func (p *Party) WatchAgain() {
+	p.mu.Lock()
+	p.skip = ""
+	p.mu.Unlock()
 }
 
 // HostSession: the content id and session type the host is watching (guest), or "".

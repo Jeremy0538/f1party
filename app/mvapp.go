@@ -410,6 +410,7 @@ func isMainWindow(p cdpPage) bool {
 // mvOpenSetup opens one of MultiViewer's setups for a session. With contentID it first opens that session
 // in MultiViewer's main window when it isn't open yet; without, it uses the session that is open.
 func mvOpenSetup(name, contentID string) error {
+	toF1Desktop() // the setup's windows land on the F1 desktop when there is one
 	pages, err := cdpPages()
 	if err != nil {
 		return err

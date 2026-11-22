@@ -317,6 +317,10 @@
 	.pick label:hover { background:#1a1d23; }
 	.pick input { width:16px; height:16px; accent-color:var(--red); }
 	.pick .sub { margin-left:auto; font-size:11px; color:var(--dim); }
+	.sessend { margin-top:10px; justify-content:space-between; }
+	#sessend { color:var(--bad); font-size:12px; }
+	#sessend:hover { color:#ff6b6b; }
+	#sessagain { height:28px; font-size:12px; }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -465,6 +469,10 @@
 					<button id="jbegin" title="Back to the beginning of the broadcast">Beginning</button>
 					<button id="jstart" title="To 1 minute before the session starts, then the five lights and everyone plays together">Start −1 min</button>
 					<button id="jlive" class="hidden" title="To the live edge">Live</button>
+				</div>
+				<div class="row sessend">
+					<button class="link" id="sessend" title="Stop watching this session; the party stays">End session</button>
+					<button class="hidden" id="sessagain" title="Open the host's session again">Watch again</button>
 				</div>
 				<div class="error" id="sesserr"></div>
 			</section>
@@ -927,7 +935,17 @@ async function refreshSession() {
 	$("sess").classList.toggle("hidden", (!v && !hosting) || infoOpen);
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v ? "Change" : "Choose";
-	document.querySelector(".sess .jumps").classList.toggle("hidden", !v);
+	document.querySelector(".sess .jumps").classList.toggle("hidden", !v || !!v.stopped);
+	// End session: with a session open (host: for everyone, guest: just you); Watch again after a guest's end
+	$("sessend").classList.toggle("hidden", !v || !!v.stopped);
+	$("sessend").title = hosting ? "Close this session for everyone; the party stays" : "Stop watching this session; the party stays";
+	$("sessagain").classList.toggle("hidden", !v || !v.stopped);
+	if (v && v.stopped) {
+		$("sessname").textContent = v.name || "The host's session";
+		$("sesstag").textContent = ""; $("sesstag").className = "";
+		$("sesswhen").textContent = "You stopped watching. The party goes on; the host's next session opens by itself.";
+		return;
+	}
 	if (!v) {
 		$("sessname").textContent = "No session open";
 		$("sesstag").textContent = "";
@@ -957,6 +975,15 @@ async function refreshSession() {
 	}
 }
 $("sesschange").onclick = () => showTab("calendar");
+$("sessend").onclick = async () => {
+	const msg = mode === "host" ? "End this session for everyone? Their streams close too, the party stays."
+		: mode === "guest" ? "Stop watching this session? You stay in the party." : "Close this session in MultiViewer?";
+	if (!confirm(msg)) return;
+	$("sesserr").textContent = "";
+	try { await post("/api/session/end"); } catch (e) { $("sesserr").textContent = e.message; }
+	refreshSession(); refresh();
+};
+$("sessagain").onclick = async () => { await post("/api/session/again"); refreshSession(); refresh(); };
 const jump = (to) => async () => { $("sesserr").textContent = ""; try { await post("/api/session/jump", { to }); } catch (e) { $("sesserr").textContent = e.message; } refreshSession(); };
 $("jbegin").onclick = jump("begin"); $("jstart").onclick = jump("start"); $("jlive").onclick = jump("live");
 

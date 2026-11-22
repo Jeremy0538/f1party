@@ -1,0 +1,6 @@
+//go:build !windows
+
+package main
+
+// toF1Desktop: virtual desktops are only handled on Windows (see desktop_windows.go).
+func toF1Desktop() {}

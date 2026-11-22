@@ -21,6 +21,7 @@ type SessionView struct {
 	CanStart bool    `json:"canStart"`          // the start time is known (live timing loaded)
 	CanJump  bool    `json:"canJump"`           // not a guest (the host moves the party)
 	Busy     string  `json:"busy,omitempty"`    // a jump in progress
+	Stopped  bool    `json:"stopped,omitempty"` // guest: stopped watching this session ("End session")
 }
 
 var sessionNameCache struct {
@@ -116,6 +117,15 @@ func parseOffset(s string) time.Duration {
 
 // Session: the Session block's data, or nil without a stream.
 func (p *Party) Session() *SessionView {
+	p.mu.Lock()
+	skip := ""
+	if p.st.Mode == "guest" && p.host != nil && p.skip != "" && p.skip == p.host.ContentID {
+		skip = p.skip
+	}
+	p.mu.Unlock()
+	if skip != "" {
+		return &SessionView{Name: sessionName(skip), Stopped: true}
+	}
 	ps, err := players()
 	if err != nil {
 		return nil

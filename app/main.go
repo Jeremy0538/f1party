@@ -472,6 +472,13 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"session": party.Session()})
 	})
+	mux.HandleFunc("POST /api/session/end", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.EndSession())
+	})
+	mux.HandleFunc("POST /api/session/again", func(w http.ResponseWriter, r *http.Request) {
+		party.WatchAgain()
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("POST /api/session/jump", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ To string }
 		json.NewDecoder(r.Body).Decode(&in)

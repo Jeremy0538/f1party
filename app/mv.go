@@ -139,6 +139,7 @@ func mainFeed(ps []Player, contentID string) *Player {
 const mainTitle = "F1 LIVE"
 
 func playerCreate(contentID, streamTitle string) (string, error) {
+	toF1Desktop() // new windows land on the F1 desktop when there is one
 	var out struct {
 		ID string `json:"playerCreate"`
 	}
