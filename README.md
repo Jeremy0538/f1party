@@ -1,13 +1,12 @@
 # F1 Party
 
-Watch [MultiViewer](https://multiviewer.app) in sync with friends on Windows, macOS and Linux.
+Watch [MultiViewer](https://multiviewer.app) in sync with friends on Windows and Linux.
 
 ## Download
 | Your computer | File |
 |---|---|
 | Windows (installer, adds F1 Party to the Start menu) | [F1Party-windows-setup.exe](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-windows-setup.exe) |
 | Windows (single file, no install) | [F1Party-windows.exe](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-windows.exe) |
-| Mac (Apple Silicon and Intel) | [F1Party-macos.zip](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-macos.zip) |
 | Linux | [F1Party-linux](https://github.com/Jeremy0538/f1party/releases/latest/download/F1Party-linux) |
 
 ## How to use
@@ -96,8 +95,6 @@ Also in the app:
 
 First launch warnings (the app isn't signed):
 - **Windows:** "Windows protected your PC", then **More info**, then **Run anyway**.
-- **macOS:** unzip, move **F1 Party.app** to Applications, open Terminal and run
-  `xattr -dr com.apple.quarantine "/Applications/F1 Party.app"`, then open it.
 - **Linux:** needs WebKitGTK (`libwebkit2gtk-4.1-0`, installed on most desktops), then
   `chmod +x F1Party-linux && ./F1Party-linux`
 
@@ -107,7 +104,7 @@ one who is behind can't be pulled forward (live streams can't skip ahead).
 ## Developer notes
 
 - `app/`: Go desktop app built with [Wails](https://wails.io) v2: a window using the system's own web view
-  (WebView2 on Windows, WebKit on macOS/Linux), no browser and no install. The page (`ui.html`) and its small
+  (WebView2 on Windows, WebKit on Linux), no browser and no install. The page (`ui.html`) and its small
   JSON API are served straight into that window, not on a network port. It talks to the MultiViewer on the
   same computer through its local API (`http://localhost:10101/api/graphql`). Starting it twice brings the
   open window to the front.
@@ -149,7 +146,7 @@ Needs Go and the Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v
     ./build.sh            # builds this computer's version into app/build/bin/
 
 All platforms: GitHub Actions (`.github/workflows/build.yml`). Run it by hand from the Actions tab, or push a
-tag like `v0.2.0` to also publish a release with `F1Party-windows.exe`, `F1Party-macos.zip` and `F1Party-linux`.
+tag like `v0.2.0` to also publish a release with `F1Party-windows.exe`, `F1Party-windows-setup.exe` and `F1Party-linux`.
 
 Install your own build on this PC (Start menu entry, can be pinned to the taskbar):
 

@@ -22,9 +22,6 @@ jobs:
             platform: windows/amd64
             flags: -nsis
             out: F1Party-windows.exe
-          - os: macos-latest
-            platform: darwin/universal
-            out: F1Party-macos.zip
           - os: ubuntu-24.04
             platform: linux/amd64
             tags: webkit2_41
@@ -66,7 +63,6 @@ jobs:
           case "${{ runner.os }}" in
             Windows) cp build/bin/F1Party.exe "../dist/${{ matrix.out }}"
                      cp build/bin/*installer*.exe ../dist/F1Party-windows-setup.exe ;;
-            macOS)   ditto -c -k --keepParent "build/bin/F1 Party.app" "../dist/${{ matrix.out }}" ;;
             Linux)   cp build/bin/F1Party "../dist/${{ matrix.out }}" ;;
           esac
       - uses: actions/upload-artifact@v4
