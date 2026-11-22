@@ -180,7 +180,8 @@
 	.calhead { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
 	.calhead .t { flex:1; min-width:0; }
 	.calhead h1 { margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-	.calhead .d { font-size:12px; color:var(--dim); }
+	.calhead .d { display:block; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.calhead button.calpick { overflow:hidden; }
 	.calhead button { width:32px; padding:0; font-size:15px; }
 	.calhead button.calarrow { width:36px; height:36px; flex:none; display:flex; align-items:center; justify-content:center; }
 	.calhead button.calarrow svg { width:20px; height:20px; display:block; }
@@ -1710,7 +1711,10 @@ async function refreshCal() {
 	const w = d.weekend; calData = w; calMeeting = w.meeting.key; notifyOK = d.notifications !== false;
 	$("calname").textContent = (w.meeting.name || "").replace("Grand Prix", "GP");
 	const ms = new Date(w.meeting.start), me = new Date(w.meeting.end);
-	$("caldates").textContent = `${w.meeting.location} · ${dayFmt.format(ms)} – ${dayFmt.format(me)} ${me.getFullYear()}`;
+	// short: "20–22 Nov 2026", or "30 Nov – 2 Dec 2026" across two months
+	const mon = (d) => d.toLocaleDateString("en-GB", { month: "short" });
+	const span = ms.getMonth() === me.getMonth() ? `${ms.getDate()}–${me.getDate()} ${mon(me)}` : `${ms.getDate()} ${mon(ms)} – ${me.getDate()} ${mon(me)}`;
+	$("caldates").textContent = `${w.meeting.location} · ${span} ${me.getFullYear()}`;
 	$("calprev").disabled = !w.prev; $("calnext").disabled = !w.next;
 	const guest = mode === "guest", hosting = mode === "host", ul = $("calsessions");
 	const pickWord = sessData && !sessData.stopped ? "Switch" : "Select";
