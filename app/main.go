@@ -271,7 +271,12 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		s := party.Snapshot()
 		s.Welcome = welcomeFor(loadConfig())
-		writeJSON(w, s)
+		// open: a tab the window should show once (the Stream Deck's Start session asks for the calendar)
+		open, _ := uiOpen.Swap("").(string)
+		writeJSON(w, struct {
+			Status
+			Open string `json:"open,omitempty"`
+		}{s, open})
 	})
 	// The setup guide or the what's new window was shown: not again (until the next version).
 	mux.HandleFunc("POST /api/welcome/done", func(w http.ResponseWriter, r *http.Request) {

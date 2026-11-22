@@ -1095,6 +1095,7 @@ async function refresh() {
 	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
 	$("ver").textContent = s.version;
 	welcome(s.welcome);
+	if (s.open === "cal") showTab("cal");
 	const up = s.update;
 	$("update").classList.toggle("hidden", !up);
 	$("settingsbtn").classList.toggle("hasdot", !!up);

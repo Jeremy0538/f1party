@@ -15,9 +15,10 @@ package main
 //   POST /control/watch  {which: "race" | "quali" | "live"} → open the race or qualifying on now, else the
 //                          last one; "live": the session on track now. A party you host switches along.
 //   POST /control/close  → End session: streams and F1 closed (a host ends it for everyone; the party stays)
+//   POST /control/calendar → the window comes up on the calendar, to pick a session (Start session key)
 //   POST /control/start  → Start together: the five lights for everyone, then the session plays (hosts a
 //                          party first when you're not in one)
-//   status also has "countdown": seconds until the lights go out (Start together), when counting
+//   status also has "session": true while a session is open (End session), and "countdown": seconds until the lights go out (Start together), when counting
 
 import (
 	"encoding/json"
@@ -29,10 +30,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 const controlAddr = "127.0.0.1:47821"
+
+// uiOpen: a tab the window shows on its next status poll ("cal"), then forgets.
+var uiOpen atomic.Value
 
 // controlHooks: what the control needs from the app window.
 type controlHooks struct {
@@ -58,6 +63,9 @@ func startControl(party *Party, h controlHooks) {
 		}
 		if s.Countdown > 0 {
 			out["countdown"] = s.Countdown
+		}
+		if v := party.Session(); v != nil && !v.Stopped {
+			out["session"] = true
 		}
 		writeJSON(w, out)
 	})
@@ -144,6 +152,11 @@ func startControl(party *Party, h controlHooks) {
 	})
 	mux.HandleFunc("POST /control/close", func(w http.ResponseWriter, r *http.Request) {
 		go party.EndSession()
+		writeJSON(w, map[string]string{})
+	})
+	mux.HandleFunc("POST /control/calendar", func(w http.ResponseWriter, r *http.Request) {
+		uiOpen.Store("cal")
+		h.show()
 		writeJSON(w, map[string]string{})
 	})
 	mux.HandleFunc("POST /control/start", func(w http.ResponseWriter, r *http.Request) {
