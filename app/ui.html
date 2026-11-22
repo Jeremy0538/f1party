@@ -406,6 +406,7 @@
 	.note:empty { display:none; }
 	/* who's in the party: one row per person, status under the name */
 	/* the party: one box with who you are, the code and its buttons, End party as a cross */
+	.asktext { margin:8px 0 0; color:var(--dim); line-height:1.5; }
 	.pcard { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:14px 16px 16px; margin-bottom:12px; }
 	.ptop { display:flex; align-items:center; gap:10px; }
 	.ptop .boxtitle { white-space:nowrap; }
@@ -745,7 +746,7 @@ $("namechange").onclick = () => { setTab = "general"; openSettings(); };
 	});
 })();
 $("leave").onclick = async () => {
-	if (mode === "host" && !confirm("End the party? Everyone leaves it; the session stays open for you.")) return;
+	if (mode === "host" && !(await ask("End the party?", "Everyone leaves the party. The session stays open for you.", "End party"))) return;
 	await post("/api/leave"); refresh();
 };
 // icon buttons: a green tick-colour for a moment instead of a text change
@@ -911,7 +912,7 @@ function renderPeople() {
 				f.status && f.status.code ? joinOrIn(f.name, f.status.code, "primary") : null,
 				open.length ? iconBtn("toTeam", open.length === 1 ? "Invite " + f.name + " to team " + open[0].name : "Invite " + f.name + " to one of your teams", () => friendTeamDialog(f)) : null,
 				iconBtn("userMinus", "Remove " + f.name + " from your friends", async () => {
-					if (!confirm("Remove " + f.name + " from your friends?")) return;
+					if (!(await ask("Remove friend?", "Remove " + f.name + " from your friends?", "Remove"))) return;
 					await post("/api/friend/remove", { id: f.id }); refreshDiscord();
 				}, "red"))));
 	}
@@ -935,7 +936,7 @@ function renderPeople() {
 				el("div", { className: "end" },
 					m.status && m.status.code ? joinOrIn(m.name, m.status.code) : null,
 					t.owner && m.id !== "me" ? iconBtn("userMinus", "Remove " + m.name + " from " + t.name, async () => {
-						if (!confirm("Remove " + m.name + " from team " + t.name + "? They can only come back with a new team link.")) return;
+						if (!(await ask("Remove from team?", "Remove " + m.name + " from team " + t.name + "? They can only come back with a new team link.", "Remove"))) return;
 						try { await post("/api/team/kick", { id: t.id, to: m.id }); } catch (e) { $("dcerr").textContent = e.message; }
 						refreshDiscord();
 					}, "red") : null));
@@ -953,7 +954,7 @@ function renderPeople() {
 }
 
 async function leaveTeamAsk(t) {
-	if (!confirm("Leave team " + t.name + "? You can join again with a team link.")) return false;
+	if (!(await ask("Leave team?", "Leave team " + t.name + "? You can join again with a team link.", "Leave team"))) return false;
 	try { await post("/api/team/leave", { id: t.id }); } catch (e) { $("dcerr").textContent = e.message; }
 	refreshDiscord();
 	return true;
@@ -1024,6 +1025,20 @@ function dialog(title, body, okText, onOk) {
 	};
 }
 $("modalcancel").onclick = () => $("modal").classList.add("hidden");
+// A question in the app's own style instead of the browser's pop-up: resolves true on OK, false on Cancel,
+// Escape or closing.
+function ask(title, text, okText = "OK", cancelText = "Cancel") {
+	return new Promise((resolve) => {
+		let done = false;
+		const finish = (v) => { if (!done) { done = true; resolve(v); } };
+		dialog(title, el("p", { className: "asktext", textContent: text }), okText, async () => finish(true));
+		$("modalcancel").textContent = cancelText;
+		$("modalcancel").onclick = () => { $("modal").classList.add("hidden"); finish(false); };
+		const watch = new MutationObserver(() => { if ($("modal").classList.contains("hidden")) { watch.disconnect(); finish(false); } });
+		watch.observe($("modal"), { attributes: true, attributeFilter: ["class"] });
+		$("modalok").focus();
+	});
+}
 // a closed dialog drops "wide" (only when it has it: changing the class again would call this again, endlessly)
 new MutationObserver(() => {
 	const m = $("modal");
@@ -1117,7 +1132,7 @@ const mvAct = (btn, path, body) => async () => {
 };
 $("mvstart").onclick = mvAct($("mvstart"), "/api/mv/start");
 $("mvrestart").onclick = async () => {
-	if (!confirm("MultiViewer closes and opens again, so F1 Party can open your setups. Continue?")) return;
+	if (!(await ask("Restart MultiViewer?", "MultiViewer closes and opens again, so F1 Party can open your setups.", "Restart"))) return;
 	await mvAct($("mvrestart"), "/api/mv/restart")();
 };
 let mvNow = {}, mvWasRunning = false;
@@ -1265,7 +1280,7 @@ function renderMembers(s) {
 		}
 		const acts = el("span", { className: "acts" });
 		if (s.mode === "host" && !host && !m.me && m.id) acts.append(iconBtn("crown", "Make " + m.name + " the host", async () => {
-			if (!confirm("Make " + m.name + " the host? Everyone then follows their stream, and you carry on as a guest.")) return;
+			if (!(await ask("Make " + m.name + " the host?", "Everyone then follows their stream, and you carry on as a guest.", "Make host"))) return;
 			try { await post("/api/makehost", { id: m.id }); } catch (e) { $("syncerr").textContent = e.message; }
 			refresh();
 		}));
@@ -1595,7 +1610,7 @@ function windowsTab(c, h) {
 $("sessend").onclick = async () => {
 	const msg = mode === "host" ? "End this session for everyone? Their streams close too, the party stays."
 		: mode === "guest" ? "Stop watching this session? You stay in the party." : "End this session? MultiViewer and the rest close (Settings → Close).";
-	if (!confirm(msg)) return;
+	if (!(await ask("End session?", msg, "End session"))) return;
 	$("sesserr").textContent = "";
 	try { await post("/api/session/end"); } catch (e) { $("sesserr").textContent = e.message; }
 	refreshSession(); refresh();
