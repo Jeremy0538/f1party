@@ -105,8 +105,13 @@
 	#start { max-width:360px; }
 	.or { display:flex; align-items:center; gap:10px; color:var(--faint); font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin:16px 0; }
 	.or::before, .or::after { content:""; flex:1; height:1px; background:var(--line-2); }
-	input.codein { text-transform:uppercase; } /* looks like the other fields; letters typed show as capitals */
-	input.codein::placeholder { text-transform:none; }
+	/* a party code: one box per character, to read and to fill in */
+	.codechars { display:flex; gap:6px; min-width:0; }
+	.codechars span, input.cbox { width:40px; height:48px; flex:none; display:grid; place-items:center; padding:0; border-radius:8px;
+		border:1px solid var(--line-2); background:#0f1114; font:700 24px/1 var(--num); text-align:center; text-transform:uppercase; color:var(--text); }
+	.codechars.big span { width:44px; height:54px; font-size:28px; user-select:all; }
+	.joinrow { align-items:center; gap:10px; }
+	.joinrow #join { height:48px; flex:1; }
 
 	/* in a party */
 	#party { display:flex; flex-direction:column; min-height:0; height:100%; }
@@ -392,13 +397,14 @@
 	.note:empty { display:none; }
 	/* who's in the party: one row per person, status under the name */
 	/* the party: one box with who you are, the code and its buttons, End party as a cross */
-	.pcard { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+	.pcard { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:14px 16px 16px; margin-bottom:12px; }
 	.ptop { display:flex; align-items:center; gap:10px; }
 	.ptop .boxtitle { white-space:nowrap; }
-	.ptop #leave { margin:-4px -6px -4px 0; }
+	.ptop #leave { width:26px; height:26px; margin:-4px -6px -4px auto; border-color:transparent; }
+	.ptop #leave svg { width:14px; height:14px; }
 	.ptop #leave:hover { color:var(--bad); border-color:rgba(239,68,68,.4); }
-	.pmid { display:flex; align-items:center; gap:12px; margin-top:6px; }
-	.pmid .code { flex:1; min-width:0; }
+	.pmid { display:flex; align-items:center; gap:12px; margin-top:16px; }
+	.pmid .codechars { flex:1; }
 	.pbtns { display:flex; gap:8px; flex:none; }
 	button.ib.big { width:40px; height:40px; border-radius:10px; }
 	button.ib.big svg { width:18px; height:18px; }
@@ -506,7 +512,13 @@
 				<input id="name" maxlength="24" placeholder="Name">
 				<button class="primary" id="host" style="width:100%; margin-top:12px">Host a party</button>
 				<div class="or">or join</div>
-				<div class="row"><input id="code" class="grow codein" maxlength="8" placeholder="Party code" aria-label="Party code"><button id="join">Join</button></div>
+				<div class="row joinrow">
+					<div class="codechars" id="codeboxes" role="group" aria-label="Party code">
+						<input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 1"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 2"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 3"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 4"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 5">
+					</div>
+					<input type="hidden" id="code">
+					<button id="join">Join</button>
+				</div>
 				<div class="error" id="err"></div>
 			</div>
 
@@ -518,7 +530,7 @@
 						<button class="ib" id="leave" title="End the party" aria-label="End the party"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
 					</div>
 					<div class="pmid">
-						<div class="code" id="bigcode"></div>
+						<div class="codechars big" id="bigcode" aria-label="Party code"></div>
 						<div class="pbtns">
 							<button class="ib big" id="copycode" title="Copy the party code" aria-label="Copy the party code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
 							<button class="ib big discord hidden" id="invite" title="Invite friends, or post the party to a team's Discord channel" aria-label="Invite"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></button>
@@ -691,7 +703,33 @@ let myCode = "", mode = "idle", nameFilled = false, webhookSet = false, pluginDo
 
 $("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", { name: $("name").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { name: $("name").value, code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
-$("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").click(); });
+// the join code boxes: one character each, on to the next as you type, back with Backspace, paste fills them all
+(() => {
+	const boxes = [...document.querySelectorAll("#codeboxes .cbox")];
+	const ok = (c) => /[A-Za-z0-9]/.test(c);
+	const sync = () => { $("code").value = boxes.map((b) => b.value).join("").toUpperCase(); };
+	const fill = (from, text) => {
+		const chars = [...text].filter(ok);
+		chars.forEach((c, i) => { if (boxes[from + i]) boxes[from + i].value = c.toUpperCase(); });
+		sync();
+		(boxes[Math.min(from + chars.length, boxes.length - 1)]).focus();
+	};
+	boxes.forEach((b, i) => {
+		b.addEventListener("input", () => {
+			const v = [...b.value].filter(ok);
+			b.value = "";
+			if (v.length) fill(i, v.join("")); else sync();
+		});
+		b.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") { e.preventDefault(); $("join").click(); }
+			else if (e.key === "Backspace" && !b.value && i > 0) { boxes[i - 1].value = ""; boxes[i - 1].focus(); sync(); e.preventDefault(); }
+			else if (e.key === "ArrowLeft" && i > 0) boxes[i - 1].focus();
+			else if (e.key === "ArrowRight" && i < boxes.length - 1) boxes[i + 1].focus();
+		});
+		b.addEventListener("paste", (e) => { e.preventDefault(); fill(i, (e.clipboardData || window.clipboardData).getData("text")); });
+		b.addEventListener("focus", () => b.select());
+	});
+})();
 $("leave").onclick = async () => {
 	if (mode === "host" && !confirm("End the party? Everyone leaves it; the session stays open for you.")) return;
 	await post("/api/leave"); refresh();
@@ -1140,7 +1178,10 @@ async function refresh() {
 	if (!inParty) return;
 
 	$("roleline").textContent = s.mode === "host" ? "You're hosting" : "You're a guest";
-	$("bigcode").textContent = s.code;
+	if ($("bigcode").dataset.code !== s.code) {
+		$("bigcode").dataset.code = s.code;
+		$("bigcode").replaceChildren(...[...s.code].map((c) => el("span", { textContent: c })));
+	}
 	if (($("note").textContent || "") !== (s.note || "")) refreshDiscord(); // e.g. a group invite link just set up Discord
 	$("note").textContent = s.note || "";
 	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync everyone";
