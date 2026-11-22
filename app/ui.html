@@ -484,6 +484,8 @@ async function refresh() {
 	$("bigcode").textContent = s.code;
 	$("note").textContent = s.note || "";
 	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
+	$("leave").textContent = s.mode === "host" ? "End party" : "Leave";
+	$("leave").title = s.mode === "host" ? "Stop hosting and leave the party" : "Leave this party";
 	$("together").classList.toggle("hidden", s.mode !== "host");
 	$("status").textContent = s.status || "";
 	const f = s.feed;

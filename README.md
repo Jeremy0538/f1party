@@ -41,7 +41,9 @@ Also in the app:
 - **Discord status**: your Discord profile shows the session you watch and, for guests, whose party; with a
   "Join party" button when join links work. Needs the F1 Party Discord application id (`discordAppID`).
 - **Keeps running**: on Windows, closing the window keeps the party going in the tray (icon by the clock: Open /
-  Quit). Starting F1 Party again brings the window back.
+  Quit), so calendar notifications and plans keep working. Starting F1 Party again brings the window back.
+- **Party ends by itself** when you're done watching: MultiViewer closed for 3 minutes after it ran in the party
+  (a MultiViewer restart is shorter). Or end it yourself with **End party** (host) / **Leave** (guest).
 - **Updates**: a "Update to x.y" button appears when a newer release is out. On Windows it installs the new
   version itself (checked against the release's `checksums.txt`) and restarts; right after starting, outside a
   party, it updates on its own. Elsewhere the button opens the release page.

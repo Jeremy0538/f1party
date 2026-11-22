@@ -246,8 +246,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		writeJSON(w, map[string]string{"code": code})
 	})
 	mux.HandleFunc("POST /api/leave", func(w http.ResponseWriter, r *http.Request) {
-		party.Leave()
-		updateConfig(func(c *config) { c.Last = nil }) // left on purpose: don't rejoin after a restart
+		endParty(party)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	// MultiViewer itself: running, setup support (debug port), its setups and the one chosen here.
@@ -528,13 +527,56 @@ const rejoinWindow = 3 * time.Hour
 
 // rememberParty keeps the current party in the config (every 15 s), so a restart can rejoin it.
 func rememberParty(party *Party) {
+	var end partyEnd
 	for range time.Tick(15 * time.Second) {
 		s := party.Snapshot()
 		if s.Mode == "idle" || s.Code == "" {
+			end = partyEnd{}
+			continue
+		}
+		if end.due(s.Code, mvRunning(), time.Now()) {
+			endParty(party)
+			if sendNotification != nil {
+				_ = sendNotification("Party ended", "MultiViewer was closed, so F1 Party left the party.")
+			}
+			end = partyEnd{}
 			continue
 		}
 		updateConfig(func(c *config) { c.Last = &lastParty{Code: s.Code, Host: s.Mode == "host", At: time.Now().Unix()} })
 	}
+}
+
+// partyEnd: done watching means MultiViewer closed for a few minutes after it ran in this party. The party
+// then ends, so the window can stay in the tray for calendar notifications without a finished party open.
+type partyEnd struct {
+	code string    // the party being watched
+	seen bool      // MultiViewer ran during it
+	gone time.Time // since when MultiViewer is closed
+}
+
+func (e *partyEnd) due(code string, mvUp bool, now time.Time) bool {
+	if code != e.code {
+		*e = partyEnd{code: code}
+	}
+	switch {
+	case mvUp:
+		e.seen, e.gone = true, time.Time{}
+	case !e.seen:
+	case e.gone.IsZero():
+		e.gone = now
+	case now.Sub(e.gone) >= partyEndAfter:
+		return true
+	}
+	return false
+}
+
+// partyEndAfter: how long MultiViewer may be closed before the party ends (a restart of MultiViewer takes less).
+const partyEndAfter = 3 * time.Minute
+
+// endParty: leave on purpose, so a restart doesn't rejoin.
+func endParty(party *Party) {
+	party.Leave()
+	updateConfig(func(c *config) { c.Last = nil })
 }
 
 // rejoinLast: on start-up, back into the last party if the app closed less than rejoinWindow ago.

@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Two apps in one party, each asking the other: both end up friends. Only one asking: a pending request.
@@ -17,6 +18,7 @@ func TestFriendRequests(t *testing.T) {
 		{Role: "host", Name: "Ann", ID: me},
 		{Role: "guest", Name: "Bob", ID: other},
 	}}}
+	p.friendsSeenAt = time.Now() // no background "last seen" save racing the temp folder clean-up
 
 	// nobody asked yet: an add button
 	s := p.Snapshot()
