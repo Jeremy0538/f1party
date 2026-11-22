@@ -136,6 +136,12 @@
 	.startcard .hint { margin:4px 0 0; }
 	.startcard button.wide { width:100%; height:44px; margin-top:12px; }
 	#start .lead b { color:var(--text); }
+	/* your name on the start screen */
+	.me { display:flex; align-items:center; gap:10px; margin:0 0 18px; }
+	.me .metext { display:flex; flex-direction:column; gap:1px; min-width:0; }
+	.me .melbl { font-size:11px; color:var(--dim); }
+	.me b { font-size:14px; }
+	.me button { margin-left:auto; height:28px; padding:0 11px; font-size:12px; }
 
 	/* in a party */
 	#party { display:flex; flex-direction:column; min-height:0; height:100%; }
@@ -185,7 +191,11 @@
 	.tabs button svg { width:15px; height:15px; flex:none; }
 	.tabs button:hover { background:none; color:var(--text); }
 	.tabs button[aria-selected="true"] { color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
-	#tabparty { font-weight:700; letter-spacing:.02em; }
+	/* Party is the main page: bold, a red button while it's open, a line apart from the rest */
+	#tabparty { align-self:center; height:32px; padding:0 13px; border-radius:8px; font-weight:700; letter-spacing:.02em; color:var(--text); }
+	#tabparty[aria-selected="true"] { background:var(--red); color:#fff; box-shadow:none; }
+	#tabparty[aria-selected="true"]:hover { background:var(--red-hi); }
+	.tabs .sep { align-self:center; width:1px; height:18px; background:var(--line-2); margin:0 6px; flex:none; }
 	.tabs .badge { display:inline-block; min-width:6px; height:6px; border-radius:50%; background:var(--red); margin-left:6px; vertical-align:2px; }
 	/* calendar */
 	#cal { display:flex; flex-direction:column; min-height:0; height:100%; }
@@ -556,6 +566,7 @@
 		<img src="/logo.png" alt="F1 Party">
 		<nav class="tabs" role="tablist">
 			<button role="tab" id="tabparty" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M17 2l-5 5-5-5"/></svg>Party</button>
+			<span class="sep" aria-hidden="true"></span>
 			<button role="tab" id="tabcal" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Calendar</button>
 			<button role="tab" id="tabfriends" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.4c1.8.8 3 2.7 3 5.6"/></svg>Friends</button>
 			<button role="tab" id="tabteams" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.3"/><circle cx="19" cy="10" r="2.3"/><path d="M6.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5M1.5 18.5c0-2.2 1.4-3.8 3.5-3.8M22.5 18.5c0-2.2-1.4-3.8-3.5-3.8"/></svg>Teams</button>
@@ -569,7 +580,11 @@
 		<main>
 			<div id="start">
 				<h1>Host or join a party</h1>
-				<p class="lead">You watch as <b id="asname">…</b> · <button class="link" id="namechange">Change</button></p>
+				<div class="me">
+					<span class="av" id="asav"></span>
+					<div class="metext"><span class="melbl">Your name</span><b id="asname">…</b></div>
+					<button id="namechange" title="Others see this name in the party and in invites">Edit name</button>
+				</div>
 				<section class="pcard startcard">
 					<span class="boxtitle">Host</span>
 					<p class="hint">Start a party and share its code with your friends.</p>
@@ -687,7 +702,7 @@
 					<span class="boxtitle">Setup</span>
 					<span class="mvstate"><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
 					<span class="mvacts">
-						<button class="hidden" id="mvstart">Start</button><button class="hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
+						<button class="hidden" id="mvstart">Start</button><button class="hidden" id="mvclose" title="Closes MultiViewer and the rest, as set under Settings → End session">Close</button><button class="hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
 					</span>
 				</div>
 				<div class="boxsub" id="setupapps"></div>
@@ -1239,6 +1254,7 @@ async function refresh() {
 	try { s = await (await fetch("/api/status")).json(); }
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
 	savedName = s.name || ""; $("asname").textContent = savedName || "Guest";
+	{ const a = avatar(savedName || "Guest"); $("asav").style.background = a.style.background; $("asav").textContent = a.textContent; }
 	$("ver").textContent = s.version;
 	welcome(s.welcome);
 	if (s.open === "cal") showTab("cal");
@@ -1361,7 +1377,9 @@ async function refreshSession() {
 	const v = sessData;
 	const hosting = mode === "host";
 	// also without a party or session while MultiViewer runs: End session is how F1 closes
-	$("sess").classList.toggle("hidden", !v && !hosting && !mvWasRunning);
+	// not in a party and nothing open: no Session box (Setup has Close for the apps then)
+	$("sess").classList.toggle("hidden", !v && mode === "idle");
+	$("mvclose").classList.toggle("hidden", !(mode === "idle" && !v && mvWasRunning));
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v && !v.stopped ? "Change" : "Select";
 	$("sesschange").title = v ? "Pick another session in the calendar: the whole party switches to it" : "Pick a session in the calendar to watch together";
@@ -1810,6 +1828,12 @@ $("sessend").onclick = async () => {
 	$("sesserr").textContent = "";
 	try { await post("/api/session/end"); } catch (e) { $("sesserr").textContent = e.message; }
 	refreshSession(); refresh();
+};
+$("mvclose").onclick = async () => {
+	if (!(await ask("Close the apps?", "MultiViewer and the rest close, as set under Settings → End session.", "Close"))) return;
+	$("mverr").textContent = "";
+	try { await post("/api/session/end"); } catch (e) { $("mverr").textContent = e.message; }
+	refreshMV(); refreshSession();
 };
 $("sessagain").onclick = async () => { await post("/api/session/again"); refreshSession(); refresh(); };
 const jump = (to) => async () => { $("sesserr").textContent = ""; try { await post("/api/session/jump", { to }); } catch (e) { $("sesserr").textContent = e.message; } refreshSession(); };
