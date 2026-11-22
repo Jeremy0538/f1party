@@ -696,7 +696,7 @@
 		</main>
 
 		<aside>
-			<section class="box setupbox">
+			<section class="box setupbox" id="setupbox">
 				<div class="boxhead">
 					<span class="boxtitle">Setup</span>
 					<span class="mvstate"><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
@@ -1274,7 +1274,7 @@ async function refresh() {
 	}
 	const inParty = s.mode !== "idle";
 	myCode = inParty ? s.code : "";
-	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
+	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); refreshSession(); }
 	$("start").classList.toggle("hidden", inParty || tab !== "party");
 	$("party").classList.toggle("hidden", !inParty || tab !== "party");
 	if (!inParty) return;
@@ -1378,6 +1378,8 @@ async function refreshSession() {
 	// not in a party and nothing open: no Session box (Setup has Close for the apps then)
 	$("sess").classList.toggle("hidden", !v && mode === "idle");
 	$("mvclose").classList.toggle("hidden", !(mode === "idle" && !v && mvWasRunning));
+	// not in a party: the Setup box only while MultiViewer runs (to see it and close it)
+	$("setupbox").classList.toggle("hidden", mode === "idle" && !v && !mvWasRunning);
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v && !v.stopped ? "Change" : "Select";
 	$("sesschange").title = v ? "Pick another session in the calendar: the whole party switches to it" : "Pick a session in the calendar to watch together";
