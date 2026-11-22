@@ -4,10 +4,13 @@ package main
 // Hue lights (hue.go, flags.go) and the window positions (winplace_*.go).
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"runtime"
+	"strings"
+	"time"
 )
 
 func init() {
@@ -65,18 +68,22 @@ func init() {
 // extraRoutes: the Settings window's buttons for the lights and the windows.
 func extraRoutes(mux *http.ServeMux) {
 	startFlags() // the flags loop (it does nothing until the lights are paired and switched on)
-	// Pair bridge: the bridge from before, else the one Philips' discovery finds on this network.
+	// The bridges on this network (the saved one, Philips' discovery and the network itself, checked).
+	mux.HandleFunc("GET /api/hue/bridges", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(hueBridges(r.Context()))
+	})
+	// Pair: waits up to 30 s for the round button on the bridge to be pressed.
 	mux.HandleFunc("POST /api/hue/pair", func(w http.ResponseWriter, r *http.Request) {
-		ip := loadHue().BridgeIP
-		if ip == "" {
-			ips, err := hueDiscover()
-			if err != nil || len(ips) == 0 {
-				replyErr(w, errors.New("no Hue bridge found on this network"))
-				return
-			}
-			ip = ips[0]
+		var in struct{ IP string }
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if in.IP == "" {
+			replyErr(w, errors.New("choose a bridge or type its IP address"))
+			return
 		}
-		replyErr(w, huePair(ip))
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		replyErr(w, huePairWait(ctx, strings.TrimSpace(in.IP)))
 	})
 	mux.HandleFunc("POST /api/hue/test", func(w http.ResponseWriter, r *http.Request) { replyErr(w, hueTest()) })
 	mux.HandleFunc("POST /api/windows/save", func(w http.ResponseWriter, r *http.Request) { replyErr(w, winSavePlaces()) })
