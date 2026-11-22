@@ -7,15 +7,15 @@ import (
 
 // Two apps in one party, each asking the other: both end up friends. Only one asking: a pending request.
 func TestFriendRequests(t *testing.T) {
-	t.Setenv("APPDATA", t.TempDir())          // Windows settings folder
+	t.Setenv("APPDATA", t.TempDir())         // Windows settings folder
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // Linux
 	t.Setenv("HOME", t.TempDir())            // macOS
 
 	me := "aaaaaaaaaaaa"
 	other := "bbbbbbbbbbbb"
 	p := &Party{id: me, st: Status{Mode: "host", Members: []Member{
-		{Role: "host", Name: "Stan", ID: me},
-		{Role: "guest", Name: "Jeremy", ID: other},
+		{Role: "host", Name: "Ann", ID: me},
+		{Role: "guest", Name: "Bob", ID: other},
 	}}}
 
 	// nobody asked yet: an add button
@@ -54,5 +54,13 @@ func TestFriendRequests(t *testing.T) {
 	RemoveFriend(other)
 	if isFriend(loadFriends(), other) {
 		t.Fatal("still a friend after remove")
+	}
+}
+
+// The setup prompt in the Downloads menu: the pasteable part only, without the intro above the line.
+func TestSetupPromptText(t *testing.T) {
+	p := setupPromptText()
+	if !strings.HasPrefix(p, "You are going to build") || strings.Contains(p, "Copy everything below the line") {
+		t.Fatalf("prompt starts with %q", p[:min(60, len(p))])
 	}
 }

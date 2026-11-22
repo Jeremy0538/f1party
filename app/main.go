@@ -323,6 +323,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		_, err := hostAndInvite(false)
 		replyErr(w, err)
 	})
+	mux.HandleFunc("POST /api/setupprompt", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, copyText(setupPromptText()))
+	})
 	mux.HandleFunc("POST /api/copycode", func(w http.ResponseWriter, r *http.Request) {
 		code := party.Snapshot().Code
 		if code == "" {
@@ -511,7 +514,7 @@ type config struct {
 	Plans          []plan     `json:"plans,omitempty"`    // planned watch parties
 	MemberID       string     `json:"memberId,omitempty"` // this app's fixed id (friends know it by this)
 	Friends        []Friend   `json:"friends,omitempty"`
-	NotifyLeads    []int      `json:"notifyLeads"`    // minutes before a session to notify (nil = 15)
+	NotifyLeads    []int      `json:"notifyLeads"`              // minutes before a session to notify (nil = 15)
 	Notify         string     `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
 	NotifySessions []int      `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
 }

@@ -70,7 +70,10 @@ Also in the app:
   (and a notification). Both asking makes you friends; the **Friends** tab lists them. Requests ride on the
   party's own messages, so the relay needs no change. Each app has a fixed random id to know friends by.
 - **Downloads** (bottom right): MultiViewer, Ultimate F1 Viewer, the Stream Deck plugin and F1 Party, with
-  what is installed already.
+  what is installed already. **Build your own setup with AI** there copies a prompt for an AI assistant that
+  can see your screen (such as Claude Code): it builds a MultiViewer setup and an Ultimate F1 Viewer layout per
+  session type for your monitors, without gaps or overlap, checked with a bright yellow desktop
+  (`app/setup-prompt.md`, the same prompt the Stream Deck plugin ships).
 - **Open with: Automatic (Stream Deck)**: the Stream Deck plugin picks your Race, Qualifying or Practice setup
   for the session and opens Ultimate F1 Viewer too.
 - **Plans without a webhook** are announced on Discord as soon as one is set.
