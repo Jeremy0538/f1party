@@ -65,6 +65,7 @@ func followMainStream() {
 		switch {
 		case paused && !wasPaused:
 			if pluginBusy() {
+				prevPaused = wasPaused // not now: try again next tick, don't lose the pause
 				continue
 			}
 			// only pause: MultiViewer's sync plays the others again, so that waits until you play
@@ -76,6 +77,7 @@ func followMainStream() {
 			quietUntil = now.Add(time.Second)
 		case !paused && wasPaused:
 			if pluginBusy() {
+				prevPaused = wasPaused
 				continue
 			}
 			for _, o := range others {
