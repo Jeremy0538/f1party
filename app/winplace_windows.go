@@ -56,43 +56,55 @@ func wpMon(h uintptr) wpMonitor {
 	wpCall("GetMonitorInfoW", h, uintptr(unsafe.Pointer(&m)))
 	return m
 }
+
+// Windows callbacks are never freed and a process may only make about 2000, so each enumeration callback
+// is made once and fills a package variable (every caller holds wpMu).
+var (
+	wpEnumOut    []wpWindow
+	wpEnumMons   []wpMonitor
+	wpWindowsCB  = syscall.NewCallback(wpWindowsEach)
+	wpMonitorsCB = syscall.NewCallback(func(h, dc, r, d uintptr) uintptr { wpEnumMons = append(wpEnumMons, wpMon(h)); return 1 })
+)
+
 func wpWindows() []wpWindow {
-	var out []wpWindow
-	cb := syscall.NewCallback(func(h, _ uintptr) uintptr {
-		if wpCall("IsWindowVisible", h) == 0 {
-			return 1
-		}
-		var pid uint32
-		wpCall("GetWindowThreadProcessId", h, uintptr(unsafe.Pointer(&pid)))
-		p, _, _ := wpKernel.NewProc("OpenProcess").Call(0x1000, 0, uintptr(pid))
-		if p == 0 {
-			return 1
-		}
-		defer wpKernel.NewProc("CloseHandle").Call(p)
-		buf := make([]uint16, 32768)
-		n := uint32(len(buf))
-		ok, _, _ := wpKernel.NewProc("QueryFullProcessImageNameW").Call(p, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&n)))
-		if ok == 0 {
-			return 1
-		}
-		exe := strings.ToLower(filepath.Base(syscall.UTF16ToString(buf[:n])))
-		if exe != "multiviewer.exe" && exe != "ultimate-f1viewer-with-f1mv.exe" {
-			return 1
-		}
-		var title [1024]uint16
-		wpCall("GetWindowTextW", h, uintptr(unsafe.Pointer(&title[0])), 1024)
-		w := wpWindow{h: h, title: syscall.UTF16ToString(title[:]), exe: exe}
-		if wpCall("GetWindowRect", h, uintptr(unsafe.Pointer(&w.outer))) == 0 {
-			return 1
-		}
-		w.visible = w.outer
-		wpDwm.NewProc("DwmGetWindowAttribute").Call(h, 9, uintptr(unsafe.Pointer(&w.visible)), unsafe.Sizeof(w.visible))
-		w.mon = wpMon(wpCall("MonitorFromWindow", h, 2))
-		out = append(out, w)
-		return 1
-	})
-	wpCall("EnumWindows", cb, 0)
+	wpEnumOut = nil
+	wpCall("EnumWindows", wpWindowsCB, 0)
+	out := wpEnumOut
+	wpEnumOut = nil
 	return out
+}
+func wpWindowsEach(h, _ uintptr) uintptr {
+	if wpCall("IsWindowVisible", h) == 0 {
+		return 1
+	}
+	var pid uint32
+	wpCall("GetWindowThreadProcessId", h, uintptr(unsafe.Pointer(&pid)))
+	p, _, _ := wpKernel.NewProc("OpenProcess").Call(0x1000, 0, uintptr(pid))
+	if p == 0 {
+		return 1
+	}
+	defer wpKernel.NewProc("CloseHandle").Call(p)
+	buf := make([]uint16, 32768)
+	n := uint32(len(buf))
+	ok, _, _ := wpKernel.NewProc("QueryFullProcessImageNameW").Call(p, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&n)))
+	if ok == 0 {
+		return 1
+	}
+	exe := strings.ToLower(filepath.Base(syscall.UTF16ToString(buf[:n])))
+	if exe != "multiviewer.exe" && exe != "ultimate-f1viewer-with-f1mv.exe" {
+		return 1
+	}
+	var title [1024]uint16
+	wpCall("GetWindowTextW", h, uintptr(unsafe.Pointer(&title[0])), 1024)
+	w := wpWindow{h: h, title: syscall.UTF16ToString(title[:]), exe: exe}
+	if wpCall("GetWindowRect", h, uintptr(unsafe.Pointer(&w.outer))) == 0 {
+		return 1
+	}
+	w.visible = w.outer
+	wpDwm.NewProc("DwmGetWindowAttribute").Call(h, 9, uintptr(unsafe.Pointer(&w.visible)), unsafe.Sizeof(w.visible))
+	w.mon = wpMon(wpCall("MonitorFromWindow", h, 2))
+	wpEnumOut = append(wpEnumOut, w)
+	return 1
 }
 func wpMain(w wpWindow, titles []string) bool {
 	if w.exe != "multiviewer.exe" {
@@ -178,9 +190,10 @@ func winSavePlaces() error {
 	return hueWrite(p, s)
 }
 func wpMonitors() []wpMonitor {
-	var ms []wpMonitor
-	cb := syscall.NewCallback(func(h, dc, r, d uintptr) uintptr { ms = append(ms, wpMon(h)); return 1 })
-	wpCall("EnumDisplayMonitors", 0, 0, cb, 0)
+	wpEnumMons = nil
+	wpCall("EnumDisplayMonitors", 0, 0, wpMonitorsCB, 0)
+	ms := wpEnumMons
+	wpEnumMons = nil
 	return ms
 }
 func winPlaceApps() {

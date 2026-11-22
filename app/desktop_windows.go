@@ -8,9 +8,11 @@ package main
 // same Ctrl+Win+Left/Right shortcut a person would press (the same way the plugin does it).
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -33,7 +35,11 @@ func desktops() ([]string, int) {
 		ids = append(ids, guidString(raw[i:i+16]))
 	}
 	cur := 0
-	if c, _, err := k.GetBinaryValue("CurrentVirtualDesktop"); err == nil && len(c) == 16 {
+	c, _, err := k.GetBinaryValue("CurrentVirtualDesktop") // Windows 11
+	if err != nil || len(c) != 16 {
+		c = currentDesktopWin10()
+	}
+	if len(c) == 16 {
 		for i, id := range ids {
 			if id == guidString(c) {
 				cur = i
@@ -41,6 +47,25 @@ func desktops() ([]string, int) {
 		}
 	}
 	return ids, cur
+}
+
+// currentDesktopWin10: Windows 10 keeps the current desktop per sign-in session, under SessionInfo.
+func currentDesktopWin10() []byte {
+	var sid uint32
+	if windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &sid) != nil {
+		return nil
+	}
+	k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\`+
+		strconv.FormatUint(uint64(sid), 10)+`\VirtualDesktops`, registry.QUERY_VALUE)
+	if err != nil {
+		return nil
+	}
+	defer k.Close()
+	c, _, err := k.GetBinaryValue("CurrentVirtualDesktop")
+	if err != nil {
+		return nil
+	}
+	return c
 }
 
 // guidString writes 16 raw GUID bytes the way the registry names them: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}.
@@ -154,8 +179,9 @@ func newDesktop(name string, had int) {
 	keyEvent(vkLControl, keyUp)
 	for i := 0; i < 15; i++ {
 		time.Sleep(200 * time.Millisecond)
-		if ids, cur := desktops(); len(ids) > had {
-			if k, _, err := registry.CreateKey(registry.CURRENT_USER, vdKey+`\Desktops\`+ids[cur], registry.SET_VALUE); err == nil {
+		if ids, _ := desktops(); len(ids) > had {
+			// the new desktop is the last one (never name another desktop when the current one can't be read)
+			if k, _, err := registry.CreateKey(registry.CURRENT_USER, vdKey+`\Desktops\`+ids[len(ids)-1], registry.SET_VALUE); err == nil {
 				_ = k.SetStringValue("Name", name)
 				k.Close()
 			}

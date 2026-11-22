@@ -837,7 +837,9 @@ func (p *Party) guestLoop(ctx context.Context) {
 		skipped := p.skip != "" && p.skip == host.ContentID
 		p.mu.Unlock()
 		if skipped {
-			// "End session": this guest stopped watching; the next session the host opens brings it back
+			// "End session": this guest stopped watching; the next session the host opens brings it back.
+			// Forget what was opened for it, so Watch again opens the setup (or the plugin) again.
+			setupFor, pluginUntil, pluginRetry, creatingAt = "", time.Time{}, time.Time{}, time.Time{}
 			p.set(func(s *Status) { s.Feed = nil })
 			status = "You stopped watching this session"
 			report()
@@ -1049,7 +1051,8 @@ func (p *Party) guestLoop(ctx context.Context) {
 		drift = &d
 
 		// mirror pause / play (not while a live hold is pausing us on purpose)
-		if resumeAt.IsZero() && feed.State.Paused != host.Paused {
+		// (auto-sync off: only "Sync to host" does it)
+		if (auto || force) && resumeAt.IsZero() && feed.State.Paused != host.Paused {
 			pauseAll(ps, host.ContentID, host.Paused)
 			mirroredAt, prevPaused = time.Now(), host.Paused
 		}
@@ -1195,8 +1198,8 @@ func (p *Party) hostRequests(ps []Player, contentID string) {
 		if kind, at, ok := strings.Cut(r, "@"); ok { // a guest went to another moment: the party goes there
 			v, err := strconv.ParseFloat(at, 64)
 			feed := mainFeed(ps, contentID)
-			if err != nil || feed == nil {
-				continue
+			if err != nil || feed == nil || kind == "" || math.IsNaN(v) || math.IsInf(v, 0) {
+				continue // a malformed request (it comes from another member's status) does nothing
 			}
 			switch kind[0] {
 			case 's':

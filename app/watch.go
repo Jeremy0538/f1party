@@ -155,6 +155,7 @@ func openChosenSetup(choice, contentID, sessionType string) error {
 	kind := kindOf(sessionType)
 	watchNow.mu.Lock()
 	watchNow.kind, watchNow.setup, watchNow.active, watchNow.lastWanted = kind, name, false, nil
+	watchNow.changeLap, watchNow.swapLap = 0, 0 // laps of another session don't hold back this one's swaps
 	watchNow.mu.Unlock()
 	var rest []int
 	c := loadConfig()
