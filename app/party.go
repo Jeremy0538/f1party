@@ -39,13 +39,20 @@ type FeedState struct {
 	CountdownAt float64 `json:"countdown,omitempty"`
 	// Resync: goes up each time the host asks everyone to sync to them now.
 	Resync int `json:"resync,omitempty"`
+	// Friends: the members the host sent a friend request (first characters of their ids).
+	Friends []string `json:"friends,omitempty"`
 }
 
 type Member struct {
 	Role   string   `json:"role"`
 	Name   string   `json:"name"`
-	ID     string   `json:"id,omitempty"` // random id per app, sent as "name#id" (picks a new host)
-	Req    string   `json:"-"`            // pause request riding on the status ("p3" = pause, "r3" = resume)
+	ID     string   `json:"id,omitempty"`     // random id per app, sent as "name#id" (picks a new host)
+	Req    string   `json:"-"`                // pause request riding on the status ("p3" = pause, "r3" = resume)
+	Offers []string `json:"-"`                // friend requests riding on the status (first characters of ids)
+	Me     bool     `json:"me,omitempty"`     // this app
+	Friend bool     `json:"friend,omitempty"` // a friend already
+	Sent   bool     `json:"sent,omitempty"`   // we asked them, no answer yet
+	Asked  bool     `json:"asked,omitempty"`  // they asked us
 	Drift  *float64 `json:"drift,omitempty"`
 	Status string   `json:"status,omitempty"`
 }
@@ -96,16 +103,19 @@ type Party struct {
 	resync      int     // host: number of "everyone sync to me" requests
 
 	// Pausing from the Stream Deck (F1 Race Control's Pause key).
-	hold       bool              // paused just for you: the party plays on (guest: no syncing; host: guests keep going)
-	askHoldTo  time.Time         // guest: asked the host to pause/resume everyone; don't undo our own pause meanwhile
-	req        string            // guest: last request to the host ("p3"/"r3")
-	reqN       int               // guest: request counter
-	seenReq    map[string]string // host: last request seen per member
-	hostSince  time.Time         // when this app started hosting this party
-	hostOffAt  time.Time         // guest: since when the host has been offline
-	update     *Update           // a newer release, when there is one
-	jumping    string            // a jump to a moment of the session in progress ("" = none)
-	rejoinHost bool              // guest: rejoined a party we hosted; host again if nobody hosts it
+	hold          bool              // paused just for you: the party plays on (guest: no syncing; host: guests keep going)
+	askHoldTo     time.Time         // guest: asked the host to pause/resume everyone; don't undo our own pause meanwhile
+	req           string            // guest: last request to the host ("p3"/"r3")
+	reqN          int               // guest: request counter
+	seenReq       map[string]string // host: last request seen per member
+	hostSince     time.Time         // when this app started hosting this party
+	hostOffAt     time.Time         // guest: since when the host has been offline
+	update        *Update           // a newer release, when there is one
+	jumping       string            // a jump to a moment of the session in progress ("" = none)
+	offers        map[string]bool   // friend requests we sent (member ids)
+	askedSeen     map[string]bool   // friend requests to us we notified about
+	friendsSeenAt time.Time
+	rejoinHost    bool // guest: rejoined a party we hosted; host again if nobody hosts it
 }
 
 type clockSample struct{ offset, rtt float64 }
@@ -113,7 +123,7 @@ type clockSample struct{ offset, rtt float64 }
 func nowMs() float64 { return float64(time.Now().UnixNano()) / 1e6 }
 
 func NewParty(name, setup string) *Party {
-	return &Party{st: Status{Mode: "idle", Name: name, Version: version}, setup: setup, id: newMemberID()}
+	return &Party{st: Status{Mode: "idle", Name: name, Version: version}, setup: setup, id: persistentID()}
 }
 
 func newMemberID() string {
@@ -237,6 +247,7 @@ func (p *Party) Snapshot() Status {
 	defer p.mu.Unlock()
 	s := p.st
 	s.Members = append([]Member(nil), p.st.Members...)
+	p.markFriends(&s)
 	if p.update != nil {
 		u := *p.update
 		s.Update = &u
@@ -257,6 +268,7 @@ func (p *Party) Start(mode, code, name string) {
 	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
 	p.hostSince = time.Time{}
 	p.rejoinHost = false
+	p.offers, p.askedSeen = map[string]bool{}, map[string]bool{}
 	if mode == "host" {
 		p.hostSince = time.Now()
 	}
@@ -406,8 +418,11 @@ func (p *Party) readLoop(ctx context.Context, c *websocket.Conn) bool {
 					if n, id, ok := strings.Cut(m.Members[i].Name, "#"); ok {
 						m.Members[i].Name, m.Members[i].ID = n, id
 					}
-					if st, req, ok := strings.Cut(m.Members[i].Status, "|"); ok {
-						m.Members[i].Status, m.Members[i].Req = st, req
+					if parts := strings.Split(m.Members[i].Status, "|"); len(parts) > 1 {
+						m.Members[i].Status, m.Members[i].Req = parts[0], parts[1]
+						if len(parts) > 2 && parts[2] != "" {
+							m.Members[i].Offers = strings.Split(parts[2], ",")
+						}
 					}
 				}
 				p.set(func(s *Status) {
@@ -548,12 +563,16 @@ func (p *Party) hostLoop(ctx context.Context) {
 				s.Status = "Starting together…"
 			}
 		})
+		if o := p.offerWire(20); o != "" {
+			fs.Friends = strings.Split(o, ",")
+		}
 		if !clockOK {
 			continue
 		}
 		// send on any discontinuity (pause/play, seek, new stream) right away, otherwise once a second
 		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title ||
-			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync
+			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync ||
+			strings.Join(fs.Friends, ",") != strings.Join(lastSent.Friends, ",")
 		if !changed && !fs.None && !fs.Paused && lastSent.At > 0 {
 			expected := lastSent.Time + (fs.At-lastSent.At)/1000
 			changed = math.Abs(fs.Time-expected) > 0.5
@@ -593,6 +612,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		startedFor   float64 // "Start together" countdown this guest has already started playing on
 		resyncSeen   = -1    // host's resync number last acted on (-1: none seen yet)
 		sentReq      string  // pause request last sent to the host
+		sentOffers   string  // friend requests last sent
 	)
 	// askPlugin hands the opening of the host's session to the Stream Deck plugin (at most every 10 s).
 	askPlugin := func(host *FeedState) {
@@ -621,13 +641,20 @@ func (p *Party) guestLoop(ctx context.Context) {
 		p.mu.Unlock()
 		report := func() {
 			p.set(func(s *Status) { s.Status = status; s.Drift = drift })
-			if time.Since(lastReport) > 2*time.Second || req != sentReq {
+			if time.Since(lastReport) > 2*time.Second || req != sentReq || p.offerWire(3) != sentOffers {
 				st := status
-				if req != "" {
+				offers := p.offerWire(3)
+				if offers != "" {
+					// the relay keeps 64 characters of a status: room for the requests behind it
+					if r := []rune(st); len(r) > 30 {
+						st = string(r[:30]) + "…"
+					}
+					st += "|" + req + "|" + offers // friend requests ride on the status too
+				} else if req != "" {
 					st += "|" + req // a pause request for the host rides on the status
 				}
 				p.send(map[string]any{"t": "report", "drift": drift, "status": st})
-				lastReport, sentReq = time.Now(), req
+				lastReport, sentReq, sentOffers = time.Now(), req, offers
 			}
 		}
 

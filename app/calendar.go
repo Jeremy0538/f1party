@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -55,6 +57,7 @@ var calendar struct {
 	meetings map[int]CalMeeting
 	loaded   time.Time
 	tried    time.Time
+	lastErr  error
 }
 
 // contentTitles: F1 TV content id → "2026 Las Vegas GP · Qualifying" for sessions opened from the calendar
@@ -78,6 +81,9 @@ func getJSON(url string, out any) error {
 			continue
 		}
 		defer res.Body.Close()
+		if res.StatusCode == 401 || res.StatusCode == 403 {
+			return errors.New("OpenF1 (where the calendar comes from) is closed while a session is live; the calendar is back after it")
+		}
 		if res.StatusCode != 200 {
 			return fmt.Errorf("the F1 calendar can't be loaded right now (%s)", res.Status)
 		}
@@ -85,17 +91,41 @@ func getJSON(url string, out any) error {
 	}
 }
 
-// loadCalendar fetches this year's and next year's calendar (and last year's for replays), at most every 30 min.
+// loadCalendar keeps the calendar up to date: from OpenF1 at most every 30 minutes, and from the copy saved on
+// this computer when OpenF1 can't be reached. OpenF1 shuts out everyone without a paid key while a session is
+// live, which is exactly when the calendar is wanted, so the copy matters.
 func loadCalendar() error {
 	calendar.Lock()
 	defer calendar.Unlock()
+	if len(calendar.sessions) == 0 {
+		readCalendarCache()
+	}
 	if time.Since(calendar.loaded) < 30*time.Minute || time.Since(calendar.tried) < time.Minute {
 		if len(calendar.sessions) == 0 {
-			return errors.New("the F1 calendar can't be loaded right now")
+			return calendar.lastErr
 		}
 		return nil
 	}
 	calendar.tried = time.Now()
+	sessions, meetings, err := fetchCalendar()
+	if err == nil && len(sessions) == 0 {
+		err = errors.New("the F1 calendar is empty")
+	}
+	if err != nil {
+		calendar.lastErr = err
+		if len(calendar.sessions) > 0 {
+			return nil // keep showing the calendar we have
+		}
+		return err
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Start.Before(sessions[j].Start) })
+	calendar.sessions, calendar.meetings, calendar.loaded, calendar.lastErr = sessions, meetings, time.Now(), nil
+	writeCalendarCache()
+	return nil
+}
+
+// fetchCalendar: last year's, this year's and next year's sessions and meetings from OpenF1.
+func fetchCalendar() ([]CalSession, map[int]CalMeeting, error) {
 	year := time.Now().UTC().Year()
 	var sessions []CalSession
 	meetings := map[int]CalMeeting{}
@@ -116,7 +146,7 @@ func loadCalendar() error {
 			if y == year+1 {
 				break // next year's calendar isn't always out
 			}
-			return err
+			return nil, nil, err
 		}
 		var ms []struct {
 			Key       int    `json:"meeting_key"`
@@ -128,7 +158,7 @@ func loadCalendar() error {
 		}
 		time.Sleep(400 * time.Millisecond)
 		if err := getJSON(fmt.Sprintf("https://api.openf1.org/v1/meetings?year=%d", y), &ms); err != nil && y != year+1 {
-			return err
+			return nil, nil, err
 		}
 		for _, m := range ms {
 			if m.Cancelled || strings.Contains(strings.ToLower(m.Name), "testing") {
@@ -150,12 +180,53 @@ func loadCalendar() error {
 			sessions = append(sessions, CalSession{Key: s.Key, Meeting: s.Meeting, Name: s.Name, Type: s.Type, Start: st, End: en})
 		}
 	}
-	if len(sessions) == 0 {
-		return errors.New("the F1 calendar is empty")
+	return sessions, meetings, nil
+}
+
+// The copy on disk (next to the settings): what OpenF1 gave last time.
+type calendarCache struct {
+	Sessions []CalSession `json:"sessions"`
+	Meetings []CalMeeting `json:"meetings"`
+	Saved    time.Time    `json:"saved"`
+}
+
+func calendarCachePath() string {
+	p, err := configPath()
+	if err != nil {
+		return ""
 	}
-	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Start.Before(sessions[j].Start) })
-	calendar.sessions, calendar.meetings, calendar.loaded = sessions, meetings, time.Now()
-	return nil
+	return filepath.Join(filepath.Dir(p), "calendar.json")
+}
+
+func readCalendarCache() {
+	path := calendarCachePath()
+	b, err := os.ReadFile(path)
+	if path == "" || err != nil {
+		return
+	}
+	var c calendarCache
+	if json.Unmarshal(b, &c) != nil || len(c.Sessions) == 0 {
+		return
+	}
+	calendar.sessions, calendar.meetings = c.Sessions, map[int]CalMeeting{}
+	for _, m := range c.Meetings {
+		calendar.meetings[m.Key] = m
+	}
+}
+
+func writeCalendarCache() {
+	path := calendarCachePath()
+	if path == "" {
+		return
+	}
+	c := calendarCache{Sessions: calendar.sessions, Saved: time.Now()}
+	for _, m := range calendar.meetings {
+		c.Meetings = append(c.Meetings, m)
+	}
+	b, _ := json.Marshal(c)
+	if os.WriteFile(path+".tmp", b, 0o644) == nil {
+		_ = os.Rename(path+".tmp", path)
+	}
 }
 
 func calSession(key int) (CalSession, CalMeeting, bool) {
@@ -491,6 +562,13 @@ func (p *Party) runPlans() {
 				}
 				changed = true
 				continue
+			case !pl.Announced && c.Webhook != "" && now.Before(at.Add(-remindBefore)):
+				// planned without a webhook (or Discord didn't answer): announce it now
+				if err := announcePlan(c.Webhook, cleanName(c.Name), &pl); err != nil {
+					log.Printf("plan announcement: %v", err)
+				} else {
+					pl.Announced, changed = true, true
+				}
 			case !pl.Reminded && now.After(at.Add(-remindBefore)):
 				if c.Webhook != "" {
 					if err := remindPlan(c.Webhook, cleanName(c.Name), &pl); err != nil {

@@ -54,6 +54,13 @@ func main() {
 	go party.watchPresence()
 	go rememberParty(party)
 	go party.runPlans()
+	go func() { // friend requests in the party
+		for range time.Tick(2 * time.Second) {
+			if party.Snapshot().Mode != "idle" {
+				party.checkFriends()
+			}
+		}
+	}()
 
 	var appCtx context.Context
 	show := func() {
@@ -247,7 +254,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
-			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo()}
+			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed()}
 		writeJSON(w, out)
 	})
 	mux.HandleFunc("POST /api/mv/start", func(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +293,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/openurl", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ URL string }
 		json.NewDecoder(r.Body).Decode(&in)
-		if in.URL != pluginDownload && in.URL != pluginPage && in.URL != "https://multiviewer.app/download" && in.URL != ReleasesPage {
+		if !allowedURL(in.URL) {
 			http.Error(w, "forbidden", 403)
 			return
 		}
@@ -345,7 +352,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			return
 		}
 		c := loadConfig()
-		writeJSON(w, map[string]any{"weekend": wk, "webhookSet": c.Webhook != "", "notify": c.Notify,
+		writeJSON(w, map[string]any{"weekend": wk, "webhookSet": c.Webhook != "", "notify": c.Notify, "leads": notifyLeads(c),
 			"notifications": sendNotification != nil})
 	})
 	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {
@@ -376,14 +383,43 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		// one right away, so you see what they look like (and macOS asks for permission now)
 		if sendNotification != nil && in.Mode != notifyOff {
 			what := map[string]string{notifyRace: "every race", notifyMain: "every race and qualifying", notifyAll: "every session"}[in.Mode]
-			go sendNotification("Notifications are on", "F1 Party lets you know 15 minutes before "+what+" starts.")
+			go sendNotification("Notifications are on", "F1 Party lets you know before "+what+" starts.")
 		}
 		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/calendar/leads", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Leads []int }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, SetNotifyLeads(in.Leads))
 	})
 	mux.HandleFunc("POST /api/calendar/bell", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Session int }
 		json.NewDecoder(r.Body).Decode(&in)
 		writeJSON(w, map[string]bool{"on": ToggleNotify(in.Session)})
+	})
+	// Friends: ask someone in the party (or accept their request), the list, remove one.
+	mux.HandleFunc("POST /api/friend/ask", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.ID == "" {
+			http.Error(w, "unknown member", 400)
+			return
+		}
+		party.AskFriend(in.ID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("GET /api/friends", func(w http.ResponseWriter, r *http.Request) {
+		fs := loadFriends()
+		if fs == nil {
+			fs = []Friend{}
+		}
+		writeJSON(w, map[string]any{"friends": fs})
+	})
+	mux.HandleFunc("POST /api/friend/remove", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		RemoveFriend(in.ID)
+		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/calendar/unplan", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ ID string }
@@ -472,7 +508,10 @@ type config struct {
 	Webhook        string     `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
 	DiscordAppID   string     `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
 	Last           *lastParty `json:"last,omitempty"`
-	Plans          []plan     `json:"plans,omitempty"`          // planned watch parties
+	Plans          []plan     `json:"plans,omitempty"`    // planned watch parties
+	MemberID       string     `json:"memberId,omitempty"` // this app's fixed id (friends know it by this)
+	Friends        []Friend   `json:"friends,omitempty"`
+	NotifyLeads    []int      `json:"notifyLeads"`    // minutes before a session to notify (nil = 15)
 	Notify         string     `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
 	NotifySessions []int      `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
 }

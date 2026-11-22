@@ -20,5 +20,5 @@ Ideas still to build, roughly in order. Done items move to the README.
   notice (0.7.0).
 - Stream Deck: hold Sync while hosting syncs everyone; Pause pauses the whole party or just you (0.8.0).
 - First full version (1.0.0): also sync on the main monitor's stream (F1 Live), back in your party after a
-  restart, Session jumps (Beginning, Start −1 min, Live), calendar with planned parties and notifications, self-update on
+  restart, Session jumps (Beginning, Start −1 min, Live), calendar with planned parties and notifications (choose when), friends, a Downloads menu, self-update on
   Windows, party info on the Stream Deck Sync key.

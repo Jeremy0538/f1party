@@ -61,9 +61,19 @@ Also in the app:
   announcement to Discord (with the time in everyone's own time zone and the party code), a reminder 15 minutes
   before, and at the time the app hosts the party with that code and opens the session. F1 Party has to be
   running then (the tray is enough).
-- **Notifications**: a system notification 15 minutes before a session. Under *Notify me* choose races only,
-  races and qualifyings, or every session; or turn on single sessions with their bell. Planned parties notify
-  too. Clicking one opens F1 Party.
+- **Notifications** (the bell at the top of the calendar): which sessions (races only, races and qualifyings,
+  every session, or single sessions with their own bell) and when (1 day, 3 h, 1 h, 30 min, 15 min, 5 min
+  before, at the start; any combination). Planned parties notify too. Clicking one opens F1 Party.
+- **Calendar offline**: the calendar is saved on your computer, so it still shows when OpenF1 can't be reached
+  (OpenF1 shuts out everyone without a paid key while a session is live).
+- **Friends**: next to someone in your party who isn't a friend yet is an add button; they see **Accept**
+  (and a notification). Both asking makes you friends; the **Friends** tab lists them. Requests ride on the
+  party's own messages, so the relay needs no change. Each app has a fixed random id to know friends by.
+- **Downloads** (bottom right): MultiViewer, Ultimate F1 Viewer, the Stream Deck plugin and F1 Party, with
+  what is installed already.
+- **Open with: Automatic (Stream Deck)**: the Stream Deck plugin picks your Race, Qualifying or Practice setup
+  for the session and opens Ultimate F1 Viewer too.
+- **Plans without a webhook** are announced on Discord as soon as one is set.
 
 First launch warnings (the app isn't signed):
 - **Windows:** "Windows protected your PC", then **More info**, then **Run anyway**.
