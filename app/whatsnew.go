@@ -12,6 +12,8 @@ type newsItem struct {
 }
 
 var whatsNew = []newsItem{
+	{"1.13.0", "A slimmer bar at the top, and a calendar that shows the next session's countdown and the sessions by day.", ""},
+	{"1.13.0", "Downloads moved into Settings, next to Updates.", "downloads"},
 	{"1.13.0", "Fixed onboards: choose whole teams or single drivers, in a card per team; the line-up follows the latest session, so a new driver shows up by himself.", "drivers"},
 	{"1.13.0", "Battle mode: each window gets as many drivers as fit, up to the most you set (1 to 4), and the second window carries on where the first stopped.", "drivers"},
 	{"1.13.0", "Settings has a menu on the left: You and party, Sessions, Drivers, Screen, Lights and End session, with Updates at the bottom.", "party"},
