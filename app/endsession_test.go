@@ -44,3 +44,24 @@ func TestEndSession(t *testing.T) {
 		t.Fatalf("host's end missing in %s", b)
 	}
 }
+
+// A guest's own pause, play or skip becomes a request to the host that rides on the guest's status.
+func TestAskHost(t *testing.T) {
+	p := &Party{st: Status{Mode: "guest"}}
+	p.askHost("s", "@1234.5")
+	if p.req != "s1@1234.5" || !p.askSeek {
+		t.Fatalf("seek request %q askSeek=%v", p.req, p.askSeek)
+	}
+	p.askHost("p", "")
+	if p.req != "p2" || p.askSeek {
+		t.Fatalf("pause request %q askSeek=%v", p.req, p.askSeek)
+	}
+	p.SetAutoSync(false)
+	if !p.autoOff || p.st.AutoSync {
+		t.Fatal("auto-sync still on")
+	}
+	p.SetAutoSync(true)
+	if p.autoOff || !p.forceSync {
+		t.Fatal("auto-sync back on should catch up at once")
+	}
+}

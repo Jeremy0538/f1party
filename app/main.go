@@ -466,7 +466,12 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		replyErr(w, copyText(code))
 	})
 	mux.HandleFunc("POST /api/start", func(w http.ResponseWriter, r *http.Request) {
-		replyErr(w, party.StartTogether())
+		err := party.StartTogether()
+		if errors.Is(err, errNoSession) {
+			http.Error(w, "pick-session", 409) // the window opens the calendar
+			return
+		}
+		replyErr(w, err)
 	})
 	// The session MultiViewer shows, and jumping to a moment in it (the host takes the party along).
 	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
@@ -581,6 +586,13 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())
 	})
+	mux.HandleFunc("POST /api/autosync", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		json.NewDecoder(r.Body).Decode(&in)
+		party.SetAutoSync(in.On)
+		updateConfig(func(c *config) { c.AutoSyncOff = !in.On })
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("POST /api/update", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.InstallUpdate())
 	})
@@ -678,6 +690,7 @@ type config struct {
 	NotifyLeads    []int          `json:"notifyLeads"`              // minutes before a session to notify (nil = 15)
 	Notify         string         `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
 	NotifySessions []int          `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
+	AutoSyncOff    bool           `json:"autoSyncOff,omitempty"`    // a guest only syncs on "Sync to host" (auto-sync is on by default)
 }
 
 // lastParty: the party this app was in, kept up to date while in it and cleared by Leave.

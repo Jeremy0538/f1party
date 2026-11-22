@@ -317,6 +317,9 @@
 	.pick label:hover { background:#1a1d23; }
 	.pick input { width:16px; height:16px; accent-color:var(--red); }
 	.pick .sub { margin-left:auto; font-size:11px; color:var(--dim); }
+	.autosync { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--dim); cursor:pointer; }
+	.autosync input { width:15px; height:15px; accent-color:var(--red); margin:0; }
+	.calhint { color:var(--warn); }
 	.sessend { margin-top:10px; justify-content:space-between; }
 	#sessend { color:var(--bad); font-size:12px; }
 	#sessend:hover { color:#ff6b6b; }
@@ -377,6 +380,7 @@
 					<span class="gap" id="gap"></span>
 				</div>
 				<div class="row" style="margin-top:12px"><button class="primary hidden" id="together">Start together</button><button id="sync">Sync</button><button id="leave">Leave</button></div>
+				<label class="autosync hidden" id="autosyncrow" title="Follow the host by itself: their pause, play and skips, and your onboards stay with the main stream. Off: only when you click Sync to host."><input type="checkbox" id="autosync" checked> Auto-sync with the host</label>
 				<div class="hint" id="note"></div>
 				<div class="error" id="syncerr"></div>
 				<ul class="members" id="members"></ul>
@@ -444,6 +448,7 @@
 				<div class="calfoot" id="calfoot"></div>
 				</div>
 				<ul class="sessions" id="calsessions"></ul>
+				<div class="hint calhint" id="calhint"></div>
 				<div class="error" id="calerr"></div>
 			</div>
 		</main>
@@ -537,7 +542,19 @@ $("invite").onclick = async () => {
 	try { await post("/api/invite"); flash(b, "Shared ✓", false); } catch (e) { $("syncerr").textContent = e.message; }
 	setTimeout(() => { b.disabled = false; }, 1600);
 };
-$("together").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/start"); } catch (e) { $("syncerr").textContent = e.message; } };
+// Start together: MultiViewer starts by itself when it's closed; without a session open, pick one in the calendar
+$("together").onclick = async () => {
+	const b = $("together"); $("syncerr").textContent = ""; b.disabled = true;
+	try { await post("/api/start"); }
+	catch (e) {
+		if (e.message === "pick-session") {
+			showTab("cal");
+			$("calhint").textContent = "Pick the session you want to watch together: Watch now opens it for the whole party. Then click Start together again.";
+		} else $("syncerr").textContent = e.message;
+	}
+	b.disabled = false;
+};
+$("autosync").onchange = async () => { await post("/api/autosync", { on: $("autosync").checked }); refresh(); };
 $("update").onclick = async () => {
 	if (!updateAuto) return openURL(updateURL);
 	try { await post("/api/update"); } catch (e) { $("update").textContent = e.message; }
@@ -892,6 +909,8 @@ async function refresh() {
 	$("leave").textContent = s.mode === "host" ? "End party" : "Leave";
 	$("leave").title = s.mode === "host" ? "Stop hosting and leave the party" : "Leave this party";
 	$("together").classList.toggle("hidden", s.mode !== "host");
+	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
+	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
 	$("status").textContent = s.status || "";
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
@@ -1047,7 +1066,7 @@ function defaultReplayTime(end) {
 }
 const btn = (text, title, onclick, cls = "") => Object.assign(document.createElement("button"), { textContent: text, title, onclick, className: cls });
 async function calAct(path, body) {
-	$("calerr").textContent = "";
+	$("calerr").textContent = ""; $("calhint").textContent = "";
 	try {
 		const res = await post(path, body); picking = 0;
 		if (path.endsWith("/plan") && res && !res.announced) {
