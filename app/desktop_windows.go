@@ -217,9 +217,9 @@ func newDesktop(name string, had int) string {
 	return ""
 }
 
-// leaveF1Desktop (Close F1): back to the first desktop; with remove, every watching desktop (also ones left
-// over from earlier) is removed (Ctrl+Win+F4 on each, as a person would: anything still on it moves to the
-// desktop next to it, nothing closes).
+// leaveF1Desktop (End session): back to the first desktop; with remove, the watching desktop is removed (one,
+// never the first; Ctrl+Win+F4 as a person would: anything still on it moves to the desktop next to it, nothing
+// closes). Starting a session makes at most one desktop, so ending one removes at most one.
 func leaveF1Desktop(remove bool) {
 	c := loadConfig()
 	if c.DesktopOff {
@@ -231,7 +231,7 @@ func leaveF1Desktop(remove bool) {
 	}
 	vdMu.Lock()
 	defer vdMu.Unlock()
-	for round := 0; remove && round < 8; round++ {
+	for round := 0; remove && round < 1; round++ { // one: the F1 desktop this session made, never more
 		ids, cur := desktops()
 		if len(ids) < 2 || cur >= len(ids) {
 			break
