@@ -57,6 +57,71 @@ var defaultTopTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racin
 var knownTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racing", "Aston Martin", "Alpine", "Williams",
 	"Racing Bulls", "Haas F1 Team", "Audi", "Cadillac"}
 
+// knownDrivers: the grid's drivers (2026) by team, for the Settings tick boxes; the open session's timing
+// adds and corrects them. Code is the three letters the timing and MultiViewer use.
+type driverInfo struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+	Team string `json:"team"`
+}
+
+var knownDrivers = []driverInfo{
+	{"NOR", "Norris", "McLaren"}, {"PIA", "Piastri", "McLaren"},
+	{"LEC", "Leclerc", "Ferrari"}, {"HAM", "Hamilton", "Ferrari"},
+	{"RUS", "Russell", "Mercedes"}, {"ANT", "Antonelli", "Mercedes"},
+	{"VER", "Verstappen", "Red Bull Racing"}, {"HAD", "Hadjar", "Red Bull Racing"},
+	{"ALO", "Alonso", "Aston Martin"}, {"STR", "Stroll", "Aston Martin"},
+	{"GAS", "Gasly", "Alpine"}, {"COL", "Colapinto", "Alpine"},
+	{"ALB", "Albon", "Williams"}, {"SAI", "Sainz", "Williams"},
+	{"LAW", "Lawson", "Racing Bulls"}, {"LIN", "Lindblad", "Racing Bulls"},
+	{"OCO", "Ocon", "Haas F1 Team"}, {"BEA", "Bearman", "Haas F1 Team"},
+	{"HUL", "Hülkenberg", "Audi"}, {"BOR", "Bortoleto", "Audi"},
+	{"PER", "Pérez", "Cadillac"}, {"BOT", "Bottas", "Cadillac"},
+}
+
+// allDrivers: the known drivers, with the open session's timing on top (a new driver, a driver who moved
+// team) and the chosen ones that are in neither.
+func allDrivers() []driverInfo {
+	out := append([]driverInfo{}, knownDrivers...)
+	put := func(d driverInfo) {
+		if d.Code == "" {
+			return
+		}
+		for i := range out {
+			if strings.EqualFold(out[i].Code, d.Code) {
+				if d.Team != "" {
+					out[i].Team = d.Team
+				}
+				if d.Name != "" {
+					out[i].Name = d.Name
+				}
+				return
+			}
+		}
+		if d.Name == "" {
+			d.Name = d.Code
+		}
+		out = append(out, d)
+	}
+	if t, ok := timingNow(); ok {
+		for _, d := range t.DriverList {
+			put(driverInfo{strings.ToUpper(d.Tla), d.LastName, d.TeamName})
+		}
+	}
+	for _, code := range keepDrivers() {
+		put(driverInfo{Code: code}) // only adds one that's in neither list; never renames
+	}
+	return out
+}
+
+func keepDrivers() []string { return append([]string{}, loadConfig().KeepDrivers...) }
+
+// kept: an onboard that always stays: its team is one of the top teams, or its driver is chosen.
+func kept(team, code string, top, keep []string) bool {
+	eq := func(v string) func(string) bool { return func(x string) bool { return v != "" && strings.EqualFold(x, v) } }
+	return slices.ContainsFunc(top, eq(team)) || slices.ContainsFunc(keep, eq(code))
+}
+
 // allTeams: the known teams, the teams in the open session's timing and the chosen ones, without doubles.
 func allTeams() []string {
 	out := append([]string{}, knownTeams...)
@@ -161,7 +226,7 @@ func openChosenSetup(choice, contentID, sessionType string) error {
 	c := loadConfig()
 	if c.RestOn && kind != "practice" {
 		if t, ok := timingNow(); ok {
-			rest = t.bestOfRest(topTeams())
+			rest = t.bestOfRest(topTeams(), keepDrivers())
 		}
 	}
 	if err := mvOpenSetupRest(name, contentID, rest); err != nil {
@@ -290,6 +355,8 @@ type timing struct {
 	} `json:"TimingData"`
 	DriverList map[string]struct {
 		TeamName string `json:"TeamName"`
+		Tla      string `json:"Tla"`
+		LastName string `json:"LastName"`
 	} `json:"DriverList"`
 	ChampionshipPrediction struct {
 		Drivers map[string]struct {
@@ -359,13 +426,13 @@ func (t *timing) byChampionship() []int {
 	return out
 }
 
-// bestOfRest: the best-placed drivers outside the top teams (still running), best first.
-func (t *timing) bestOfRest(top []string) []int {
+// bestOfRest: the best-placed drivers outside the top teams and the chosen drivers (still running), best first.
+func (t *timing) bestOfRest(top, keep []string) []int {
 	var out []int
 	for _, n := range t.byPosition() {
 		line := t.TimingData.Lines[strconv.Itoa(n)]
-		team := t.DriverList[strconv.Itoa(n)].TeamName
-		if line.Retired || line.Stopped || slices.ContainsFunc(top, func(x string) bool { return strings.EqualFold(x, team) }) {
+		d := t.DriverList[strconv.Itoa(n)]
+		if line.Retired || line.Stopped || kept(d.TeamName, d.Tla, top, keep) {
 			continue
 		}
 		out = append(out, n)
@@ -381,6 +448,7 @@ type slotPlayer struct {
 	DriverData *struct {
 		DriverNumber *int   `json:"driverNumber"`
 		TeamName     string `json:"teamName"`
+		Tla          string `json:"tla"`
 	} `json:"driverData"`
 	StreamData *struct {
 		ContentID string `json:"contentId"`
@@ -405,14 +473,14 @@ func updateRestSlots(force bool) {
 	var out struct {
 		Players []slotPlayer `json:"players"`
 	}
-	if gql(`{ players { id type state { muted volume } driverData { driverNumber teamName } streamData { contentId } bounds { x y width height } } }`, nil, &out) != nil {
+	if gql(`{ players { id type state { muted volume } driverData { driverNumber teamName tla } streamData { contentId } bounds { x y width height } } }`, nil, &out) != nil {
 		return
 	}
-	top := topTeams()
+	top, keep := topTeams(), keepDrivers()
 	var slots []slotPlayer
 	for _, p := range out.Players {
 		if p.Type == "OBC" && p.DriverData != nil && p.DriverData.DriverNumber != nil &&
-			!slices.ContainsFunc(top, func(x string) bool { return strings.EqualFold(x, p.DriverData.TeamName) }) {
+			!kept(p.DriverData.TeamName, p.DriverData.Tla, top, keep) {
 			slots = append(slots, p)
 		}
 	}
@@ -429,7 +497,7 @@ func updateRestSlots(force bool) {
 	if !ok {
 		return
 	}
-	wanted := t.bestOfRest(top)
+	wanted := t.bestOfRest(top, keep)
 	if len(wanted) < len(slots) {
 		watchNow.lastWanted, watchNow.changeLap = nil, 0
 		return

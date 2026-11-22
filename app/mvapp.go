@@ -401,7 +401,7 @@ const probeJS = `(() => {` + findSessionProps + `
 // restoreJS: opens setup __NAME__ for the session page's content. Returns "ok", "no-setup", "no-session",
 // "no-api" or "error: …".
 const restoreJS = `(async () => {` + findSessionProps + `
-  const name = __NAME__, rest = __REST__, topTeams = __TOP__.map(t => t.toLowerCase());
+  const name = __NAME__, rest = __REST__, topTeams = __TOP__.map(t => t.toLowerCase()), keep = __KEEP__.map(t => t.toLowerCase());
   if (!window.f1mv || !window.f1mv.setupManager) return 'no-api';
   const setups = await window.f1mv.setupManager.getSetups();
   const setup = (setups || []).find(s => (s.name || '').toLowerCase() === name.toLowerCase());
@@ -422,7 +422,8 @@ const restoreJS = `(async () => {` + findSessionProps + `
   if (rest.length) {
     const slots = copy.windows
       .filter(w => w.type === 'f1tv.player' && w.state && w.state.driverData &&
-                   !topTeams.includes(String(w.state.driverData.teamName || '').toLowerCase()))
+                   !topTeams.includes(String(w.state.driverData.teamName || '').toLowerCase()) &&
+                   !keep.includes(String(w.state.driverData.tla || '').toLowerCase()))
       .sort((a, b) => (a.windowState.bounds.y - b.windowState.bounds.y) || (a.windowState.bounds.x - b.windowState.bounds.x));
     slots.forEach((w, i) => {
       const s = props.streams.find(s => String(s.racingNumber) === String(rest[i]));
@@ -504,7 +505,9 @@ func mvOpenSetupRest(name, contentID string, rest []int) error {
 	}
 	restJSON, _ := json.Marshal(rest)
 	topJSON, _ := json.Marshal(topTeams())
-	js := strings.NewReplacer("__NAME__", string(nameJSON), "__REST__", string(restJSON), "__TOP__", string(topJSON)).Replace(restoreJS)
+	keepJSON, _ := json.Marshal(keepDrivers())
+	js := strings.NewReplacer("__NAME__", string(nameJSON), "__REST__", string(restJSON), "__TOP__", string(topJSON),
+		"__KEEP__", string(keepJSON)).Replace(restoreJS)
 	v, err := cdpEval(page, js, 60*time.Second)
 	if errors.Is(err, context.DeadlineExceeded) {
 		afterSetup(name, contentID)

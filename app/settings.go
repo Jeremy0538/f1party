@@ -6,6 +6,7 @@ package main
 
 import (
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -33,6 +34,7 @@ func settingsView() map[string]any {
 		"fitTiming": c.FitTiming,
 		// Drivers
 		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(), "teams": allTeams(),
+		"keepDrivers": keepDrivers(), "drivers": allDrivers(),
 		"battleOn": c.BattleOn, "battleLaps": battleLaps(), "battleRight": c.BattleRight,
 		// Close F1
 		"closeMv": !c.CloseMVOff, "closeUf1": !c.CloseUf1Off, "closeDesktop": c.CloseDesktop,
@@ -67,6 +69,7 @@ type settingsIn struct {
 	RestOn        *bool
 	RestLive      *bool
 	TopTeams      []string
+	KeepDrivers   []string
 	BattleOn      *bool
 	BattleLaps    *int
 	BattleRight   *string
@@ -135,6 +138,14 @@ func applySettings(in settingsIn, party *Party) {
 			for _, t := range in.TopTeams {
 				if t = clip(t, 40); t != "" && len(c.TopTeams) < 10 {
 					c.TopTeams = append(c.TopTeams, t)
+				}
+			}
+		}
+		if in.KeepDrivers != nil {
+			c.KeepDrivers = nil
+			for _, d := range in.KeepDrivers {
+				if d = strings.ToUpper(clip(d, 3)); d != "" && len(c.KeepDrivers) < 30 && !slices.Contains(c.KeepDrivers, d) {
+					c.KeepDrivers = append(c.KeepDrivers, d)
 				}
 			}
 		}
