@@ -598,7 +598,6 @@
 					<span class="mvstate"><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
 					<span class="mvacts">
 						<button class="hidden" id="mvstart">Start</button><button class="hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
-						<button class="closex hidden" id="closef1" title="Close F1: MultiViewer and Ultimate F1 Viewer close, the desktop, lights and taskbar go back (Settings → Close)" aria-label="Close F1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
 					</span>
 				</div>
 				<div class="boxsub" id="setupapps"></div>
@@ -1051,12 +1050,7 @@ $("mvrestart").onclick = async () => {
 	if (!confirm("MultiViewer closes and opens again, so F1 Party can open your setups. Continue?")) return;
 	await mvAct($("mvrestart"), "/api/mv/restart")();
 };
-let mvNow = {};
-$("closef1").onclick = async () => {
-	if (!confirm("Close F1? MultiViewer and Ultimate F1 Viewer close (as set in Settings → Close).")) return;
-	try { await post("/api/closef1"); } catch (e) { $("mverr").textContent = e.message; }
-	setTimeout(refreshMV, 1500);
-};
+let mvNow = {}, mvWasRunning = false;
 // Session > Layout: open the session with another layout just this time (MultiViewer starts first if needed)
 $("setup").onchange = () => { $("setup").dataset.touched = "1"; };
 $("setupopen").onclick = async () => {
@@ -1075,7 +1069,7 @@ async function refreshMV() {
 	$("setupapps").textContent = !m.running ? "" : m.setupsReady || !(m.setups || []).length ? "MultiViewer" + (m.uf1 ? " · Ultimate F1 Viewer" : "") : "MultiViewer runs without setup support";
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
-	$("closef1").classList.toggle("hidden", !m.running);
+	if (m.running !== mvWasRunning) { mvWasRunning = m.running; refreshSession(); }
 	const hint = $("setuphint");
 	hint.innerHTML = "";
 	if (!m.installed) hint.append("Get MultiViewer at ", Object.assign(document.createElement("a"), { textContent: "multiviewer.app", onclick: () => openURL("https://multiviewer.app/download") }), ".");
@@ -1130,7 +1124,7 @@ async function refresh() {
 	$("note").textContent = s.note || "";
 	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
 	$("pstatus").title = s.status || "";
-	$("leave").textContent = s.mode === "host" ? "End party" : "Leave";
+	$("leave").textContent = s.mode === "host" ? "End party" : "Leave party";
 	$("leave").title = s.mode === "host" ? "Stop hosting and leave the party" : "Leave this party";
 	$("together").classList.toggle("hidden", s.mode !== "host");
 	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
@@ -1204,14 +1198,15 @@ async function refreshSession() {
 	try { sessData = (await (await fetch("/api/session")).json()).session; } catch { sessData = null; }
 	const v = sessData;
 	const hosting = mode === "host";
-	$("sess").classList.toggle("hidden", !v && !hosting);
+	// also without a party or session while MultiViewer runs: End session is how F1 closes
+	$("sess").classList.toggle("hidden", !v && !hosting && !mvWasRunning);
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v && !v.stopped ? "Change" : "Select";
 	$("sesschange").title = v ? "Pick another session in the calendar: the whole party switches to it" : "Pick a session in the calendar to watch together";
 	$("sesschange").classList.toggle("primary", !v);
 	document.querySelector(".sess .jumpspart").classList.toggle("hidden", !v || !!v.stopped);
 	// End session: with a session open (host: for everyone, guest: just you); Watch again after a guest's end
-	$("sessend").classList.toggle("hidden", !v || !!v.stopped);
+	$("sessend").classList.toggle("hidden", v ? !!v.stopped : !mvWasRunning);
 	$("sesslayout").classList.toggle("hidden", !v || !!v.stopped);
 	if (!v) delete $("setup").dataset.touched;
 	$("sessend").title = hosting ? "Close this session for everyone; the party stays" : "Stop watching this session; the party stays";
@@ -1355,8 +1350,8 @@ async function openSettings(opts = {}) {
 		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
 		updates: ["Updates", updatesTab(group, hint)],
 		close: ["Close", el("div", {},
-			group("Close F1 closes",
-				hint("The Close F1 button under MultiViewer closes what's ticked here, and puts the lights and the taskbar back."),
+			group("End session closes",
+				hint("End session closes the streams and what's ticked here, and puts the lights and the taskbar back. The party stays."),
 				check("closeMv", c.closeMv !== false, "MultiViewer"),
 				uf1(check("closeUf1", c.closeUf1 !== false, "Ultimate F1 Viewer")),
 				desk ? check("closeDesktop", c.closeDesktop, win ? "The watching desktop" : "The watching workspace", win ? "Anything else still on it moves to the desktop next to it" : "Anything else still on it moves back to the workspace you came from") : null))],
@@ -1512,7 +1507,7 @@ function windowsTab(c, h) {
 }
 $("sessend").onclick = async () => {
 	const msg = mode === "host" ? "End this session for everyone? Their streams close too, the party stays."
-		: mode === "guest" ? "Stop watching this session? You stay in the party." : "Close this session in MultiViewer?";
+		: mode === "guest" ? "Stop watching this session? You stay in the party." : "End this session? MultiViewer and the rest close (Settings → Close).";
 	if (!confirm(msg)) return;
 	$("sesserr").textContent = "";
 	try { await post("/api/session/end"); } catch (e) { $("sesserr").textContent = e.message; }

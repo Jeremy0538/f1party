@@ -616,7 +616,18 @@ func killApp(process string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("taskkill", "/IM", process+".exe")
+		// asked to close first; an app that stays (Ultimate F1 Viewer keeps running in the background) is
+		// ended after 3 seconds, with everything it started
+		ask := exec.Command("taskkill", "/IM", process+".exe")
+		detach(ask)
+		_ = ask.Run()
+		for i := 0; i < 15 && processRunning(process); i++ {
+			time.Sleep(200 * time.Millisecond)
+		}
+		if !processRunning(process) {
+			return
+		}
+		cmd = exec.Command("taskkill", "/F", "/T", "/IM", process+".exe")
 	case "darwin":
 		cmd = exec.Command("osascript", "-e", `quit app "`+process+`"`)
 	default:

@@ -207,6 +207,8 @@ func (p *Party) ResyncAll() error {
 	return nil
 }
 
+var errNotConnected = errors.New("not connected to the party yet")
+
 // errNoSession: Start together without a session open; the window sends you to the calendar to pick one.
 var errNoSession = errors.New("pick a session in the calendar first")
 
@@ -247,7 +249,7 @@ func (p *Party) StartTogether() error {
 	}
 	at, ok := p.relayNow()
 	if !ok {
-		return errors.New("not connected to the party yet")
+		return errNotConnected
 	}
 	if !mvRunning() {
 		p.SetNote("Starting MultiViewer…")
@@ -1295,8 +1297,14 @@ func (p *Party) takeOverHost() bool {
 	return true
 }
 
-// closeSession closes every stream and timing window (a variable so tests never touch a real MultiViewer).
-var closeSession = func() { mvCloseOthers("", true) }
+// closeSession closes every stream and timing window; closeRest then the rest of F1 the way Settings → Close
+// says (MultiViewer, Ultimate F1 Viewer, the watching desktop, lights and taskbar). A guest only closes the
+// streams: MultiViewer stays up for the host's next session. Variables so tests never touch a real
+// MultiViewer.
+var (
+	closeSession = func() { mvCloseOthers("", true) }
+	closeRest    = closeF1
+)
 
 // EndSession: stop watching the session without leaving the party. The host closes it for everyone (the
 // party stays, ready for the next session from the calendar); a guest stops watching just for themself
@@ -1314,13 +1322,14 @@ func (p *Party) EndSession() error {
 		closeSession()
 	case "host":
 		closeSession()
-		taskbarRestore()
+		closeRest()
 		p.mu.Lock()
 		p.ended = true // after closing: the host loop clears it as soon as a stream is open again
 		p.mu.Unlock()
 		p.SetNote("Session ended for everyone; the party stays. Pick another session in the calendar.")
 	default:
 		closeSession()
+		closeRest()
 	}
 	return nil
 }

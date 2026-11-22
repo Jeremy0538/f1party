@@ -156,8 +156,13 @@ func toF1Desktop() {
 		vdMade = newDesktop(name, len(ids))
 		return
 	}
+	switchDesktop(cur, target)
+}
+
+// switchDesktop goes from desktop cur to desktop target (Ctrl+Win+arrows) and waits until it shows.
+func switchDesktop(cur, target int) bool {
 	if target == cur {
-		return
+		return true
 	}
 	arrow, steps := uintptr(vkRight), target-cur
 	if steps < 0 {
@@ -170,10 +175,11 @@ func toF1Desktop() {
 	for i := 0; i < 20; i++ {
 		if _, now := desktops(); now == target {
 			time.Sleep(300 * time.Millisecond) // the switch animation
-			return
+			return true
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
+	return false
 }
 
 // vdMu: one desktop switch at a time. vdMade: the id of the desktop made here (and when).
@@ -210,8 +216,9 @@ func newDesktop(name string, had int) string {
 	return ""
 }
 
-// leaveF1Desktop (Close F1): back to the first desktop; with remove, the watching desktop is removed when it
-// shows (Ctrl+Win+F4, as a person would: anything still on it moves to the desktop next to it, nothing closes).
+// leaveF1Desktop (Close F1): back to the first desktop; with remove, every watching desktop (also ones left
+// over from earlier) is removed (Ctrl+Win+F4 on each, as a person would: anything still on it moves to the
+// desktop next to it, nothing closes).
 func leaveF1Desktop(remove bool) {
 	c := loadConfig()
 	if c.DesktopOff {
@@ -221,26 +228,39 @@ func leaveF1Desktop(remove bool) {
 	if name == "" {
 		name = f1DesktopName
 	}
-	ids, cur := desktops()
-	if len(ids) < 2 || cur >= len(ids) {
-		return
-	}
-	if remove && strings.EqualFold(strings.TrimSpace(desktopName(ids[cur])), name) {
+	vdMu.Lock()
+	defer vdMu.Unlock()
+	for round := 0; remove && round < 8; round++ {
+		ids, cur := desktops()
+		if len(ids) < 2 || cur >= len(ids) {
+			break
+		}
+		target := -1
+		for i, id := range ids {
+			if i > 0 && strings.EqualFold(strings.TrimSpace(desktopName(id)), name) {
+				target = i // never the first desktop: that is where everything goes back to
+				break
+			}
+		}
+		if target < 0 || !switchDesktop(cur, target) {
+			break
+		}
 		keyEvent(vkLControl, 0)
 		keyEvent(vkLWin, keyExtended)
 		keyEvent(vkF4, 0)
 		keyEvent(vkF4, keyUp)
 		keyEvent(vkLWin, keyExtended|keyUp)
 		keyEvent(vkLControl, keyUp)
-		time.Sleep(500 * time.Millisecond)
-		ids, cur = desktops()
-		vdMu.Lock()
+		for i := 0; i < 10; i++ {
+			time.Sleep(200 * time.Millisecond)
+			if now, _ := desktops(); len(now) < len(ids) {
+				break
+			}
+		}
 		vdMade = ""
-		vdMu.Unlock()
 	}
-	for i := 0; i < cur; i++ {
-		ctrlWin(vkLeft)
-		time.Sleep(350 * time.Millisecond)
+	if _, cur := desktops(); cur > 0 {
+		switchDesktop(cur, 0)
 	}
 }
 

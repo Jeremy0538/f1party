@@ -57,6 +57,7 @@ func main() {
 	go party.watchPeople()
 	go rememberParty(party)
 	go party.runPlans()
+	go followMainStream()
 	go func() { // friend requests in the party
 		for range time.Tick(2 * time.Second) {
 			if party.Snapshot().Mode != "idle" {
@@ -114,7 +115,17 @@ func main() {
 		}
 		return s.Code, nil
 	}
-	startControl(party, func() (string, error) { return hostAndInvite(true) }, show)
+	startControl(party, controlHooks{
+		host:   func() (string, error) { return hostAndInvite(true) },
+		invite: func() (string, error) { return hostAndInvite(false) },
+		copy: func(text string) error {
+			if appCtx == nil {
+				return errors.New("F1 Party is still starting")
+			}
+			return wruntime.ClipboardSetText(appCtx, text)
+		},
+		show:   show,
+	})
 	hostArg := func(args []string) bool {
 		for _, a := range args {
 			if a == "--host" {
@@ -639,7 +650,8 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		}
 		writeJSON(w, map[string]bool{"ok": true})
 	})
-	// Close F1: MultiViewer and Ultimate F1 Viewer closed, desktop, lights and taskbar back (as set).
+	// Close F1 (older windows; the app now does this with End session): MultiViewer and Ultimate F1 Viewer
+	// closed, desktop, lights and taskbar back (as set).
 	mux.HandleFunc("POST /api/closef1", func(w http.ResponseWriter, r *http.Request) {
 		go closeF1()
 		writeJSON(w, map[string]bool{"ok": true})
