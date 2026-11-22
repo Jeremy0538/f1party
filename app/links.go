@@ -4,12 +4,10 @@ package main
 // itself, and which of them are installed here.
 
 import (
-	_ "embed"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 const (
@@ -41,22 +39,6 @@ func uf1Installed() bool {
 		}
 	}
 	return false
-}
-
-// setupPrompt: a prompt for an AI assistant that builds MultiViewer setups and Ultimate F1 Viewer layouts per
-// session type for your own monitors. The same file ships with the F1 Race Control Stream Deck plugin
-// (StanvanDaalen/streamdeck-plugins, F1/sdPlugin/setup-prompt.md); keep the two copies the same.
-//
-//go:embed setup-prompt.md
-var setupPromptFile string
-
-// setupPromptText: the part to paste, everything after the first line that is just "---".
-func setupPromptText() string {
-	s := strings.ReplaceAll(setupPromptFile, "\r\n", "\n")
-	if _, after, ok := strings.Cut(s, "\n---\n"); ok {
-		s = after
-	}
-	return strings.TrimSpace(s)
 }
 
 // allowedURL: the only pages the window may open in the browser.

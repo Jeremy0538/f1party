@@ -323,9 +323,6 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		_, err := hostAndInvite(false)
 		replyErr(w, err)
 	})
-	mux.HandleFunc("POST /api/setupprompt", func(w http.ResponseWriter, r *http.Request) {
-		replyErr(w, copyText(setupPromptText()))
-	})
 	mux.HandleFunc("POST /api/copycode", func(w http.ResponseWriter, r *http.Request) {
 		code := party.Snapshot().Code
 		if code == "" {

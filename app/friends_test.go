@@ -56,11 +56,3 @@ func TestFriendRequests(t *testing.T) {
 		t.Fatal("still a friend after remove")
 	}
 }
-
-// The setup prompt in the Downloads menu: the pasteable part only, without the intro above the line.
-func TestSetupPromptText(t *testing.T) {
-	p := setupPromptText()
-	if !strings.HasPrefix(p, "You are going to build") || strings.Contains(p, "Copy everything below the line") {
-		t.Fatalf("prompt starts with %q", p[:min(60, len(p))])
-	}
-}

@@ -163,7 +163,6 @@
 	.dlmenu { position:absolute; right:0; bottom:24px; width:max-content; min-width:250px; text-align:left; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:4; }
 	.dlmenu a { display:flex; justify-content:space-between; align-items:center; gap:24px; white-space:nowrap; padding:7px 9px; border-radius:6px; font-size:12px; color:var(--text); text-decoration:none; }
 	.dlmenu a:hover { background:#20242b; }
-	.dlmenu .dlsep { height:1px; background:var(--line-2); margin:4px 6px; }
 	.dlmenu a span { color:var(--faint); font-size:11px; white-space:nowrap; flex:none; }
 	.dlmenu a span.ok { color:var(--ok); }
 	/* friends in the member list */
@@ -335,8 +334,6 @@
 					<a role="menuitem" data-url="https://github.com/MRAJEKO/UF1-Viewer-with-F1MV/releases/latest">Ultimate F1 Viewer <span id="dluf1"></span></a>
 					<a role="menuitem" data-url="https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control">F1 Race Control (Stream Deck) <span id="dlsd"></span></a>
 					<a role="menuitem" data-url="https://github.com/Jeremy0538/f1party/releases/latest">F1 Party <span>Share with friends</span></a>
-					<div class="dlsep"></div>
-					<a role="menuitem" id="dlprompt" title="A prompt for an AI assistant that can see your screen (such as Claude Code): it builds a MultiViewer setup and an Ultimate F1 Viewer layout per session type for your monitors">Build your own setup with AI <span id="dlpromptst">Copy prompt</span></a>
 				</div>
 			</div>
 		</aside>
@@ -388,14 +385,7 @@ $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await pos
 // Downloads menu: opens above the link, closes on a pick, a click elsewhere or Escape
 function showDownloads(on) { $("dlmenu").classList.toggle("hidden", !on); $("dlbtn").setAttribute("aria-expanded", String(on)); }
 $("dlbtn").onclick = (e) => { e.stopPropagation(); showDownloads($("dlmenu").classList.contains("hidden")); };
-document.querySelectorAll("#dlmenu a[data-url]").forEach((a) => a.onclick = (e) => { e.stopPropagation(); openURL(a.dataset.url); showDownloads(false); });
-$("dlprompt").onclick = async (e) => {
-	e.stopPropagation();
-	const st = $("dlpromptst");
-	try { await post("/api/setupprompt"); st.textContent = "Copied ✓"; st.className = "ok"; }
-	catch { st.textContent = "Couldn't copy"; st.className = ""; }
-	setTimeout(() => { st.textContent = "Copy prompt"; st.className = ""; }, 2500);
-};
+document.querySelectorAll("#dlmenu a").forEach((a) => a.onclick = (e) => { e.stopPropagation(); openURL(a.dataset.url); showDownloads(false); });
 document.addEventListener("click", () => showDownloads(false));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") showDownloads(false); });
 const installed = (id, yes) => { $(id).textContent = yes ? "✓ Installed" : "Download"; $(id).className = yes ? "ok" : ""; };
