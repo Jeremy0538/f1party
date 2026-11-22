@@ -162,6 +162,9 @@
 	.calhead h1 { margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.calhead .d { font-size:12px; color:var(--dim); }
 	.calhead button { width:32px; padding:0; font-size:15px; }
+	.calhead button.calarrow { width:36px; height:36px; flex:none; display:flex; align-items:center; justify-content:center; }
+	.calhead button.calarrow svg { width:20px; height:20px; display:block; }
+	.calhead button.calarrow:disabled { opacity:.35; }
 	/* the weekend's name opens the season list: every year, every race */
 	.calhead button.calpick { flex:1; min-width:0; width:auto; height:auto; padding:2px 6px; margin-left:-6px; border:0; background:none; text-align:left; display:block; font-size:inherit; }
 	.calhead button.calpick:hover { background:#16191e; }
@@ -387,20 +390,30 @@
 	.mlist li { display:flex; align-items:center; gap:10px; min-height:46px; padding:5px 12px; }
 	.mlist li + li { border-top:1px solid var(--line); }
 	.mlist .nm { flex:1; min-width:0; }
-	.mlist .nm .top { display:flex; align-items:center; gap:7px; min-width:0; }
-	.mlist .nm b { font-weight:500; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.mlist .nm .top { display:flex; align-items:center; gap:7px; min-width:0; height:20px; }
+	.mlist .nm b { font-weight:500; font-size:13px; line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.mlist .nm .st { display:flex; align-items:center; font-size:11.5px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.mlist .nm .st .dot { width:6px; height:6px; margin-right:6px; flex:none; }
-	.mlist .you { font-size:10.5px; color:var(--faint); }
+	.mlist .you { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:999px; border:1px solid #3a404a; font-size:10px; line-height:1; color:var(--dim); flex:none; }
 	.mlist .drift { font-size:12px; font-variant-numeric:tabular-nums; color:var(--dim); min-width:44px; text-align:right; }
 	.mlist .drift.ok { color:var(--ok); } .mlist .drift.warn { color:var(--warn); } .mlist .drift.bad { color:var(--bad); }
+	.toast { position:fixed; left:50%; bottom:24px; transform:translate(-50%, 12px); opacity:0; pointer-events:none; z-index:1000;
+		display:flex; align-items:center; gap:10px; max-width:min(440px, calc(100vw - 32px)); padding:11px 16px 11px 12px; border-radius:10px;
+		background:#1d2128; border:1px solid #2e333c; box-shadow:0 10px 30px rgba(0,0,0,.45); font-size:13px; color:var(--text); transition:opacity .18s, transform .18s; }
+	.toast.show { opacity:1; transform:translate(-50%, 0); }
+	.toast .ti { width:22px; height:22px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; background:var(--ok); color:#0b0d10; }
+	.toast.bad .ti { background:var(--bad); color:#fff; }
+	.toast .ti svg { width:14px; height:14px; }
+	.toast b { display:block; font-weight:600; }
+	.toast span.sub { display:block; font-size:12px; color:var(--dim); margin-top:1px; }
 	.mlist .acts { display:flex; align-items:center; gap:4px; flex:none; }
 	.mlist .acts .ib { width:26px; height:26px; border-color:transparent; background:none; }
 	.mlist .acts .ib:hover { background:#20242b; }
 	.mlist .acts .ib svg { width:15px; height:15px; }
-	.hostbadge { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 7px 0 6px; border-radius:999px; flex:none;
+	.hostbadge { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 7px 0 6px; border-radius:999px; flex:none; box-sizing:border-box;
 		font:700 10px/1 var(--num); letter-spacing:.08em; color:#ffd166; background:rgba(255,209,102,.1); border:1px solid rgba(255,209,102,.35); }
-	.hostbadge svg { width:11px; height:11px; }
+	.hostbadge svg { width:11px; height:11px; display:block; flex:none; margin-top:-1px; }
+	.hostbadge span { display:block; padding-top:1px; }
 	/* sidebar boxes */
 	aside { gap:12px; }
 	.box { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:12px 14px; }
@@ -535,13 +548,13 @@
 			</div>
 			<div id="cal" class="hidden" role="tabpanel">
 				<div class="calhead">
-					<button id="calprev" aria-label="Previous weekend" title="Previous weekend">‹</button>
+					<button id="calprev" class="calarrow" aria-label="Previous weekend" title="Previous weekend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
 					<button class="calpick" id="calpick" aria-haspopup="true" aria-expanded="false" aria-controls="seasonpanel" title="Every season and race">
 						<span class="nmrow"><h1 id="calname">Calendar</h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
 						<span class="d" id="caldates"></span>
 					</button>
 					<button id="notifbtn" class="notifbtn" aria-haspopup="true" aria-expanded="false" aria-controls="notifpanel" title="Notifications" aria-label="Notifications"></button>
-					<button id="calnext" aria-label="Next weekend" title="Next weekend">›</button>
+					<button id="calnext" class="calarrow" aria-label="Next weekend" title="Next weekend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
 				</div>
 				<div class="seasonpanel hidden" id="seasonpanel" role="dialog" aria-label="Seasons and races">
 					<div class="years" id="seasonyears" role="group" aria-label="Season"></div>
@@ -922,7 +935,7 @@ function teamInviteDialog(t) {
 		picker([["Friends", friends.map((f) => ["f:" + f.id, f.name, f.online ? "online" : "", false])]]),
 		friends.length ? null : el("p", { className: "hint", textContent: "No friends to invite here yet: use the link." }),
 		el("div", { className: "row", style: "margin-top:12px" }, btn("Copy team link", "Works 7 days, 5 times", async (e) => {
-			try { await post("/api/team/link", { id: t.id }); e.target.textContent = "Link copied"; } catch (err) { $("modalerr").textContent = err.message; }
+			try { await post("/api/team/link", { id: t.id }); e.target.textContent = "Link copied"; toast("Team link copied", "Paste it in Discord or send it to someone to join " + t.name + "."); } catch (err) { $("modalerr").textContent = err.message; }
 		})));
 	dialog("Invite to team " + t.name, body, "Send invites", async () => {
 		const ids = picked(body, "f:");
@@ -951,7 +964,7 @@ $("invite").onclick = partyInviteDialog;
 
 $("friendinv").onclick = async () => {
 	$("friendmsg").textContent = "";
-	try { await post("/api/friendlink", {}); $("friendmsg").textContent = "Link copied: paste it in Discord or send it to a friend (works 7 days)"; }
+	try { await post("/api/friendlink", {}); toast("Invite link copied", "Paste it in Discord or send it to a friend. It works for 7 days."); }
 	catch (e) { $("friendmsg").textContent = e.message; }
 };
 $("dcsave").onclick = async () => {
@@ -1071,7 +1084,9 @@ async function refresh() {
 	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
 	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
 	// the host's usual status says what the heading already does: keep it short next to it
-	$("status").textContent = /^Hosting: guests follow/.test(s.status || "") ? "Guests follow you" : (s.status || "");
+	let stTxt = /^Hosting: guests follow/.test(s.status || "") ? "Guests follow you" : (s.status || "");
+	if (s.mode === "host" && !s.mvOnline) stTxt = sessData && !sessData.stopped ? "Session not open in MultiViewer" : "No session yet";
+	$("status").textContent = stTxt;
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
 	const ok = s.mvOnline && s.connected;
@@ -1087,6 +1102,20 @@ async function refresh() {
 }
 // Who's in the party: a round initial, the name with a Host badge, what they're doing under it, the gap to
 // the host on the right; the host can hand the party over, anyone can send a friend request.
+// A pop-up message at the bottom of the window that goes away by itself.
+let toastTimer = 0;
+function toast(title, sub, ok = true) {
+	let t = $("toast");
+	if (!t) { t = el("div", { id: "toast", className: "toast", role: "status" }); t.setAttribute("aria-live", "polite"); document.body.append(t); }
+	t.innerHTML = "";
+	const ic = el("span", { className: "ti" });
+	ic.innerHTML = ok ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>'
+		: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 7v6M12 17h.01"/></svg>';
+	t.append(ic, el("div", {}, el("b", { textContent: title }), sub ? el("span", { className: "sub", textContent: sub }) : ""));
+	t.classList.toggle("bad", !ok);
+	void t.offsetWidth; t.classList.add("show");
+	clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 4500);
+}
 const CROWN = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 18h18v2H3zM3 7l5 4 4-6 4 6 5-4-2 9H5z"/></svg>';
 function renderMembers(s) {
 	const ul = $("members"); ul.innerHTML = "";
@@ -1096,7 +1125,7 @@ function renderMembers(s) {
 		const host = m.role === "host";
 		const synced = m.status === "In sync" || m.status === "In sync (live)";
 		const top = el("span", { className: "top" }, el("b", { textContent: m.name }));
-		if (host) { const h = el("span", { className: "hostbadge", title: "Host: everyone follows their stream" }); h.innerHTML = CROWN + "HOST"; top.append(h); }
+		if (host) { const h = el("span", { className: "hostbadge", title: "Host: everyone follows their stream" }); h.innerHTML = CROWN + "<span>HOST</span>"; top.append(h); }
 		if (m.me) top.append(el("span", { className: "you", textContent: "you" }));
 		const what = host ? (s.feed || m.me ? "Hosting" : m.status || "Hosting") : synced ? "Watching along" : (m.status || "Joining…");
 		const dotCls = host || synced ? "ok" : /can't|error|offline/i.test(what) ? "bad" : "warn";
@@ -1533,6 +1562,7 @@ async function refreshCal() {
 	$("caldates").textContent = `${w.meeting.location} · ${dayFmt.format(ms)} – ${dayFmt.format(me)} ${me.getFullYear()}`;
 	$("calprev").disabled = !w.prev; $("calnext").disabled = !w.next;
 	const guest = mode === "guest", hosting = mode === "host", ul = $("calsessions");
+	const pickWord = sessData && !sessData.stopped ? "Switch" : "Select";
 	if (document.activeElement && ul.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return; // picking a time
 	ul.innerHTML = "";
 	const now = Date.now();
@@ -1552,7 +1582,7 @@ async function refreshCal() {
 			acts.append(btn("Cancel", "Cancel this planned party", () => calAct("/api/calendar/unplan", { id: x.plan.id })));
 		} else if (x.status === "live") {
 			st.className = "st live"; st.textContent = "LIVE";
-			const wb = btn(hosting ? "Switch" : "Watch now", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to the live session" : "Host a party on the live session", () => liveStartDialog(x.key, (w.meeting.name || "").replace("Grand Prix", "GP") + " · " + x.name), "primary");
+			const wb = btn(hosting ? pickWord : "Watch now", guest ? "Only the host picks the party's session" : hosting ? (pickWord === "Switch" ? "The whole party switches to the live session" : "The whole party watches the live session") : "Host a party on the live session", () => liveStartDialog(x.key, (w.meeting.name || "").replace("Grand Prix", "GP") + " · " + x.name), "primary");
 			wb.disabled = guest; acts.append(wb);
 		} else if (x.status === "soon") {
 			st.textContent = inTime(start - now);
@@ -1560,7 +1590,7 @@ async function refreshCal() {
 			if (mode === "idle") acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
 		} else {
 			st.textContent = "Replay";
-			const wb = btn(hosting ? "Switch" : "Watch", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to this replay, from a minute before the start" : "Host a party on the replay now, from a minute before the start", () => calAct("/api/calendar/watch", { session: x.key }));
+			const wb = btn(hosting ? pickWord : "Watch", guest ? "Only the host picks the party's session" : hosting ? (pickWord === "Switch" ? "The whole party switches to this replay, from a minute before the start" : "The whole party watches this replay, from a minute before the start") : "Host a party on the replay now, from a minute before the start", () => calAct("/api/calendar/watch", { session: x.key }));
 			wb.disabled = guest;
 			acts.append(wb);
 			if (mode === "idle") acts.append(btn("Plan", "Plan a replay party at a time you pick", () => { picking = picking === x.key ? 0 : x.key; refreshCal(); }));
