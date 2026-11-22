@@ -18,7 +18,6 @@ import (
 
 const vdKey = `Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops`
 
-
 // desktops: every desktop id in order, and the index of the current one.
 func desktops() ([]string, int) {
 	k, err := registry.OpenKey(registry.CURRENT_USER, vdKey, registry.QUERY_VALUE)
@@ -221,3 +220,7 @@ func leaveF1Desktop(remove bool) {
 		time.Sleep(350 * time.Millisecond)
 	}
 }
+
+// desktopsSupported / placesSupported: whether the settings for these show on this computer.
+func desktopsSupported() bool { return true }
+func placesSupported() bool   { return true }
