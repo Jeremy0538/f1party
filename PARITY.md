@@ -54,6 +54,6 @@ Still to do: KDE Plasma (KWin scripts over D-Bus), X11 (EWMH), GNOME Wayland sta
 
 ## Still open
 
-- Ultimate F1 Viewer on Linux has never been tested.
+- Ultimate F1 Viewer on Linux has never been tested. When it was opened by hand (without the debug port) F1 Party now closes and restarts it on every platform, as it did on Windows.
 - Automatic update on Linux: possible for the plain binary (replace the file, restart), not for package installs.
 - Tray on Linux: Wails v2 and systray both want the main thread; would need the StatusNotifier D-Bus protocol directly.

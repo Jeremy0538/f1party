@@ -47,7 +47,12 @@ func TestEndSession(t *testing.T) {
 
 // A guest's own pause, play or skip becomes a request to the host that rides on the guest's status.
 func TestAskHost(t *testing.T) {
-	p := &Party{st: Status{Mode: "guest"}}
+	old := &Party{st: Status{Mode: "guest"}, host: &FeedState{T: "state"}}
+	old.askHost("s", "@1234.5")
+	if old.req != "" {
+		t.Fatalf("seek request %q sent to a host that doesn't understand it", old.req)
+	}
+	p := &Party{st: Status{Mode: "guest"}, host: &FeedState{T: "state", Seek: true}}
 	p.askHost("s", "@1234.5")
 	if p.req != "s1@1234.5" || !p.askSeek {
 		t.Fatalf("seek request %q askSeek=%v", p.req, p.askSeek)

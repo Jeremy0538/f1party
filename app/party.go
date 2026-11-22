@@ -47,6 +47,9 @@ type FeedState struct {
 	// NewHost: the host hands the party over to this member (their id); that guest connects as the host, the
 	// relay then replaces the old host's connection and the old host carries on as a guest.
 	NewHost string `json:"newHost,omitempty"`
+	// Seek: this host understands seek requests ("s…@" and "t…@"). An older host takes every request that
+	// isn't a pause for a play, so guests only ask a host that sends this.
+	Seek bool `json:"seek,omitempty"`
 }
 
 type Member struct {
@@ -221,6 +224,9 @@ func (p *Party) SetAutoSync(on bool) {
 func (p *Party) askHost(kind, arg string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if (kind == "s" || kind == "t") && (p.host == nil || !p.host.Seek) {
+		return // an older host would play instead of seek: the guest's own skip just gets synced back
+	}
 	p.hold = false
 	p.reqN++
 	p.req = fmt.Sprintf("%s%d%s", kind, p.reqN, arg)
@@ -553,8 +559,16 @@ func (p *Party) hostLoop(ctx context.Context) {
 			p.ended = false
 		}
 		fs.Ended = p.ended
-		if p.handover != "" && time.Since(p.handoverAt) < 15*time.Second {
-			fs.NewHost = p.handover
+		if p.handover != "" {
+			if time.Since(p.handoverAt) < 15*time.Second {
+				fs.NewHost = p.handover
+			} else {
+				// Still the host after 15 s: the member didn't take over (an older F1 Party, or gone).
+				p.handover = ""
+				if strings.HasPrefix(p.st.Note, "Handing the party to ") {
+					p.st.Note = "They didn't take over. They may need to update F1 Party."
+				}
+			}
 		}
 		p.mu.Unlock()
 		if feed != nil {
@@ -636,6 +650,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 		if o := p.offerWire(20); o != "" {
 			fs.Friends = strings.Split(o, ",")
 		}
+		fs.Seek = true
 		if !clockOK {
 			continue
 		}
