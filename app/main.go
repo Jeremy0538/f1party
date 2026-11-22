@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
@@ -49,7 +50,7 @@ func envOr(k, def string) string {
 func main() {
 	afterUpdate(os.Args[1:])
 	cfg := loadConfig()
-	party := NewParty(cfg.Name, cfg.Setup)
+	party := NewParty(cfg.Name, setupChoice(cfg.Setup))
 	go party.watchUpdates()
 	go party.watchPresence()
 	migrateTeams()
@@ -191,7 +192,7 @@ func main() {
 			}
 			return false
 		},
-		OnShutdown: func(context.Context) { stopTray() },
+		OnShutdown: func(context.Context) { stopTray(); taskbarRestore() },
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "nl.jeremyklootwijk.f1party",
 			OnSecondInstanceLaunch: func(d options.SecondInstanceData) { // already running: bring it to the front
@@ -282,7 +283,11 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
-			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed()}
+			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed() && !loadConfig().Uf1Off}
+		if out["uf1"] == true {
+			c := loadConfig()
+			out["uf1Layouts"], out["uf1For"], out["uf1Auto"] = uf1Layouts(), c.Uf1For, uf1LayoutFor(party.Setup())
+		}
 		writeJSON(w, out)
 	})
 	mux.HandleFunc("POST /api/mv/start", func(w http.ResponseWriter, r *http.Request) {
@@ -290,13 +295,6 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	mux.HandleFunc("POST /api/mv/restart", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, mvRestart())
-	})
-	mux.HandleFunc("POST /api/setup", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ Name string }
-		json.NewDecoder(r.Body).Decode(&in)
-		party.SetSetup(in.Name)
-		updateConfig(func(c *config) { c.Setup = in.Name })
-		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/setup/open", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Name string }
@@ -322,7 +320,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		party.mu.Unlock()
 		err := mvStartReady()
 		if err == nil {
-			err = mvOpenSetup(in.Name, contentID)
+			err = openChosenSetup(in.Name, contentID, sessionType)
 		}
 		party.mu.Lock()
 		party.setupBusy = false
@@ -466,11 +464,34 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		replyErr(w, copyText(code))
 	})
 	mux.HandleFunc("POST /api/start", func(w http.ResponseWriter, r *http.Request) {
-		replyErr(w, party.StartTogether())
+		err := party.StartTogether()
+		if errors.Is(err, errNoSession) {
+			// no session open: one that is live now opens after asking where to start; else pick one in the calendar
+			pick := map[string]any{"pick": "session"}
+			if s, m, ok := liveCalSession(); ok {
+				pick = map[string]any{"pick": "live", "session": s.Key, "name": sessionTitle(s, m)}
+			}
+			b, _ := json.Marshal(pick)
+			http.Error(w, string(b), 409)
+			return
+		}
+		replyErr(w, err)
 	})
 	// The session MultiViewer shows, and jumping to a moment in it (the host takes the party along).
 	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"session": party.Session()})
+	})
+	mux.HandleFunc("POST /api/makehost", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, party.MakeHost(in.ID))
+	})
+	mux.HandleFunc("POST /api/session/end", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.EndSession())
+	})
+	mux.HandleFunc("POST /api/session/again", func(w http.ResponseWriter, r *http.Request) {
+		party.WatchAgain()
+		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/session/jump", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ To string }
@@ -499,9 +520,17 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		writeJSON(w, s)
 	})
 	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ Session int }
+		var in struct {
+			Session int
+			Start   string // begin | start | live | ""
+		}
 		json.NewDecoder(r.Body).Decode(&in)
-		replyErr(w, party.WatchNow(in.Session, cleanName(loadConfig().Name)))
+		switch in.Start {
+		case "", "begin", "start", "live":
+		default:
+			in.Start = ""
+		}
+		replyErr(w, party.WatchNow(in.Session, cleanName(loadConfig().Name), in.Start))
 	})
 	mux.HandleFunc("POST /api/calendar/plan", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -573,6 +602,55 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())
+	})
+	// Settings (the gear at the top right).
+	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, settingsView()) })
+	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]any
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		var in settingsIn
+		if json.Unmarshal(body, &in) != nil || json.Unmarshal(body, &raw) != nil {
+			http.Error(w, "Bad settings", 400)
+			return
+		}
+		applySettings(in, party)
+		if settingsApplyExtra != nil {
+			settingsApplyExtra(raw)
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Close F1: MultiViewer and Ultimate F1 Viewer closed, desktop, lights and taskbar back (as set).
+	mux.HandleFunc("POST /api/closef1", func(w http.ResponseWriter, r *http.Request) {
+		go closeF1()
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	extraRoutes(mux)
+	// Ultimate F1 Viewer layout with a MultiViewer setup ("-" = none, "" = the one with the same name).
+	mux.HandleFunc("POST /api/setup/uf1", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Setup, Layout string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.Setup == "" || in.Setup == setupStreamDeck {
+			http.Error(w, "Choose a MultiViewer setup first", 400)
+			return
+		}
+		updateConfig(func(c *config) {
+			if c.Uf1For == nil {
+				c.Uf1For = map[string]string{}
+			}
+			if in.Layout == "" {
+				delete(c.Uf1For, in.Setup)
+			} else {
+				c.Uf1For[in.Setup] = in.Layout
+			}
+		})
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/autosync", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		json.NewDecoder(r.Body).Decode(&in)
+		party.SetAutoSync(in.On)
+		updateConfig(func(c *config) { c.AutoSyncOff = !in.On })
+		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/update", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.InstallUpdate())
@@ -657,7 +735,7 @@ func newCode() string {
 
 type config struct {
 	Name           string         `json:"name"`
-	Setup          string         `json:"setup,omitempty"`        // MultiViewer setup opened on joining
+	Setup          string         `json:"setup,omitempty"`        // how sessions open: "" automatic per session type, "@live" F1 Live only, "@streamdeck", or a setup
 	Webhook        string         `json:"webhook,omitempty"`      // own Discord webhook for party invites (a team key here is moved to Teams)
 	TeamName       string         `json:"teamName,omitempty"`     // (1.3.0) name of the team key kept in Webhook
 	Teams          []TeamRef      `json:"teams,omitempty"`        // teams this app is in
@@ -671,7 +749,38 @@ type config struct {
 	NotifyLeads    []int          `json:"notifyLeads"`              // minutes before a session to notify (nil = 15)
 	Notify         string         `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
 	NotifySessions []int          `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
+	AutoSyncOff    bool           `json:"autoSyncOff,omitempty"`    // a guest only syncs on "Sync to host" (auto-sync is on by default)
+	// Settings (the gear at the top right)
+	DesktopOff         bool              `json:"desktopOff,omitempty"`         // open on the desktop that happens to show
+	DesktopName        string            `json:"desktopName,omitempty"`        // the desktop for watching ("" = "F1")
+	Taskbar            string            `json:"taskbar,omitempty"`            // while watching: "" leave it, "main" main monitor only, "autohide"
+	TaskbarRestore     bool              `json:"taskbarRestore,omitempty"`     // F1 Party turned "on all displays" off: put it back
+	TaskbarRestoreHide bool              `json:"taskbarRestoreHide,omitempty"` // F1 Party turned auto-hide on: put it back
+	Uf1For             map[string]string `json:"uf1For,omitempty"`             // MultiViewer setup -> Ultimate F1 Viewer layout id ("-" = none)
+	// Sessions: a MultiViewer setup per session type (with the setup choice "Automatic per session type")
+	SetupRace     string   `json:"setupRace,omitempty"`     // "" = found by its name
+	SetupQuali    string   `json:"setupQuali,omitempty"`    //
+	SetupPractice string   `json:"setupPractice,omitempty"` //
+	Uf1Off        bool     `json:"uf1Off,omitempty"`        // don't use Ultimate F1 Viewer (even when it's installed)
+	Uf1CloseFirst bool     `json:"uf1CloseFirst,omitempty"` // close the viewer's open windows before its layout opens
+	FitTiming     bool     `json:"fitTiming,omitempty"`     // zoom Live Timing to fill its window
+	RestOn        bool     `json:"restOn,omitempty"`        // best of the rest in the onboards outside the top teams
+	RestLive      bool     `json:"restLive,omitempty"`      // keep them up to date during the session
+	TopTeams      []string `json:"topTeams,omitempty"`      // the teams whose onboards always stay
+	TopTeamsSet   bool     `json:"topTeamsSet,omitempty"`   // TopTeams was chosen (also none); else McLaren, Ferrari, Mercedes, Red Bull Racing
+	BattleOn      bool     `json:"battleOn,omitempty"`      // pick battle mode's drivers in Ultimate F1 Viewer
+	BattleLive    bool     `json:"battleLive,omitempty"`    // (1.5) keep them up to date: now BattleEvery
+	BattleLaps    int      `json:"battleLaps,omitempty"`    // laps between battle mode updates during the race (-1 = only when it opens, 0 = 5)
+	BattleRight   string   `json:"battleRight,omitempty"`   // second battle mode window: "" championship top 3, "p5to8" positions 5 to 8
+	// Close F1
+	CloseMVOff   bool `json:"closeMvOff,omitempty"`   // leave MultiViewer open
+	CloseUf1Off  bool `json:"closeUf1Off,omitempty"`  // leave Ultimate F1 Viewer open
+	CloseDesktop bool `json:"closeDesktop,omitempty"` // remove the watching desktop
+	PlaceOff     bool `json:"placeOff,omitempty"`     // don't put MultiViewer and Ultimate F1 Viewer at their saved places
 }
+
+// f1DesktopName: the desktop for watching unless the settings name another (the F1 Race Control plugin's name).
+const f1DesktopName = "F1"
 
 // lastParty: the party this app was in, kept up to date while in it and cleared by Leave.
 type lastParty struct {
@@ -738,6 +847,7 @@ const partyEndAfter = 3 * time.Minute
 // endParty: leave on purpose, so a restart doesn't rejoin.
 func endParty(party *Party) {
 	party.Leave()
+	taskbarRestore()
 	updateConfig(func(c *config) { c.Last = nil })
 }
 

@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,11 @@ type FeedState struct {
 	Resync int `json:"resync,omitempty"`
 	// Friends: the members the host sent a friend request (first characters of their ids).
 	Friends []string `json:"friends,omitempty"`
+	// Ended: the host closed the session on purpose ("End session"); guests close theirs too. The party stays.
+	Ended bool `json:"ended,omitempty"`
+	// NewHost: the host hands the party over to this member (their id); that guest connects as the host, the
+	// relay then replaces the old host's connection and the old host carries on as a guest.
+	NewHost string `json:"newHost,omitempty"`
 }
 
 type Member struct {
@@ -58,6 +64,7 @@ type Member struct {
 }
 
 type Status struct {
+	AutoSync   bool      `json:"autoSync"` // guest: follow the host by itself (on by default)
 	Mode       string    `json:"mode"` // idle | host | guest
 	Code       string    `json:"code,omitempty"`
 	Name       string    `json:"name"`
@@ -96,6 +103,12 @@ type Party struct {
 	hostWhen time.Time
 
 	setup     string // MultiViewer setup a guest opens on joining ("" = none)
+	ended     bool   // host: "End session" closed the session; told to guests until another one is open
+	handover   string    // host: member id the party is being handed to
+	handoverAt time.Time // when (asked for 15 s, then given up)
+	autoOff   bool   // guest: auto-sync off: only "Sync to host" moves this guest to the host
+	askSeek   bool   // guest: asked the host to seek where we went; don't pull us back meanwhile
+	skip      string // guest: content id this guest stopped watching ("End session"); the party goes on
 	setupBusy bool   // the Open button is starting MultiViewer and opening a setup: the guest loop waits
 	setupDone string // content id the Open button opened a setup for: the guest loop doesn't open it again
 	forceSync bool   // guest: correct the drift now, whatever its size
@@ -125,7 +138,8 @@ type clockSample struct{ offset, rtt float64 }
 func nowMs() float64 { return float64(time.Now().UnixNano()) / 1e6 }
 
 func NewParty(name, setup string) *Party {
-	return &Party{st: Status{Mode: "idle", Name: name, Version: version}, setup: setup, id: persistentID()}
+	off := loadConfig().AutoSyncOff
+	return &Party{st: Status{Mode: "idle", Name: name, Version: version, AutoSync: !off}, setup: setup, id: persistentID(), autoOff: off}
 }
 
 func newMemberID() string {
@@ -157,6 +171,7 @@ func (p *Party) Pause(paused, everyone bool) error {
 				p.req = fmt.Sprintf("p%d", p.reqN)
 			}
 			p.askHoldTo = time.Now().Add(4 * time.Second)
+			p.askSeek = false
 		} else {
 			p.hold = paused
 			if !paused {
@@ -186,6 +201,33 @@ func (p *Party) ResyncAll() error {
 	return nil
 }
 
+// errNoSession: Start together without a session open; the window sends you to the calendar to pick one.
+var errNoSession = errors.New("pick a session in the calendar first")
+
+// SetAutoSync (guest): follow the host by itself (default) or only on "Sync to host".
+func (p *Party) SetAutoSync(on bool) {
+	p.mu.Lock()
+	p.autoOff = !on
+	p.st.AutoSync = on
+	if on && p.st.Mode == "guest" {
+		p.forceSync = true // back on: catch up now
+	}
+	p.mu.Unlock()
+}
+
+// askHost (guest): ask the host to do what this guest just did in MultiViewer: "p" pause, "r" play,
+// "s@<seconds>" go to that moment of a replay, "t@<ms>" go to that real-world moment of a live stream. The
+// request rides on the guest's status; the host does it and everyone follows the host.
+func (p *Party) askHost(kind, arg string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.hold = false
+	p.reqN++
+	p.req = fmt.Sprintf("%s%d%s", kind, p.reqN, arg)
+	p.askSeek = kind == "s" || kind == "t"
+	p.askHoldTo = time.Now().Add(5 * time.Second)
+}
+
 // StartTogether (host): pause on the current frame, count down 5 seconds, then everyone plays at once.
 func (p *Party) StartTogether() error {
 	p.mu.Lock()
@@ -198,13 +240,20 @@ func (p *Party) StartTogether() error {
 	if !ok {
 		return errors.New("not connected to the party yet")
 	}
+	if !mvRunning() {
+		p.SetNote("Starting MultiViewer…")
+		if err := mvStartReady(); err != nil && !mvRunning() {
+			return err
+		}
+		p.SetNote("")
+	}
 	ps, err := players()
 	if err != nil {
 		return err
 	}
 	feed := mainFeed(ps, "")
 	if feed == nil {
-		return errors.New("open F1 Live in MultiViewer first")
+		return errNoSession
 	}
 	_ = playerPause(feed.ID, true)
 	_ = playerSync(feed.ID)
@@ -264,8 +313,9 @@ func (p *Party) Start(mode, code, name string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.mu.Lock()
 	p.cancel = cancel
-	p.st = Status{Mode: mode, Code: code, Name: name, Status: "Connecting…", Version: version}
+	p.st = Status{Mode: mode, Code: code, Name: name, Status: "Connecting…", Version: version, AutoSync: !p.autoOff}
 	p.samples, p.host = nil, nil
+	p.ended, p.skip, p.askSeek, p.handover = false, "", false, ""
 	p.hostOffAt, p.countdownAt = time.Time{}, 0
 	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
 	p.hostSince = time.Time{}
@@ -498,6 +548,15 @@ func (p *Party) hostLoop(ctx context.Context) {
 			p.hostRequests(ps, feed.StreamData.ContentID)
 		}
 		fs := FeedState{T: "state", None: true}
+		p.mu.Lock()
+		if feed != nil {
+			p.ended = false
+		}
+		fs.Ended = p.ended
+		if p.handover != "" && time.Since(p.handoverAt) < 15*time.Second {
+			fs.NewHost = p.handover
+		}
+		p.mu.Unlock()
 		if feed != nil {
 			if id := feed.StreamData.ContentID; id != typeFor {
 				typeFor, sessionType, typeAt = id, "", time.Time{} // another session: don't send the old type
@@ -559,6 +618,9 @@ func (p *Party) hostLoop(ctx context.Context) {
 			if feed == nil {
 				s.Feed = nil
 				s.Status = "Open F1 Live in MultiViewer"
+				if fs.Ended {
+					s.Status = "Session ended: pick another one in the calendar"
+				}
 			} else {
 				s.Feed = &FeedInfo{Title: fs.Title, Time: fs.Time, Paused: fs.Paused, Live: fs.Live}
 				if s.Connected {
@@ -579,7 +641,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 		}
 		// send on any discontinuity (pause/play, seek, new stream) right away, otherwise once a second
 		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title ||
-			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync ||
+			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync || fs.Ended != lastSent.Ended || fs.NewHost != lastSent.NewHost ||
 			strings.Join(fs.Friends, ",") != strings.Join(lastSent.Friends, ",")
 		if !changed && !fs.None && !fs.Paused && lastSent.At > 0 {
 			expected := lastSent.Time + (fs.At-lastSent.At)/1000
@@ -623,6 +685,14 @@ func (p *Party) guestLoop(ctx context.Context) {
 		resyncSeen   = -1    // host's resync number last acted on (-1: none seen yet)
 		sentReq      string  // pause request last sent to the host
 		sentOffers   string  // friend requests last sent
+		// what this guest's stream did last tick, to tell their own pause/play/skip from ours
+		prevLocal      float64
+		prevAt         time.Time
+		prevPaused     bool
+		prevHostPaused bool
+		prevFeed       string    // the player those were read from (another one: nothing to compare)
+		mirroredAt     time.Time // we last paused/played to match the host
+		onboardsAt     time.Time // last check of the onboards against the main stream
 	)
 	// askPlugin hands the opening of the host's session to the Stream Deck plugin (at most every 10 s).
 	askPlugin := func(host *FeedState) {
@@ -661,7 +731,10 @@ func (p *Party) guestLoop(ctx context.Context) {
 					}
 					st += "|" + req + "|" + offers // friend requests ride on the status too
 				} else if req != "" {
-					st += "|" + req // a pause request for the host rides on the status
+					if r := []rune(st); len(r) > 30 {
+						st = string(r[:30]) + "…"
+					}
+					st += "|" + req // a pause/play/seek request for the host rides on the status
 				}
 				p.send(map[string]any{"t": "report", "drift": drift, "status": st})
 				lastReport, sentReq, sentOffers = time.Now(), req, offers
@@ -724,6 +797,20 @@ func (p *Party) guestLoop(ctx context.Context) {
 			}
 		case host == nil || !clockOK || time.Since(hostWhen) > 10*time.Second:
 			status = "Waiting for the host's stream"
+		case host != nil && host.NewHost != "" && host.NewHost == p.id:
+			// the host handed the party to us: connect as the host (the relay moves the old host to guest)
+			code, name := p.Snapshot().Code, p.Snapshot().Name
+			go func() {
+				p.Start("host", code, name)
+				p.SetNote("You're the host now")
+			}()
+			return
+		case host.None && host.Ended:
+			status = "The host ended the session"
+			if hostContent != "" {
+				mvCloseOthers("", setup != "")
+				hostContent, setupFor, pluginUntil, pluginRetry, creatingAt = "", "", time.Time{}, time.Time{}, time.Time{}
+			}
 		case host.None:
 			status = "The host has no stream open"
 		}
@@ -744,6 +831,16 @@ func (p *Party) guestLoop(ctx context.Context) {
 				report()
 			}
 			hostContent, switchAt = host.ContentID, time.Now()
+			continue
+		}
+		p.mu.Lock()
+		skipped := p.skip != "" && p.skip == host.ContentID
+		p.mu.Unlock()
+		if skipped {
+			// "End session": this guest stopped watching; the next session the host opens brings it back
+			p.set(func(s *Status) { s.Feed = nil })
+			status = "You stopped watching this session"
+			report()
 			continue
 		}
 		feed := mainFeed(ps, host.ContentID)
@@ -796,9 +893,9 @@ func (p *Party) guestLoop(ctx context.Context) {
 		if feed == nil && !busy && setup != "" && setup != setupStreamDeck && setupFor != host.ContentID && mvDebugReady() {
 			// the chosen MultiViewer setup opens the host's session with all its windows (tried once)
 			setupFor = host.ContentID
-			status = "Opening your setup “" + setup + "”…"
+			status = "Opening your setup “" + resolveSetup(setup, host.SessionType) + "”…"
 			report()
-			if err := mvOpenSetup(setup, host.ContentID); err != nil {
+			if err := openChosenSetup(setup, host.ContentID, host.SessionType); err != nil {
 				log.Printf("setup %q: %v", setup, err)
 				status = "Setup didn't open (" + err.Error() + "), opening F1 Live"
 				report()
@@ -830,7 +927,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 
 		// Paused just for you, or waiting for the host to take up your pause/play: leave your stream alone.
 		p.mu.Lock()
-		hold, asking := p.hold, time.Now().Before(p.askHoldTo)
+		hold, asking, askSeek, auto := p.hold, time.Now().Before(p.askHoldTo), p.askSeek, !p.autoOff
 		p.mu.Unlock()
 		if hold {
 			status = "Paused just for you; the party plays on"
@@ -839,6 +936,56 @@ func (p *Party) guestLoop(ctx context.Context) {
 		}
 		if asking && feed.State.Paused != host.Paused {
 			status = "Asking the host…"
+			report()
+			continue
+		}
+		if asking && askSeek {
+			// we went somewhere else in the stream: the host goes there too; until then stay where we are
+			h := host.Time
+			if !host.Paused {
+				h += (now - host.At) / 1000
+			}
+			if host.Live || math.Abs(local-h) > 2 {
+				status = "Taking the party along…"
+				prevLocal, prevAt, prevPaused, prevHostPaused, prevFeed = local, time.Now(), feed.State.Paused, host.Paused, feed.ID
+				report()
+				continue
+			}
+		}
+
+		// Did this guest pause, play or skip in MultiViewer itself (not us following the host)? Then the whole
+		// party does it: we ask the host, everyone follows the host.
+		acted := false
+		if prevFeed == feed.ID && !prevAt.IsZero() && time.Since(prevAt) < 1500*time.Millisecond && time.Now().After(settleUntil) &&
+			time.Since(mirroredAt) > 1500*time.Millisecond && host.CountdownAt == 0 && resumeAt.IsZero() {
+			expected := prevLocal
+			if !prevPaused {
+				expected += time.Since(prevAt).Seconds()
+			}
+			switch {
+			case feed.State.Paused != prevPaused && host.Paused == prevHostPaused && feed.State.Paused != host.Paused:
+				if feed.State.Paused {
+					p.askHost("p", "")
+				} else {
+					p.askHost("r", "")
+				}
+				acted = true
+			case math.Abs(local-expected) > 3 && !feed.State.Live:
+				p.askHost("s", "@"+strconv.FormatFloat(local, 'f', 1, 64))
+				acted = true
+			case math.Abs(local-expected) > 3 && feed.State.Live:
+				if own, ok := trackNow(); ok {
+					p.askHost("t", "@"+strconv.FormatFloat(own, 'f', 0, 64))
+					acted = true
+				}
+			}
+		}
+		prevLocal, prevAt, prevPaused, prevHostPaused, prevFeed = local, time.Now(), feed.State.Paused, host.Paused, feed.ID
+		if acted {
+			p.mu.Lock()
+			req = p.req
+			p.mu.Unlock()
+			status = "Taking the party along…"
 			report()
 			continue
 		}
@@ -858,6 +1005,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 			case now < h.CountdownAt:
 				if !feed.State.Paused {
 					_ = playerPause(feed.ID, true)
+					mirroredAt = time.Now()
 				}
 				if math.Abs(local-h.Time) > tolerance && time.Now().After(settleUntil) {
 					_ = playerSeek(feed.ID, h.Time)
@@ -871,6 +1019,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 			case startedFor != h.CountdownAt && now < h.CountdownAt+3000:
 				startedFor = h.CountdownAt
 				_ = playerPause(feed.ID, false)
+				mirroredAt = time.Now()
 				settleUntil, pendingSync, measureLead = time.Now().Add(seekSettle), true, false
 			}
 			if h.Paused && startedFor == h.CountdownAt && now < h.CountdownAt+3000 {
@@ -902,11 +1051,12 @@ func (p *Party) guestLoop(ctx context.Context) {
 		// mirror pause / play (not while a live hold is pausing us on purpose)
 		if resumeAt.IsZero() && feed.State.Paused != host.Paused {
 			pauseAll(ps, host.ContentID, host.Paused)
+			mirroredAt, prevPaused = time.Now(), host.Paused
 		}
 
 		live := host.Live || feed.State.Live
 		switch {
-		case (force && live && liveTrack) || (live && liveTrack && math.Abs(d) > liveTol && time.Now().After(settleUntil) && !pendingSync):
+		case (force && live && liveTrack) || (auto && live && liveTrack && math.Abs(d) > liveTol && time.Now().After(settleUntil) && !pendingSync):
 			// live: move by the difference in real-world time (forward stops at the live edge)
 			rel := -d
 			if !host.Paused {
@@ -955,17 +1105,19 @@ func (p *Party) guestLoop(ctx context.Context) {
 			case !resumeAt.IsZero():
 				resumeAt = time.Time{}
 				_ = playerPause(feed.ID, false)
-				settleUntil, pendingSync = time.Now().Add(seekSettle), true
+				settleUntil, pendingSync, mirroredAt = time.Now().Add(seekSettle), true, time.Now()
 				status = "Syncing…"
-			case d > liveAhead && !host.Paused:
+			case auto && d > liveAhead && !host.Paused:
 				_ = playerPause(feed.ID, true)
-				resumeAt = time.Now().Add(time.Duration(d * float64(time.Second)))
+				resumeAt, mirroredAt = time.Now().Add(time.Duration(d*float64(time.Second))), time.Now()
 				status = fmt.Sprintf("Ahead of the host by %.1f s, waiting", d)
 			case d < -2:
 				status = fmt.Sprintf("Behind the host by %.1f s (live can't skip ahead)", -d)
 			default:
 				status = "In sync (live)"
 			}
+		case !auto && math.Abs(d) > tolerance:
+			status = fmt.Sprintf("%.1f s off the host · auto-sync is off", math.Abs(d))
 		case math.Abs(d) > tolerance:
 			seekTo := target
 			if !host.Paused {
@@ -979,6 +1131,21 @@ func (p *Party) guestLoop(ctx context.Context) {
 			}
 		default:
 			status = "In sync"
+			// every 15 s: onboards that drifted from the main stream follow it again (replays; live onboards
+			// have timelines of their own, MultiViewer keeps those together)
+			if auto && !live && time.Since(onboardsAt) > 15*time.Second {
+				onboardsAt = time.Now()
+				for _, o := range ps {
+					if o.ID == feed.ID || o.StreamData == nil || o.StreamData.ContentID != host.ContentID {
+						continue
+					}
+					if ot, ok := o.Time(); ok && math.Abs(ot-local) > 1 {
+						_ = playerSync(feed.ID)
+						settleUntil = time.Now().Add(seekSettle)
+						break
+					}
+				}
+			}
 		}
 		report()
 	}
@@ -1025,6 +1192,23 @@ func (p *Party) hostRequests(ps []Player, contentID string) {
 	}
 	p.mu.Unlock()
 	for _, r := range act {
+		if kind, at, ok := strings.Cut(r, "@"); ok { // a guest went to another moment: the party goes there
+			v, err := strconv.ParseFloat(at, 64)
+			feed := mainFeed(ps, contentID)
+			if err != nil || feed == nil {
+				continue
+			}
+			switch kind[0] {
+			case 's':
+				_ = playerSeek(feed.ID, math.Max(0, v))
+			case 't':
+				if own, ok := trackNow(); ok {
+					_ = playerSeekBy(feed.ID, (v-own)/1000)
+				}
+			}
+			go func(id string) { time.Sleep(seekSettle); _ = playerSync(id) }(feed.ID) // the host's onboards follow
+			continue
+		}
 		pauseAll(ps, contentID, strings.HasPrefix(r, "p"))
 		if !strings.HasPrefix(r, "p") {
 			p.mu.Lock()
@@ -1072,6 +1256,61 @@ func (p *Party) takeOverHost() bool {
 		p.SetNote("The host left, so you're hosting now")
 	}()
 	return true
+}
+
+// closeSession closes every stream and timing window (a variable so tests never touch a real MultiViewer).
+var closeSession = func() { mvCloseOthers("", true) }
+
+// EndSession: stop watching the session without leaving the party. The host closes it for everyone (the
+// party stays, ready for the next session from the calendar); a guest stops watching just for themself
+// until the host opens another session, or until WatchAgain.
+func (p *Party) EndSession() error {
+	switch p.Snapshot().Mode {
+	case "guest":
+		id, _ := p.HostSession()
+		if id == "" {
+			return errors.New("the host has no session open")
+		}
+		p.mu.Lock()
+		p.skip = id
+		p.mu.Unlock()
+		closeSession()
+	case "host":
+		closeSession()
+		taskbarRestore()
+		p.mu.Lock()
+		p.ended = true // after closing: the host loop clears it as soon as a stream is open again
+		p.mu.Unlock()
+		p.SetNote("Session ended for everyone; the party stays. Pick another session in the calendar.")
+	default:
+		closeSession()
+	}
+	return nil
+}
+
+// MakeHost (host): hand the party to another member. They become the host within a few seconds; this app
+// then carries on as a guest (see the 4001 "replaced" close in run).
+func (p *Party) MakeHost(id string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.st.Mode != "host" {
+		return errors.New("only the host can hand over the party")
+	}
+	for _, m := range p.st.Members {
+		if m.Role == "guest" && m.ID != "" && m.ID == id {
+			p.handover, p.handoverAt = id, time.Now()
+			p.st.Note = "Handing the party to " + m.Name + "…"
+			return nil
+		}
+	}
+	return errors.New("that member isn't in the party any more (or runs an older F1 Party)")
+}
+
+// WatchAgain (guest): undo "End session": the host's session opens again.
+func (p *Party) WatchAgain() {
+	p.mu.Lock()
+	p.skip = ""
+	p.mu.Unlock()
 }
 
 // HostSession: the content id and session type the host is watching (guest), or "".

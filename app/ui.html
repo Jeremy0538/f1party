@@ -28,6 +28,25 @@
 	header .ver { margin-left:auto; font-size:11px; color:var(--faint); }
 	header .update { margin-left:auto; font-size:12px; color:#fff; background:var(--red); padding:3px 9px; border-radius:999px; text-decoration:none; }
 	header .update:not(.hidden) + .ver { margin-left:10px; }
+	button.gear { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; margin-left:6px; color:var(--dim); border-color:transparent; background:none; }
+	button.gear:hover { color:var(--text); background:#1c1f25; }
+	button.gear svg { width:17px; height:17px; }
+	.inparty { font-size:11px; color:var(--ok); border:1px solid rgba(34,197,94,.4); border-radius:999px; padding:2px 8px; white-space:nowrap; }
+	.setrow { display:flex; align-items:center; gap:10px; min-height:34px; }
+	.setrow label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+	.setrow input[type=checkbox] { width:15px; height:15px; accent-color:var(--red); margin:0; }
+	.setgroup + .setgroup { margin-top:14px; padding-top:12px; border-top:1px solid var(--line-2); }
+	.sethead { display:flex; align-items:center; gap:8px; margin:0 0 6px; font:700 13.5px/1.3 var(--ui); color:var(--text); }
+	.sethead::before { content:""; width:3px; height:13px; border-radius:2px; background:var(--red); flex:none; }
+	.sethint { margin:0 0 6px; }
+	.setoff { opacity:.4; }
+	.setmaster { margin:4px 0; padding:8px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.03); }
+	.setmaster label { font-weight:700; font-size:13.5px; }
+	.setsub { margin:6px 0 0 14px; padding-left:12px; border-left:2px solid var(--line-2); }
+	.teamgrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2px 12px; }
+	.teamgrid label { display:flex; align-items:center; gap:8px; min-height:28px; cursor:pointer; font-size:12.5px; }
+	.teamgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
+	.setoff label, .setoff select, .setoff input { cursor:not-allowed; }
 	/* Start together countdown */
 	.countdown { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(8,9,11,.88); z-index:5; }
 	.countdown .n { font:700 96px/1 var(--num); color:#fff; }
@@ -309,7 +328,19 @@
 	button.primary { background:var(--red); border-color:var(--red); color:#fff; }
 	button.primary:hover { background:var(--red-hi); }
 	.modal { position:fixed; inset:0; background:rgba(8,9,11,.72); display:flex; align-items:center; justify-content:center; z-index:6; }
-	.modal .box { width:380px; max-height:80%; overflow:auto; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
+	.modal.wide .box { width:560px; }
+	.settabs { display:flex; gap:2px; flex-wrap:wrap; padding:3px; margin:0 0 12px; background:var(--bg); border:1px solid var(--line-2); border-radius:9px; }
+	.settabs button { height:28px; padding:0 11px; font-size:12px; border:0; border-radius:6px; background:none; color:var(--dim); }
+	.settabs button[aria-selected="true"] { background:#262a31; color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
+	.setpane { min-height:300px; }
+	.setlbl { min-width:140px; font-size:12px; color:var(--dim); }
+	.setrow select { max-width:280px; }
+	/* title on top, buttons at the bottom always in view; only the content between them scrolls */
+	.modal .box { display:flex; flex-direction:column; }
+	#modalbody { flex:1 1 auto; min-height:0; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; margin:0 -18px; padding:0 18px; }
+	.modal .box > .row { flex:none; padding-top:12px; border-top:1px solid var(--line); }
+	.settabs { position:sticky; top:0; z-index:1; }
+	.modal .box { width:380px; max-height:86%; overflow:hidden; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
 	.modal .box > b { display:block; font-size:15px; margin-bottom:10px; }
 	.pick { display:flex; flex-direction:column; gap:2px; }
 	.pick .lbl { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:10px 0 4px; }
@@ -317,6 +348,24 @@
 	.pick label:hover { background:#1a1d23; }
 	.pick input { width:16px; height:16px; accent-color:var(--red); }
 	.pick .sub { margin-left:auto; font-size:11px; color:var(--dim); }
+	.mvbar .row { gap:8px; }
+	.mvbar .mvstate { display:flex; align-items:center; font-size:12px; }
+	.mvbar .mvacts { margin-left:auto; display:flex; gap:10px; }
+	.sesslayout { margin-top:10px; gap:8px; }
+	.sesslayout select { min-width:0; height:30px; font-size:12px; }
+	.sesslayout button { height:30px; font-size:12px; }
+	.startpicks { display:flex; flex-direction:column; gap:8px; }
+	button.startpick { height:auto; display:flex; flex-direction:column; align-items:flex-start; gap:2px; padding:10px 12px; text-align:left; }
+	button.startpick b { font-weight:600; }
+	button.startpick span { font-size:12px; color:var(--dim); font-weight:400; }
+	button.startpick:hover { border-color:var(--red); }
+	.autosync { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--dim); cursor:pointer; }
+	.autosync input { width:15px; height:15px; accent-color:var(--red); margin:0; }
+	.calhint { color:var(--warn); }
+	.sessend { margin-top:10px; justify-content:space-between; }
+	#sessend { color:var(--bad); font-size:12px; }
+	#sessend:hover { color:#ff6b6b; }
+	#sessagain { height:28px; font-size:12px; }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -339,6 +388,7 @@
 		</nav>
 		<a class="update hidden" id="update"></a>
 		<span class="ver" id="ver"></span>
+		<button class="gear" id="settingsbtn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 	</header>
 
 	<div class="body">
@@ -373,6 +423,7 @@
 					<span class="gap" id="gap"></span>
 				</div>
 				<div class="row" style="margin-top:12px"><button class="primary hidden" id="together">Start together</button><button id="sync">Sync</button><button id="leave">Leave</button></div>
+				<label class="autosync hidden" id="autosyncrow" title="Follow the host by itself: their pause, play and skips, and your onboards stay with the main stream. Off: only when you click Sync to host."><input type="checkbox" id="autosync" checked> Auto-sync with the host</label>
 				<div class="hint" id="note"></div>
 				<div class="error" id="syncerr"></div>
 				<ul class="members" id="members"></ul>
@@ -440,18 +491,21 @@
 				<div class="calfoot" id="calfoot"></div>
 				</div>
 				<ul class="sessions" id="calsessions"></ul>
+				<div class="hint calhint" id="calhint"></div>
 				<div class="error" id="calerr"></div>
 			</div>
 		</main>
 
 		<aside>
-			<section>
-				<span class="label">MultiViewer</span>
-				<div class="row" style="justify-content:space-between; margin-bottom:12px">
-					<span><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
-					<button class="link hidden" id="mvstart">Open</button><button class="link hidden" id="mvrestart">Restart for setups</button>
+			<section class="mvbar">
+				<div class="row">
+					<span class="label" style="margin:0">MultiViewer</span>
+					<span class="mvstate"><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
+					<span class="mvacts">
+						<button class="link hidden" id="mvstart">Start</button><button class="link hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
+						<button class="link hidden" id="closef1" title="Close MultiViewer and Ultimate F1 Viewer, the desktop, lights and taskbar back (Settings → Close)">Close F1</button>
+					</span>
 				</div>
-				<div class="row"><select id="setup" class="grow" aria-label="Open with"></select><button id="setupopen">Open</button></div>
 				<div class="hint" id="setuphint"></div>
 				<div class="error" id="mverr"></div>
 			</section>
@@ -461,10 +515,17 @@
 				</div>
 				<div class="sesshead"><div class="name" id="sessname"></div><button class="link hidden" id="sesschange" title="Pick a session in the calendar: the whole party switches to it">Change</button></div>
 				<div class="when" id="sesswhen"></div>
+				<div class="row sesslayout hidden" id="sesslayout" title="Open this session with another layout, just this time (the default is in Settings → Sessions)">
+					<span class="label" style="margin:0">Layout</span><select id="setup" class="grow" aria-label="Layout for this session"></select><button id="setupopen">Open</button>
+				</div>
 				<div class="jumps">
 					<button id="jbegin" title="Back to the beginning of the broadcast">Beginning</button>
 					<button id="jstart" title="To 1 minute before the session starts, then the five lights and everyone plays together">Start −1 min</button>
 					<button id="jlive" class="hidden" title="To the live edge">Live</button>
+				</div>
+				<div class="row sessend">
+					<button class="link" id="sessend" title="Stop watching this session; the party stays">End session</button>
+					<button class="hidden" id="sessagain" title="Open the host's session again">Watch again</button>
 				</div>
 				<div class="error" id="sesserr"></div>
 			</section>
@@ -517,7 +578,7 @@ const flash = (btn, text, ok = true, ms = 1600) => {
 };
 const openURL = (url) => post("/api/openurl", { url });
 const SD = "@streamdeck";
-let mode = "idle", nameFilled = false, webhookSet = false, pluginDownload = "";
+let myCode = "", mode = "idle", nameFilled = false, webhookSet = false, pluginDownload = "";
 
 $("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", { name: $("name").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { name: $("name").value, code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
@@ -529,7 +590,21 @@ $("invite").onclick = async () => {
 	try { await post("/api/invite"); flash(b, "Shared ✓", false); } catch (e) { $("syncerr").textContent = e.message; }
 	setTimeout(() => { b.disabled = false; }, 1600);
 };
-$("together").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/start"); } catch (e) { $("syncerr").textContent = e.message; } };
+// Start together: MultiViewer starts by itself when it's closed; without a session open, pick one in the calendar
+$("together").onclick = async () => {
+	const b = $("together"); $("syncerr").textContent = ""; b.disabled = true;
+	try { await post("/api/start"); }
+	catch (e) {
+		let pick = null; try { pick = JSON.parse(e.message); } catch {}
+		if (pick && pick.pick === "live") liveStartDialog(pick.session, pick.name);
+		else if (pick && pick.pick === "session") {
+			showTab("cal");
+			$("calhint").textContent = "Pick a session that has been on: Watch opens it for the whole party. Then click Start together again.";
+		} else $("syncerr").textContent = e.message;
+	}
+	b.disabled = false;
+};
+$("autosync").onchange = async () => { await post("/api/autosync", { on: $("autosync").checked }); refresh(); };
 $("update").onclick = async () => {
 	if (!updateAuto) return openURL(updateURL);
 	try { await post("/api/update"); } catch (e) { $("update").textContent = e.message; }
@@ -566,6 +641,7 @@ const ICON = {
 	userMinus: PERSON + '<path d="M22 11h-6"/>',
 	toTeam: PERSON + '<path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
 	plus: '<path d="M12 5v14M5 12h14"/>',
+	crown: '<path d="M2 18h20M3 7l5 5 4-7 4 7 5-5-2 11H5z"/>',
 	pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
 	leave: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
 };
@@ -575,6 +651,10 @@ function iconBtn(icon, title, onclick, cls = "") {
 	b.setAttribute("aria-label", title); b.innerHTML = svgOf(ICON[icon]);
 	return b;
 }
+// Join, or "In party" when you're in that party already
+const joinOrIn = (name, code, cls = "") => code === myCode
+	? el("span", { className: "inparty", textContent: "In party", title: "You're in " + name + "'s party" })
+	: btn("Join", "Join " + name + "'s party", () => joinParty(code), cls);
 const peopleErr = (msg) => { $(tab === "teams" ? "dcerr" : "friendmsg").textContent = msg; };
 // teams a friend isn't in yet (only mutual friends can be invited)
 const teamsWithout = (f) => f.mutual ? people.teams.filter((t) => !(t.people || []).some((m) => m.id === f.id)) : [];
@@ -617,7 +697,7 @@ function renderPeople() {
 			avatar(f.name, f.status ? (f.status.live ? "live" : "on") : f.online ? "on" : ""),
 			el("div", { className: "nm" }, el("b", { textContent: f.name }), el("span", { textContent: line })),
 			el("div", { className: "acts" },
-				f.status && f.status.code ? btn("Join", "Join " + f.name + "'s party", () => joinParty(f.status.code), "primary") : null,
+				f.status && f.status.code ? joinOrIn(f.name, f.status.code, "primary") : null,
 				open.length ? iconBtn("toTeam", open.length === 1 ? "Invite " + f.name + " to team " + open[0].name : "Invite " + f.name + " to one of your teams", () => friendTeamDialog(f)) : null,
 				iconBtn("userMinus", "Remove " + f.name + " from your friends", async () => {
 					if (!confirm("Remove " + f.name + " from your friends?")) return;
@@ -642,7 +722,7 @@ function renderPeople() {
 					m.status ? el("span", { textContent: "watching " + watching(m.status) }) : null),
 				el("div", {}, el("span", { className: "role" + (mod ? " mod" : ""), textContent: mod ? "Moderator" : "Member" })),
 				el("div", { className: "end" },
-					m.status && m.status.code ? btn("Join", "Join " + m.name + "'s party", () => joinParty(m.status.code)) : null,
+					m.status && m.status.code ? joinOrIn(m.name, m.status.code) : null,
 					t.owner && m.id !== "me" ? iconBtn("userMinus", "Remove " + m.name + " from " + t.name, async () => {
 						if (!confirm("Remove " + m.name + " from team " + t.name + "? They can only come back with a new team link.")) return;
 						try { await post("/api/team/kick", { id: t.id, to: m.id }); } catch (e) { $("dcerr").textContent = e.message; }
@@ -698,12 +778,31 @@ function teamEditDialog(t) {
 	name.focus();
 }
 
+// A live session: open it for the party, starting where you choose.
+function liveStartDialog(session, name) {
+	const go = (start) => async () => {
+		$("modalerr").textContent = "";
+		try { await post("/api/calendar/watch", { session, start }); $("modal").classList.add("hidden"); showTab("party"); }
+		catch (e) { $("modalerr").textContent = e.message; }
+	};
+	const choice = (title, sub, start) => el("button", { className: "startpick", onclick: go(start) }, el("b", { textContent: title }), el("span", { textContent: sub }));
+	const body = el("div", {},
+		el("p", { className: "hint", style: "margin:0 0 10px", textContent: name + " is on now. Where should the party start?" }),
+		el("div", { className: "startpicks" },
+			choice("From the beginning", "The start of the stream", "begin"),
+			choice("Just before the start", "A minute before the session starts, with the lights", "start"),
+			choice("Live", "Where it is right now", "live")));
+	dialog("Watch " + name, body, "", async () => {});
+	$("modalok").classList.add("hidden");
+}
+
 // A small dialog: title, body, OK button text and what OK does (throw to show an error and stay open).
 function dialog(title, body, okText, onOk) {
 	$("modaltitle").textContent = title;
 	$("modalbody").innerHTML = ""; $("modalbody").append(body);
 	$("modalerr").textContent = "";
 	$("modalok").textContent = okText;
+	$("modalok").classList.remove("hidden");
 	$("modalok").classList.add("primary");
 	$("modal").classList.remove("hidden");
 	$("modalok").onclick = async () => {
@@ -713,6 +812,8 @@ function dialog(title, body, okText, onOk) {
 	};
 }
 $("modalcancel").onclick = () => $("modal").classList.add("hidden");
+// a closed dialog drops "wide" (only when it has it: changing the class again would call this again, endlessly)
+new MutationObserver(() => { const m = $("modal"); if (m.classList.contains("hidden") && m.classList.contains("wide")) m.classList.remove("wide"); }).observe($("modal"), { attributes: true, attributeFilter: ["class"] });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.add("hidden"); });
 
 // checkbox list: groups of [value, label, sublabel, checked]
@@ -803,13 +904,13 @@ $("mvrestart").onclick = async () => {
 	await mvAct($("mvrestart"), "/api/mv/restart")();
 };
 let mvNow = {};
-$("setup").onchange = async () => {
-	await post("/api/setup", { name: $("setup").value });
-	await refreshMV();
-	// in a party with MultiViewer closed: start it and open the chosen setup right away
-	const v = $("setup").value;
-	if (mode !== "idle" && v && v !== SD && mvNow.installed && !mvNow.running) $("setupopen").click();
+$("closef1").onclick = async () => {
+	if (!confirm("Close F1? MultiViewer and Ultimate F1 Viewer close (as set in Settings → Close).")) return;
+	try { await post("/api/closef1"); } catch (e) { $("mverr").textContent = e.message; }
+	setTimeout(refreshMV, 1500);
 };
+// Session > Layout: open the session with another layout just this time (MultiViewer starts first if needed)
+$("setup").onchange = () => { $("setup").dataset.touched = "1"; };
 $("setupopen").onclick = async () => {
 	if (!mvNow.running && $("setup").value !== SD) { $("mvstate").textContent = "Starting…"; $("mvstart").classList.add("hidden"); }
 	await mvAct($("setupopen"), "/api/setup/open", () => ({ name: $("setup").value }))();
@@ -825,29 +926,23 @@ async function refreshMV() {
 	$("mvstate").textContent = m.running ? "Running" : (m.installed ? "Not running" : "Not installed");
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
-	const sel = $("setup"), names = (m.setups || []).map(s => s.name);
-	const want = ["", SD, ...names].join("|");
+	$("closef1").classList.toggle("hidden", !m.running);
+	const hint = $("setuphint");
+	hint.innerHTML = "";
+	if (!m.installed) hint.append("Get MultiViewer at ", Object.assign(document.createElement("a"), { textContent: "multiviewer.app", onclick: () => openURL("https://multiviewer.app/download") }), ".");
+	// the layouts the Session block offers: automatic, each setup, the Stream Deck when it's there
+	const sel = $("setup"), names = (m.setups || []).map((x) => x.name);
+	const want = ["@auto", ...names, pl.installed ? SD : ""].join("|");
 	if (sel.dataset.list !== want) {
 		sel.innerHTML = "";
-		sel.append(new Option("F1 Live only", ""));
-		sel.append(new Option("Automatic (Stream Deck)", SD));
-		for (const s of m.setups || []) sel.append(new Option(s.name, s.name));
+		sel.append(new Option("Automatic per session type", "@auto"));
+		for (const n of names) sel.append(new Option(n, n));
+		if (pl.installed) sel.append(new Option("Stream Deck plugin", SD));
 		sel.dataset.list = want;
 	}
-	if (document.activeElement !== sel) sel.value = [SD, ...names].includes(m.setup) ? m.setup : "";
-	const sd = sel.value === SD, hint = $("setuphint");
-	hint.innerHTML = "";
-	if (!m.installed) {
-		hint.append("Get MultiViewer at ", Object.assign(document.createElement("a"), { textContent: "multiviewer.app", onclick: () => openURL("https://multiviewer.app/download") }), ".");
-	} else if (sd && !pl.installed) {
-		hint.append("Plugin not installed. ", Object.assign(document.createElement("a"), { textContent: "Download", onclick: () => openURL(pl.download) }));
-	} else if (sd && !pl.running) {
-		hint.append("Start Stream Deck, or ", Object.assign(document.createElement("a"), { textContent: "update the plugin", onclick: () => openURL(pl.download) }), ".");
-	} else if (sd) {
-		hint.append("The Stream Deck plugin picks your Race, Qualifying or Practice setup for the session and opens Ultimate F1 Viewer too.");
-	}
-	// closed MultiViewer is fine: Open starts it first. Running without setup support needs a restart.
-	$("setupopen").disabled = sd ? !pl.running : (!sel.value || !m.installed || (m.running && !m.setupsReady));
+	if (document.activeElement !== sel && !sel.dataset.touched) sel.value = ["@auto", SD, ...names].includes(m.setup) ? m.setup : "@auto";
+	const sd = sel.value === SD;
+	$("setupopen").disabled = sd ? !pl.running : (!m.installed || (m.running && !m.setupsReady));
 }
 
 async function refresh() {
@@ -871,6 +966,7 @@ async function refresh() {
 		document.querySelectorAll(".lights i").forEach((el, i) => el.classList.toggle("on", i < 6 - n));
 	}
 	const inParty = s.mode !== "idle";
+	myCode = inParty ? s.code : "";
 	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
 	$("start").classList.toggle("hidden", inParty || tab !== "party");
 	$("party").classList.toggle("hidden", !inParty || tab !== "party");
@@ -884,6 +980,8 @@ async function refresh() {
 	$("leave").textContent = s.mode === "host" ? "End party" : "Leave";
 	$("leave").title = s.mode === "host" ? "Stop hosting and leave the party" : "Leave this party";
 	$("together").classList.toggle("hidden", s.mode !== "host");
+	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
+	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
 	$("status").textContent = s.status || "";
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
@@ -914,6 +1012,11 @@ async function refresh() {
 		right.append(val);
 		const slot = document.createElement("span"); slot.className = "frslot";
 		if (!m.me && m.id) slot.append(friendControl(m));
+		if (s.mode === "host" && m.role === "guest" && !m.me && m.id) right.append(iconBtn("crown", "Make " + m.name + " the host", async () => {
+			if (!confirm("Make " + m.name + " the host? Everyone then follows their stream, and you carry on as a guest.")) return;
+			try { await post("/api/makehost", { id: m.id }); } catch (e) { $("syncerr").textContent = e.message; }
+			refresh();
+		}));
 		right.append(slot);
 		li.append(who, right); ul.append(li);
 	}
@@ -924,10 +1027,22 @@ async function refreshSession() {
 	try { sessData = (await (await fetch("/api/session")).json()).session; } catch { sessData = null; }
 	const v = sessData;
 	const hosting = mode === "host";
-	$("sess").classList.toggle("hidden", (!v && !hosting) || infoOpen);
+	$("sess").classList.toggle("hidden", !v && !hosting);
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v ? "Change" : "Choose";
-	document.querySelector(".sess .jumps").classList.toggle("hidden", !v);
+	document.querySelector(".sess .jumps").classList.toggle("hidden", !v || !!v.stopped);
+	// End session: with a session open (host: for everyone, guest: just you); Watch again after a guest's end
+	$("sessend").classList.toggle("hidden", !v || !!v.stopped);
+	$("sesslayout").classList.toggle("hidden", !v || !!v.stopped);
+	if (!v) delete $("setup").dataset.touched;
+	$("sessend").title = hosting ? "Close this session for everyone; the party stays" : "Stop watching this session; the party stays";
+	$("sessagain").classList.toggle("hidden", !v || !v.stopped);
+	if (v && v.stopped) {
+		$("sessname").textContent = v.name || "The host's session";
+		$("sesstag").textContent = ""; $("sesstag").className = "";
+		$("sesswhen").textContent = "You stopped watching. The party goes on; the host's next session opens by itself.";
+		return;
+	}
 	if (!v) {
 		$("sessname").textContent = "No session open";
 		$("sesstag").textContent = "";
@@ -956,7 +1071,213 @@ async function refreshSession() {
 			: b.dataset.tip;
 	}
 }
-$("sesschange").onclick = () => showTab("calendar");
+$("sesschange").onclick = () => showTab("cal");
+// Settings (gear at the top right): tabs per subject, groups with a heading and a line between them.
+// Everything is optional. Ultimate F1 Viewer has its own switch; its options are greyed out while it's off
+// or not installed. Desktops, taskbar and window positions are Windows only.
+let setTab = "general";
+$("settingsbtn").onclick = async () => {
+	let c = {}; try { c = await (await fetch("/api/settings")).json(); } catch {}
+	const ids = {}, uf1Parts = [];
+	const win = c.windows !== false;
+	const check = (key, on, text, tip) => { const i = el("input", { type: "checkbox", checked: !!on }); ids[key] = () => i.checked;
+		const r = el("div", { className: "setrow" }, el("label", { title: tip || "" }, i, el("span", { textContent: text }))); r.input = i; return r; };
+	const pick = (key, value, options, tip) => { const sel = el("select", { title: tip || "" }); for (const [v, t] of options) sel.append(new Option(t, v));
+		sel.value = value ?? ""; if (key) ids[key] = () => sel.value; return sel; };
+	const text = (key, value, attrs = {}) => { const i = el("input", { value: value ?? "", autocomplete: "off", ...attrs }); ids[key] = () => i.value; return i; };
+	const row = (label, ...kids) => el("div", { className: "setrow" }, el("span", { className: "setlbl", textContent: label }), ...kids);
+	const hint = (t) => el("p", { className: "hint sethint", textContent: t });
+	// a group: heading + its rows; groups are separated by a line
+	const group = (title, ...kids) => el("section", { className: "setgroup" }, el("h3", { className: "sethead", textContent: title }), ...kids);
+	// parts that need Ultimate F1 Viewer: greyed out while it's off or missing
+	const uf1 = (node) => { uf1Parts.push(node); return node; };
+	const uf1Usable = () => !!c.uf1 && (!uf1Switch || uf1Switch.input.checked);
+	let uf1Switch = null;
+	const syncUf1 = () => { const on = uf1Usable();
+		for (const n of uf1Parts) { n.classList.toggle("setoff", !on); for (const i of n.querySelectorAll("input, select, button")) i.disabled = !on; } };
+
+	uf1Switch = check("uf1On", c.uf1 && c.uf1On !== false, "Use Ultimate F1 Viewer", "Opens its layout with each setup, battle mode and the rest");
+	if (!c.uf1) { uf1Switch.input.disabled = true; uf1Switch.classList.add("setoff"); }
+	uf1Switch.input.addEventListener("change", syncUf1);
+
+	const tabs = {
+		general: ["General", el("div", {},
+			group("Apps",
+				uf1Switch,
+				hint(c.uf1 ? "Optional: next to MultiViewer for flag bars, battle mode and more." : "Ultimate F1 Viewer isn't installed on this computer, so its options are greyed out. Get it under Downloads.")),
+			group("Desktop",
+				win ? check("desktop", c.desktop, "Open everything on its own desktop", "MultiViewer, setups and Ultimate F1 Viewer open on this virtual desktop; made when it isn't there yet") : hint("Desktops are Windows only."),
+				win ? row("Desktop name", text("desktopName", c.desktopName || "F1", { maxLength: 40, style: "width:140px" })) : null),
+			group("Taskbar while watching",
+				win ? row("Taskbar", pick("taskbar", c.taskbar, [["", "Leave it as it is"], ["main", "Only on the main monitor"], ["autohide", "Hide automatically"]])) : hint("The taskbar setting is Windows only."),
+				win ? hint("Put back as it was when the party or the session ends, or F1 Party closes.") : null),
+			group("Party",
+				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host")))],
+		sessions: ["Sessions", (() => {
+			const setups = c.setups || [], layouts = c.uf1Layouts || [], uf1For = { ...(c.uf1For || {}) };
+			const pl = c.plugin || {};
+			const openWith = pick("openWith", c.openWith || "@auto", [["@auto", "Automatic per session type"], ["@live", "F1 Live only"],
+				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])]);
+			const box = el("div", {},
+				group("Open sessions with",
+					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout."),
+					row("Open with", openWith),
+					hint("Automatic per session type: each kind of session opens the setup below. Automatic there picks the setup with that word in its name.")));
+			for (const [k, label, auto] of [["setupRace", "Race", c.autoRace], ["setupQuali", "Qualifying", c.autoQuali], ["setupPractice", "Practice", c.autoPractice]]) {
+				const setupSel = pick(k, c[k], [["", "Automatic" + (auto ? " (" + auto + ")" : ", none found")], ...setups.map((n) => [n, n])]);
+				const l = el("select", {});
+				const fill = () => {
+					const name = setupSel.value || auto || "";
+					l.innerHTML = "";
+					l.append(new Option("Same name as the setup", ""), new Option("None", "-"));
+					for (const x of layouts) l.append(new Option(x.name, x.id));
+					l.value = name && uf1For[name] !== undefined ? uf1For[name] : "";
+				};
+				l.onchange = () => { const name = setupSel.value || auto || ""; if (!name) return; if (l.value) uf1For[name] = l.value; else delete uf1For[name]; };
+				setupSel.addEventListener("change", fill); fill();
+				box.append(group(label, row("MultiViewer setup", setupSel), uf1(row("Ultimate F1 Viewer layout", l))));
+			}
+			ids.uf1For = () => uf1For;
+			box.append(group("While opening",
+				check("fitTiming", c.fitTiming, "Fit Live Timing to its window", "Zooms the Live Timing rows to the bottom of the window (at most 40% larger)"),
+				uf1(check("uf1CloseFirst", c.uf1CloseFirst, "Close the open Ultimate F1 Viewer windows first"))));
+			return box;
+		})()],
+		drivers: ["Drivers", (() => {
+			// teams whose onboards always stay: tick boxes, the rest of the setup's onboards follow the order
+			const keep = new Set((c.topTeams || []).map((t) => t.toLowerCase()));
+			const grid = el("div", { className: "teamgrid" });
+			const boxes = [];
+			for (const t of c.teams || []) {
+				const i = el("input", { type: "checkbox", checked: keep.has(t.toLowerCase()) });
+				boxes.push([t, i]);
+				grid.append(el("label", {}, i, el("span", { textContent: t })));
+			}
+			ids.topTeams = () => boxes.filter(([, i]) => i.checked).map(([t]) => t);
+			return el("div", {},
+				group("Best of the rest",
+					hint("Your setup has onboards of some teams that always stay, and other onboards that F1 Party fills with the best-placed drivers of all other teams."),
+					check("restOn", c.restOn, "Fill those onboards when a setup opens"),
+					check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits."),
+					el("div", { className: "setlbl", style: "margin:8px 0 4px", textContent: "These teams' onboards always stay:" }),
+					grid),
+				uf1(group("Battle mode",
+					hint("For races, in Ultimate F1 Viewer's battle mode windows. Your layout can have one or more; they're filled from left to right."),
+					check("battleOn", c.battleOn, "Pick the drivers automatically"),
+					row("First window", el("span", { className: "hint", style: "margin:0", textContent: "Top 4 of the race" })),
+					row("Second window (if any)", pick("battleRight", c.battleRight, [["", "Championship top 3"], ["p5to8", "Positions 5 to 8"]])),
+					row("Update", pick("battleLaps", String(c.battleLaps ?? 5), [["0", "Only when the layout opens"], ["1", "Every lap"], ["2", "Every 2 laps"], ["5", "Every 5 laps"], ["10", "Every 10 laps"]])))));
+		})()],
+		lights: ["Lights", lightsTab(c, { check, pick, row, hint, group, ids })],
+		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
+		close: ["Close", el("div", {},
+			group("Close F1 closes",
+				hint("The Close F1 button under MultiViewer closes what's ticked here, and puts the lights and the taskbar back."),
+				check("closeMv", c.closeMv !== false, "MultiViewer"),
+				uf1(check("closeUf1", c.closeUf1 !== false, "Ultimate F1 Viewer")),
+				win ? check("closeDesktop", c.closeDesktop, "The watching desktop", "Anything else still on it moves to the desktop next to it") : null))],
+	};
+	const bar = el("div", { className: "settabs", role: "tablist" }), pane = el("div", { className: "setpane" });
+	const show = (k) => { setTab = k; for (const b of bar.children) b.setAttribute("aria-selected", String(b.dataset.k === k));
+		for (const [key, [, node]] of Object.entries(tabs)) node.classList.toggle("hidden", key !== k); };
+	for (const [k, [label, node]] of Object.entries(tabs)) {
+		const b = btn(label, "", () => show(k)); b.dataset.k = k; b.setAttribute("role", "tab"); bar.append(b);
+		pane.append(node);
+	}
+	show(tabs[setTab] ? setTab : "general");
+	syncUf1();
+	$("modal").classList.add("wide");
+	dialog("Settings", el("div", {}, bar, pane), "Save", async () => {
+		const out = {};
+		for (const [k, f] of Object.entries(ids)) out[k] = f();
+		if (!c.uf1) delete out.uf1On; // not installed: keep what was set
+		if (out.battleLaps !== undefined) out.battleLaps = parseInt(out.battleLaps, 10) || 0;
+		await post("/api/settings", out);
+		refresh(); refreshMV();
+	});
+};
+// Lights (Philips Hue) and Windows tabs: filled from what this computer has (see hue.go, winplace_*.go).
+function lightsTab(c, h) {
+	const hue = c.hue;
+	if (!hue) return h.hint("Philips Hue isn't available in this version.");
+	const st = el("p", { className: "hint sethint" });
+	// Pairing: pick a bridge found on your network (or type its address), click Pair, then press the round
+	// button on the bridge within 30 seconds.
+	const list = el("select", {});
+	const ip = el("input", { placeholder: "or type its IP address", autocomplete: "off", spellcheck: false, style: "width:170px" });
+	const find = async () => {
+		list.innerHTML = ""; list.append(new Option("Looking for bridges…", "")); list.disabled = true;
+		let found = []; try { found = await (await fetch("/api/hue/bridges")).json(); } catch {}
+		list.innerHTML = ""; list.disabled = false;
+		if (!found.length) list.append(new Option("No bridge found", ""));
+		for (const b of found) list.append(new Option((b.name || "Hue bridge") + " · " + b.ip, b.ip));
+	};
+	const pairBtn = btn(hue.paired ? "Pair again" : "Pair", "", async () => {
+		const addr = ip.value.trim() || list.value;
+		if (!addr) { st.textContent = "Choose a bridge or type its IP address."; return; }
+		pairBtn.disabled = true; st.textContent = "Now press the round button on your Hue bridge (30 seconds)…";
+		try { await post("/api/hue/pair", { ip: addr }); st.textContent = "Paired"; setTab = "lights"; $("modal").classList.add("hidden"); $("settingsbtn").click(); }
+		catch (e) { st.textContent = e.message; }
+		pairBtn.disabled = false;
+	});
+	const testBtn = btn("Test the flags now", "Shows each ticked flag for a moment, then the lights go back", async () => { st.textContent = ""; try { await post("/api/hue/test", {}); } catch (e) { st.textContent = e.message; } });
+	const pairing = el("div", {}, h.row("Bridge", list, btn("Search again", "", find)), h.row("", ip, pairBtn));
+	if (hue.paired) pairing.classList.add("hidden");
+	find();
+	return el("div", {},
+		h.group("Bridge",
+			hue.paired ? h.row("Paired with", el("span", { textContent: hue.bridge || "your bridge" }), btn("Pair another", "", () => { pairing.classList.remove("hidden"); })) : h.hint("Choose your bridge, click Pair, then press the round button on the bridge."),
+			pairing,
+			st,
+			hue.paired ? h.row("Lights", h.pick("hueGroup", hue.group, [["", "Choose a room or zone"], ...(hue.groups || []).map((g) => [g, g])])) : null),
+		(() => {
+			// the main switch; the flags below only count while it's on
+			const master = h.check("hueEnabled", hue.enabled, "Show flags on my lights");
+			master.classList.add("setmaster");
+			const which = el("div", { className: "setsub" },
+				el("div", { className: "setlbl", style: "margin:2px 0 4px", textContent: "Which flags:" }),
+				h.check("hueYellow", hue.showYellow !== false, "Yellow flag (yellow)"),
+				h.check("hueSafetyCar", hue.showSafetyCar !== false, "Safety Car and VSC (orange)"),
+				h.check("hueVscPulse", hue.vscPulse !== false, "Pulse during VSC"),
+				h.check("hueRed", hue.showRed !== false, "Red flag (red)"),
+				h.check("hueChequered", hue.showChequered !== false, "Chequered flag (white, pulsing)"));
+			const sync = () => { const on = master.input.checked && !!hue.paired;
+				which.classList.toggle("setoff", !on); for (const i of which.querySelectorAll("input")) i.disabled = !on; };
+			master.input.addEventListener("change", sync);
+			if (!hue.paired) { master.input.disabled = true; master.classList.add("setoff"); }
+			sync();
+			return h.group("Flags on the lights",
+				h.hint("During a session the lights take the colour of the flag on track, and go back as they were afterwards." + (hue.paired ? "" : " Pair your bridge first.")),
+				master, which,
+				hue.paired ? el("div", { className: "setrow" }, testBtn) : null);
+		})());
+}
+function windowsTab(c, h) {
+	const pl = c.places;
+	if (!pl) return h.hint("Window positions are Windows only.");
+	const st = el("p", { className: "hint sethint" });
+	const saved = (yes) => el("span", { className: "hint", style: "margin:0", textContent: yes ? "Saved" : "Not saved yet" });
+	return el("div", {},
+		h.group("Positions",
+			h.hint("Put MultiViewer and Ultimate F1 Viewer where you want them, then save: they open there from now on."),
+			h.row("MultiViewer", saved(pl.mv)),
+			h.uf1(h.row("Ultimate F1 Viewer", saved(pl.uf1))),
+			el("div", { className: "setrow" }, btn("Save current positions", "", async () => { try { await post("/api/windows/save", {}); st.textContent = "Saved"; } catch (e) { st.textContent = e.message; } })),
+			st,
+			h.check("placeApps", pl.on !== false, "Put the windows in place when a setup opens")),
+		h.group("Tidy up",
+			h.hint("Stacks the windows by height (higher in front) and closes the small seams between them."),
+			el("div", { className: "setrow" }, btn("Tidy up now", "", async () => { try { const r = await post("/api/windows/tidy", {}); st.textContent = (r.moved || 0) + " windows adjusted"; } catch (e) { st.textContent = e.message; } }))));
+}
+$("sessend").onclick = async () => {
+	const msg = mode === "host" ? "End this session for everyone? Their streams close too, the party stays."
+		: mode === "guest" ? "Stop watching this session? You stay in the party." : "Close this session in MultiViewer?";
+	if (!confirm(msg)) return;
+	$("sesserr").textContent = "";
+	try { await post("/api/session/end"); } catch (e) { $("sesserr").textContent = e.message; }
+	refreshSession(); refresh();
+};
+$("sessagain").onclick = async () => { await post("/api/session/again"); refreshSession(); refresh(); };
 const jump = (to) => async () => { $("sesserr").textContent = ""; try { await post("/api/session/jump", { to }); } catch (e) { $("sesserr").textContent = e.message; } refreshSession(); };
 $("jbegin").onclick = jump("begin"); $("jstart").onclick = jump("start"); $("jlive").onclick = jump("live");
 
@@ -1020,7 +1341,7 @@ function defaultReplayTime(end) {
 }
 const btn = (text, title, onclick, cls = "") => Object.assign(document.createElement("button"), { textContent: text, title, onclick, className: cls });
 async function calAct(path, body) {
-	$("calerr").textContent = "";
+	$("calerr").textContent = ""; $("calhint").textContent = "";
 	try {
 		const res = await post(path, body); picking = 0;
 		if (path.endsWith("/plan") && res && !res.announced) {
@@ -1066,17 +1387,18 @@ async function refreshCal() {
 			acts.append(btn("Cancel", "Cancel this planned party", () => calAct("/api/calendar/unplan", { id: x.plan.id })));
 		} else if (x.status === "live") {
 			st.className = "st live"; st.textContent = "LIVE";
-			const wb = btn(hosting ? "Switch" : "Watch now", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to the live session" : "Host a party on the live session", () => calAct("/api/calendar/watch", { session: x.key }), "primary");
+			const wb = btn(hosting ? "Switch" : "Watch now", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to the live session" : "Host a party on the live session", () => liveStartDialog(x.key, (w.meeting.name || "").replace("Grand Prix", "GP") + " · " + x.name), "primary");
 			wb.disabled = guest; acts.append(wb);
 		} else if (x.status === "soon") {
 			st.textContent = inTime(start - now);
 			if (notifyOK) acts.append(bell(x));
-			acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
+			if (mode === "idle") acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
 		} else {
 			st.textContent = "Replay";
 			const wb = btn(hosting ? "Switch" : "Watch", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to this replay, from a minute before the start" : "Host a party on the replay now, from a minute before the start", () => calAct("/api/calendar/watch", { session: x.key }));
 			wb.disabled = guest;
-			acts.append(wb, btn("Plan", "Plan a replay party at a time you pick", () => { picking = picking === x.key ? 0 : x.key; refreshCal(); }));
+			acts.append(wb);
+			if (mode === "idle") acts.append(btn("Plan", "Plan a replay party at a time you pick", () => { picking = picking === x.key ? 0 : x.key; refreshCal(); }));
 		}
 		li.append(nm, st, acts);
 		if (picking === x.key) {

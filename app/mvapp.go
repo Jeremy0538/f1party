@@ -269,6 +269,7 @@ func mvDebugPort() int {
 }
 
 type cdpPage struct {
+	ID    string `json:"id"`
 	Type  string `json:"type"`
 	Title string `json:"title"`
 	URL   string `json:"url"`
@@ -293,6 +294,26 @@ func cdpPages() ([]cdpPage, error) {
 	}
 	if len(pages) == 0 {
 		return nil, errNoDebug
+	}
+	return pages, nil
+}
+
+// cdpTargets: the pages of a Chromium app listening on a debug port (Ultimate F1 Viewer).
+func cdpTargets(port int) ([]cdpPage, error) {
+	res, err := cdpHTTP.Get(fmt.Sprintf("http://127.0.0.1:%d/json/list", port))
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	var all []cdpPage
+	if err := json.NewDecoder(res.Body).Decode(&all); err != nil {
+		return nil, err
+	}
+	pages := all[:0]
+	for _, p := range all {
+		if p.Type == "page" && p.WS != "" {
+			pages = append(pages, p)
+		}
 	}
 	return pages, nil
 }
@@ -379,7 +400,7 @@ const probeJS = `(() => {` + findSessionProps + `
 // restoreJS: opens setup __NAME__ for the session page's content. Returns "ok", "no-setup", "no-session",
 // "no-api" or "error: …".
 const restoreJS = `(async () => {` + findSessionProps + `
-  const name = __NAME__;
+  const name = __NAME__, rest = __REST__, topTeams = __TOP__.map(t => t.toLowerCase());
   if (!window.f1mv || !window.f1mv.setupManager) return 'no-api';
   const setups = await window.f1mv.setupManager.getSetups();
   const setup = (setups || []).find(s => (s.name || '').toLowerCase() === name.toLowerCase());
@@ -396,6 +417,26 @@ const restoreJS = `(async () => {` + findSessionProps + `
     const ps = w.state && w.state.playerState;
     if (ps && ps.videoQuality !== undefined && typeof ps.videoQuality !== 'string') delete ps.videoQuality;
   }
+  // best of the rest: the onboards of drivers outside the top teams show the best-placed of them
+  if (rest.length) {
+    const slots = copy.windows
+      .filter(w => w.type === 'f1tv.player' && w.state && w.state.driverData &&
+                   !topTeams.includes(String(w.state.driverData.teamName || '').toLowerCase()))
+      .sort((a, b) => (a.windowState.bounds.y - b.windowState.bounds.y) || (a.windowState.bounds.x - b.windowState.bounds.x));
+    slots.forEach((w, i) => {
+      const s = props.streams.find(s => String(s.racingNumber) === String(rest[i]));
+      if (!s) return;
+      w.state.driverData = { ...w.state.driverData, driverNumber: s.racingNumber, tla: s.title, firstName: undefined, lastName: undefined };
+      w.state.streamData = { ...(w.state.streamData || {}), title: s.title, channelId: s.channelId };
+    });
+  }
+  // a setup replaces its own windows but leaves other timing windows open: close the ones it doesn't have
+  try {
+    const keep = new Set(copy.windows.map(w => w.type));
+    const open = new Set((await window.f1mv.setupManager.getWindows()).map(w => w.type));
+    for (const t of open)
+      if (t.startsWith('f1.live-timing.') && !keep.has(t)) await window.f1mv.setupManager.closeWindowsOfType(t);
+  } catch (e) { /* older MultiViewer: just open the setup */ }
   try { await window.f1mv.setupManager.restoreSetup(copy, payload); }
   catch (e) { return 'error: ' + ((e && e.message) || e); }
   return 'ok';
@@ -409,7 +450,11 @@ func isMainWindow(p cdpPage) bool {
 
 // mvOpenSetup opens one of MultiViewer's setups for a session. With contentID it first opens that session
 // in MultiViewer's main window when it isn't open yet; without, it uses the session that is open.
-func mvOpenSetup(name, contentID string) error {
+func mvOpenSetup(name, contentID string) error { return mvOpenSetupRest(name, contentID, nil) }
+
+// mvOpenSetupRest: mvOpenSetup with the best-of-the-rest drivers (best first) for the setup's other onboards.
+func mvOpenSetupRest(name, contentID string, rest []int) error {
+	toF1Desktop() // the setup's windows land on the F1 desktop when there is one
 	pages, err := cdpPages()
 	if err != nil {
 		return err
@@ -453,8 +498,15 @@ func mvOpenSetup(name, contentID string) error {
 		}
 	}
 	nameJSON, _ := json.Marshal(name)
-	v, err := cdpEval(page, strings.Replace(restoreJS, "__NAME__", string(nameJSON), 1), 60*time.Second)
+	if rest == nil {
+		rest = []int{}
+	}
+	restJSON, _ := json.Marshal(rest)
+	topJSON, _ := json.Marshal(topTeams())
+	js := strings.NewReplacer("__NAME__", string(nameJSON), "__REST__", string(restJSON), "__TOP__", string(topJSON)).Replace(restoreJS)
+	v, err := cdpEval(page, js, 60*time.Second)
 	if errors.Is(err, context.DeadlineExceeded) {
+		afterSetup(name, contentID)
 		return nil // still opening windows; that carries on by itself
 	}
 	if err != nil {
@@ -464,6 +516,7 @@ func mvOpenSetup(name, contentID string) error {
 	_ = json.Unmarshal(v, &r)
 	switch {
 	case r == "ok":
+		afterSetup(name, contentID)
 		return nil
 	case r == "no-setup":
 		return fmt.Errorf("MultiViewer has no setup called %q", name)

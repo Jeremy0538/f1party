@@ -413,6 +413,19 @@ func calSession(key int) (CalSession, CalMeeting, bool) {
 	return CalSession{}, CalMeeting{}, false
 }
 
+// liveCalSession: the session that is on right now, if any.
+func liveCalSession() (CalSession, CalMeeting, bool) {
+	calendar.Lock()
+	defer calendar.Unlock()
+	now := time.Now()
+	for _, s := range calendar.sessions {
+		if now.After(s.Start) && now.Before(s.End) {
+			return s, calendar.meetings[s.Meeting], true
+		}
+	}
+	return CalSession{}, CalMeeting{}, false
+}
+
 // shortGP: "Abu Dhabi Grand Prix" → "Abu Dhabi GP".
 func shortGP(name string) string { return strings.Replace(name, "Grand Prix", "GP", 1) }
 
@@ -550,7 +563,7 @@ func (p *Party) openCalSession(s CalSession, contentID string) error {
 		return nil // open already
 	}
 	if setup != "" && mvDebugReady() {
-		if err := mvOpenSetup(setup, contentID); err == nil {
+		if err := openChosenSetup(setup, contentID, s.Type+" "+s.Name); err == nil {
 			return nil
 		}
 	}
@@ -564,7 +577,9 @@ func (p *Party) openCalSession(s CalSession, contentID string) error {
 
 // WatchNow (calendar): host this session now (a replay, or the live one), open it and, for a replay, go to a
 // minute before the start with the lights. Keeps the party you're hosting; a guest can't.
-func (p *Party) WatchNow(key int, name string) error {
+// startAt: where the party starts once the session is open: "begin" (the broadcast's beginning), "start" (a
+// minute before the session starts) or "live"; "" = a minute before the start for a replay, live as it comes.
+func (p *Party) WatchNow(key int, name, startAt string) error {
 	s, m, ok := calSession(key)
 	if !ok {
 		return errors.New("unknown session")
@@ -607,29 +622,34 @@ func (p *Party) WatchNow(key int, name string) error {
 			p.SetNote(err.Error())
 			return
 		}
-		if contentID != "" {
-			p.toStartWhenLoaded(contentID)
+		switch {
+		case startAt != "":
+			p.jumpWhenLoaded(contentID, startAt)
+		case contentID != "":
+			p.jumpWhenLoaded(contentID, "start")
 		}
 	}()
 	return nil
 }
 
-// toStartWhenLoaded waits (up to 2 minutes) for the session's stream and its timing, then jumps to a minute
-// before the start: nobody sees how it ends while the stream loads at some later moment.
-func (p *Party) toStartWhenLoaded(contentID string) {
+// jumpWhenLoaded waits (up to 2 minutes) for the session's stream (and for "start" its timing), then jumps
+// there. For a replay "start" = a minute before the start: nobody sees how it ends while the stream loads.
+func (p *Party) jumpWhenLoaded(contentID, to string) {
 	for i := 0; i < 60; i++ {
 		time.Sleep(2 * time.Second)
 		ps, err := players()
 		if err != nil || mainFeed(ps, contentID) == nil {
 			continue
 		}
-		if _, ok := sessionStart(); !ok {
-			continue
+		if to == "start" {
+			if _, ok := sessionStart(); !ok {
+				continue
+			}
+			if _, ok := trackNow(); !ok {
+				continue
+			}
 		}
-		if _, ok := trackNow(); !ok {
-			continue
-		}
-		if err := p.Jump("start"); err != nil {
+		if err := p.Jump(to); err != nil {
 			p.SetNote(err.Error())
 		}
 		return
@@ -825,7 +845,7 @@ func (p *Party) startPlan(pl plan, c config) {
 			return
 		}
 		if contentID != "" {
-			p.toStartWhenLoaded(contentID)
+			p.jumpWhenLoaded(contentID, "start")
 		}
 	}()
 }
