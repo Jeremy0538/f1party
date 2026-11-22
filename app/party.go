@@ -96,14 +96,16 @@ type Party struct {
 	resync      int     // host: number of "everyone sync to me" requests
 
 	// Pausing from the Stream Deck (F1 Race Control's Pause key).
-	hold      bool              // paused just for you: the party plays on (guest: no syncing; host: guests keep going)
-	askHoldTo time.Time         // guest: asked the host to pause/resume everyone; don't undo our own pause meanwhile
-	req       string            // guest: last request to the host ("p3"/"r3")
-	reqN      int               // guest: request counter
-	seenReq   map[string]string // host: last request seen per member
-	hostSince time.Time         // when this app started hosting this party
-	hostOffAt time.Time         // guest: since when the host has been offline
-	update    *Update           // a newer release, when there is one
+	hold       bool              // paused just for you: the party plays on (guest: no syncing; host: guests keep going)
+	askHoldTo  time.Time         // guest: asked the host to pause/resume everyone; don't undo our own pause meanwhile
+	req        string            // guest: last request to the host ("p3"/"r3")
+	reqN       int               // guest: request counter
+	seenReq    map[string]string // host: last request seen per member
+	hostSince  time.Time         // when this app started hosting this party
+	hostOffAt  time.Time         // guest: since when the host has been offline
+	update     *Update           // a newer release, when there is one
+	jumping    string            // a jump to a moment of the session in progress ("" = none)
+	rejoinHost bool              // guest: rejoined a party we hosted; host again if nobody hosts it
 }
 
 type clockSample struct{ offset, rtt float64 }
@@ -190,7 +192,7 @@ func (p *Party) StartTogether() error {
 	}
 	feed := mainFeed(ps, "")
 	if feed == nil {
-		return errors.New("open the world feed (International) in MultiViewer first")
+		return errors.New("open F1 Live in MultiViewer first")
 	}
 	_ = playerPause(feed.ID, true)
 	_ = playerSync(feed.ID)
@@ -225,7 +227,7 @@ func (p *Party) SyncNow() error {
 	}
 	feed := mainFeed(ps, "")
 	if feed == nil {
-		return errors.New("open the world feed (International) in MultiViewer first")
+		return errors.New("open F1 Live in MultiViewer first")
 	}
 	return playerSync(feed.ID)
 }
@@ -235,7 +237,10 @@ func (p *Party) Snapshot() Status {
 	defer p.mu.Unlock()
 	s := p.st
 	s.Members = append([]Member(nil), p.st.Members...)
-	s.Update = p.update
+	if p.update != nil {
+		u := *p.update
+		s.Update = &u
+	}
 	return s
 }
 
@@ -251,6 +256,7 @@ func (p *Party) Start(mode, code, name string) {
 	p.hostOffAt, p.countdownAt = time.Time{}, 0
 	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
 	p.hostSince = time.Time{}
+	p.rejoinHost = false
 	if mode == "host" {
 		p.hostSince = time.Now()
 	}
@@ -529,11 +535,11 @@ func (p *Party) hostLoop(ctx context.Context) {
 			s.MVOnline = true
 			if feed == nil {
 				s.Feed = nil
-				s.Status = "Open the world feed (International) in MultiViewer"
+				s.Status = "Open F1 Live in MultiViewer"
 			} else {
 				s.Feed = &FeedInfo{Title: fs.Title, Time: fs.Time, Paused: fs.Paused, Live: fs.Live}
 				if s.Connected {
-					s.Status = "Hosting: guests follow your world feed"
+					s.Status = "Hosting: guests follow your main stream"
 				}
 			}
 			s.Countdown = 0
@@ -677,7 +683,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		case host == nil || !clockOK || time.Since(hostWhen) > 10*time.Second:
 			status = "Waiting for the host's stream"
 		case host.None:
-			status = "The host has no world feed open"
+			status = "The host has no stream open"
 		}
 		if status != "" {
 			feed := mainFeed(ps, "")
@@ -728,7 +734,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 			report()
 			if err := mvOpenSetup(setup, host.ContentID); err != nil {
 				log.Printf("setup %q: %v", setup, err)
-				status = "Setup didn't open (" + err.Error() + "), opening the world feed"
+				status = "Setup didn't open (" + err.Error() + "), opening F1 Live"
 				report()
 			}
 			creatingAt = time.Now() // give the setup's players time to appear before opening one ourselves
@@ -738,12 +744,11 @@ func (p *Party) guestLoop(ctx context.Context) {
 			status = "Opening the host's session…"
 			if time.Since(creatingAt) > createRetry {
 				creatingAt = time.Now()
-				title := host.Title
-				if title == "" {
-					title = "INTERNATIONAL"
-				}
-				if _, err := playerCreate(host.ContentID, title); err != nil {
-					status = "Can't open the host's session: " + err.Error()
+				// always F1 LIVE (with commentary); INTERNATIONAL only for sessions without it
+				if _, err := playerCreate(host.ContentID, mainTitle); err != nil {
+					if _, err2 := playerCreate(host.ContentID, "INTERNATIONAL"); err2 != nil {
+						status = "Can't open the host's session: " + err.Error()
+					}
 				}
 			}
 			report()
@@ -965,9 +970,27 @@ func (p *Party) hostRequests(ps []Player, contentID string) {
 
 // takeOverHost: the host has been gone for 20 seconds. The guest with the lowest member id becomes the host
 // (every guest picks the same one), so the party carries on. Returns true when this app took over.
+// Rejoin: back in the party you were in before the app closed. You come back as a guest, so a guest who took
+// over as host meanwhile stays host; if nobody hosts it and you were the host, you host it again.
+func (p *Party) Rejoin(code, name string, wasHost bool) {
+	p.Start("guest", code, name)
+	p.mu.Lock()
+	p.rejoinHost = wasHost
+	p.st.Note = "Back in your last party"
+	p.mu.Unlock()
+}
+
 func (p *Party) takeOverHost() bool {
 	p.mu.Lock()
 	off, code, name, me := p.hostOffAt, p.st.Code, p.st.Name, p.id
+	if p.rejoinHost && !off.IsZero() && time.Since(off) > 5*time.Second {
+		p.mu.Unlock()
+		go func() {
+			p.Start("host", code, name)
+			p.SetNote("Back in your last party, hosting again")
+		}()
+		return true
+	}
 	var lowest string
 	for _, m := range p.st.Members {
 		if m.Role == "guest" && m.ID != "" && (lowest == "" || m.ID < lowest) {

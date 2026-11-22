@@ -42,9 +42,25 @@ Also in the app:
   "Join party" button when join links work. Needs the F1 Party Discord application id (`discordAppID`).
 - **Keeps running**: on Windows, closing the window keeps the party going in the tray (icon by the clock: Open /
   Quit). Starting F1 Party again brings the window back.
-- **Updates**: a "Update to x.y" button appears when a newer release is out.
+- **Updates**: a "Update to x.y" button appears when a newer release is out. On Windows it installs the new
+  version itself (checked against the release's `checksums.txt`) and restarts; right after starting, outside a
+  party, it updates on its own. Elsewhere the button opens the release page.
 - **Sync now**: a guest jumps to the host right away and takes the onboards along; the host lines up their own
-  onboards with the world feed.
+  onboards with their main stream.
+- **Main stream**: everything syncs with the stream on your main monitor (usually F1 Live); without one there,
+  F1 Live, then International. A guest always opens F1 Live.
+- **Back in your party**: after a restart (or a crash) within 3 hours, the app goes back into the party it was
+  in. A host comes back as a guest first, so a guest who took over stays host; if nobody hosts, you host again.
+  **Leave** forgets the party.
+- **Session**: the session MultiViewer shows, and jumps for the whole party (host): **Beginning**, **Start −1
+  min** (a minute before the session starts, then the five lights; needs MultiViewer's live timing, so a setup
+  with a timing window or the Stream Deck) and **Live** on a live stream.
+- **Calendar**: every race weekend (OpenF1) in your own time. **Watch** a replay now (hosts a party, opens it
+  the way you chose under *Open with* and goes to a minute before the start, so nobody sees the end while it
+  loads), or **Plan** a party: a live session at its start, or a replay at a time you pick. Planning posts an
+  announcement to Discord (with the time in everyone's own time zone and the party code), a reminder 15 minutes
+  before, and at the time the app hosts the party with that code and opens the session. F1 Party has to be
+  running then (the tray is enough).
 
 First launch warnings (the app isn't signed):
 - **Windows:** "Windows protected your PC", then **More info**, then **Run anyway**.
@@ -74,7 +90,8 @@ one who is behind can't be pulled forward (live streams can't skip ahead).
 Everyone shares one clock: each app pings the relay and keeps the offset of the lowest round trip of its last
 12 samples (NTP-style), so a moment stamped by the host means the same moment on every computer.
 
-- **Host:** every 250 ms reads its world feed (INTERNATIONAL, else F1 LIVE): content id, position, paused,
+- **Host:** every 250 ms reads its main stream (the one on the main monitor, else F1 LIVE, else
+  INTERNATIONAL): content id, position, paused,
   live. It sends that once a second and at once on pause/play/seek/new session, stamped with the shared clock.
   For live streams it also sends the real-world time of the frame on screen (`track`, from MultiViewer's live
   timing clock).

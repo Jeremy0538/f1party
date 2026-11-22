@@ -10,3 +10,5 @@ func startTray(show, quit func()) {}
 func keepRunningOnClose() bool { return false }
 
 func stopTray() {}
+
+func markQuitting() {}

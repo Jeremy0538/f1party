@@ -45,6 +45,14 @@ func sendInvite(webhook, name, code, watching string) error {
 		text += fmt.Sprintf(" · [Join the party](<%s>)", link)
 	}
 	text += "\nNo F1 Party yet? [Download it](<https://github.com/Jeremy0538/f1party/releases/latest>)"
+	return postDiscord(webhook, text)
+}
+
+// postDiscord posts one message through the webhook (as "F1 Party", never pinging anyone).
+func postDiscord(webhook, text string) error {
+	if !validWebhook(webhook) {
+		return errors.New("that isn't a Discord webhook URL")
+	}
 	body, _ := json.Marshal(map[string]any{
 		"username": "F1 Party", "content": text,
 		"allowed_mentions": map[string]any{"parse": []string{}}, // never ping anyone

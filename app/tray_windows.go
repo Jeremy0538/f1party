@@ -42,3 +42,6 @@ func startTray(show, quit func()) {
 func keepRunningOnClose() bool { return trayOn.Load() && !quitting.Load() }
 
 func stopTray() { systray.Quit() }
+
+// markQuitting: the next close quits instead of hiding to the tray.
+func markQuitting() { quitting.Store(true) }

@@ -1,0 +1,554 @@
+package main
+
+// The F1 calendar (OpenF1, public) in the app, and planned watch parties: plan a live session, or a replay at a
+// time you pick. Planning posts a Discord announcement with the time (Discord shows it in everyone's own time
+// zone) and the party code, a reminder follows 15 minutes before, and at the time the app hosts the party with
+// that code, opens the session and (for a replay) starts a minute before the session with the five lights.
+// Plans only run while F1 Party runs (the tray is enough).
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+type CalSession struct {
+	Key     int       `json:"key"`
+	Meeting int       `json:"meeting"`
+	Name    string    `json:"name"` // "Race", "Qualifying", "Practice 1", …
+	Type    string    `json:"type"` // "Race", "Qualifying", "Practice"
+	Start   time.Time `json:"start"`
+	End     time.Time `json:"end"`
+}
+
+type CalMeeting struct {
+	Key      int       `json:"key"`
+	Name     string    `json:"name"` // "Abu Dhabi Grand Prix"
+	Location string    `json:"location"`
+	Start    time.Time `json:"start"`
+	End      time.Time `json:"end"`
+}
+
+// plan: a planned watch party (kept in the config).
+type plan struct {
+	ID        string `json:"id"`
+	Session   int    `json:"session"`
+	Meeting   int    `json:"meeting"`
+	Title     string `json:"title"` // "2026 Abu Dhabi GP · Race"
+	Type      string `json:"type"`
+	At        int64  `json:"at"` // unix seconds: when the party starts
+	Replay    bool   `json:"replay,omitempty"`
+	Code      string `json:"code"`
+	Announced bool   `json:"announced,omitempty"`
+	Reminded  bool   `json:"reminded,omitempty"`
+}
+
+var calendar struct {
+	sync.Mutex
+	sessions []CalSession
+	meetings map[int]CalMeeting
+	loaded   time.Time
+	tried    time.Time
+}
+
+// contentTitles: F1 TV content id → "2026 Las Vegas GP · Qualifying" for sessions opened from the calendar
+// (MultiViewer only knows the name once its timing has loaded).
+var contentTitles sync.Map
+
+var calHTTP = &http.Client{Timeout: 12 * time.Second}
+
+// getJSON with a short back-off when the service says "too many requests" (OpenF1 allows a few per second).
+func getJSON(url string, out any) error {
+	for attempt := 1; ; attempt++ {
+		req, _ := http.NewRequest("GET", url, nil)
+		req.Header.Set("User-Agent", "Mozilla/5.0 F1Party/"+version)
+		res, err := calHTTP.Do(req)
+		if err != nil {
+			return err
+		}
+		if res.StatusCode == 429 && attempt < 5 {
+			res.Body.Close()
+			time.Sleep(time.Duration(attempt) * 1500 * time.Millisecond)
+			continue
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			return fmt.Errorf("the F1 calendar can't be loaded right now (%s)", res.Status)
+		}
+		return json.NewDecoder(res.Body).Decode(out)
+	}
+}
+
+// loadCalendar fetches this year's and next year's calendar (and last year's for replays), at most every 30 min.
+func loadCalendar() error {
+	calendar.Lock()
+	defer calendar.Unlock()
+	if time.Since(calendar.loaded) < 30*time.Minute || time.Since(calendar.tried) < time.Minute {
+		if len(calendar.sessions) == 0 {
+			return errors.New("the F1 calendar can't be loaded right now")
+		}
+		return nil
+	}
+	calendar.tried = time.Now()
+	year := time.Now().UTC().Year()
+	var sessions []CalSession
+	meetings := map[int]CalMeeting{}
+	for i, y := range []int{year - 1, year, year + 1} {
+		if i > 0 {
+			time.Sleep(400 * time.Millisecond)
+		}
+		var ss []struct {
+			Key       int    `json:"session_key"`
+			Meeting   int    `json:"meeting_key"`
+			Name      string `json:"session_name"`
+			Type      string `json:"session_type"`
+			Start     string `json:"date_start"`
+			End       string `json:"date_end"`
+			Cancelled bool   `json:"is_cancelled"`
+		}
+		if err := getJSON(fmt.Sprintf("https://api.openf1.org/v1/sessions?year=%d", y), &ss); err != nil {
+			if y == year+1 {
+				break // next year's calendar isn't always out
+			}
+			return err
+		}
+		var ms []struct {
+			Key       int    `json:"meeting_key"`
+			Name      string `json:"meeting_name"`
+			Location  string `json:"location"`
+			Start     string `json:"date_start"`
+			End       string `json:"date_end"`
+			Cancelled bool   `json:"is_cancelled"`
+		}
+		time.Sleep(400 * time.Millisecond)
+		if err := getJSON(fmt.Sprintf("https://api.openf1.org/v1/meetings?year=%d", y), &ms); err != nil && y != year+1 {
+			return err
+		}
+		for _, m := range ms {
+			if m.Cancelled || strings.Contains(strings.ToLower(m.Name), "testing") {
+				continue
+			}
+			st, _ := time.Parse(time.RFC3339, m.Start)
+			en, _ := time.Parse(time.RFC3339, m.End)
+			meetings[m.Key] = CalMeeting{Key: m.Key, Name: m.Name, Location: m.Location, Start: st, End: en}
+		}
+		for _, s := range ss {
+			if _, ok := meetings[s.Meeting]; !ok || s.Cancelled {
+				continue
+			}
+			st, err1 := time.Parse(time.RFC3339, s.Start)
+			en, err2 := time.Parse(time.RFC3339, s.End)
+			if err1 != nil || err2 != nil {
+				continue
+			}
+			sessions = append(sessions, CalSession{Key: s.Key, Meeting: s.Meeting, Name: s.Name, Type: s.Type, Start: st, End: en})
+		}
+	}
+	if len(sessions) == 0 {
+		return errors.New("the F1 calendar is empty")
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Start.Before(sessions[j].Start) })
+	calendar.sessions, calendar.meetings, calendar.loaded = sessions, meetings, time.Now()
+	return nil
+}
+
+func calSession(key int) (CalSession, CalMeeting, bool) {
+	calendar.Lock()
+	defer calendar.Unlock()
+	for _, s := range calendar.sessions {
+		if s.Key == key {
+			return s, calendar.meetings[s.Meeting], true
+		}
+	}
+	return CalSession{}, CalMeeting{}, false
+}
+
+// shortGP: "Abu Dhabi Grand Prix" → "Abu Dhabi GP".
+func shortGP(name string) string { return strings.Replace(name, "Grand Prix", "GP", 1) }
+
+func sessionTitle(s CalSession, m CalMeeting) string {
+	return fmt.Sprintf("%d %s · %s", s.Start.Year(), shortGP(m.Name), s.Name)
+}
+
+// CalendarWeekend: one race weekend for the app. meeting 0 = the current one (or the next one).
+type CalendarWeekend struct {
+	Meeting  CalMeeting `json:"meeting"`
+	Prev     int        `json:"prev,omitempty"`
+	Next     int        `json:"next,omitempty"`
+	Sessions []CalRow   `json:"sessions"`
+}
+
+type CalRow struct {
+	CalSession
+	Status string `json:"status"` // "done", "live", "soon"
+	Plan   *plan  `json:"plan,omitempty"`
+}
+
+func calendarWeekend(meeting int) (*CalendarWeekend, error) {
+	if err := loadCalendar(); err != nil {
+		return nil, err
+	}
+	calendar.Lock()
+	var keys []int
+	seen := map[int]bool{}
+	for _, s := range calendar.sessions {
+		if !seen[s.Meeting] {
+			seen[s.Meeting] = true
+			keys = append(keys, s.Meeting)
+		}
+	}
+	now := time.Now()
+	if meeting == 0 {
+		// the weekend that isn't over yet (the current one, else the next one), else the last one
+		meeting = keys[len(keys)-1]
+		for _, k := range keys {
+			if m := calendar.meetings[k]; m.End.After(now.Add(-6 * time.Hour)) {
+				meeting = k
+				break
+			}
+		}
+	}
+	w := &CalendarWeekend{Meeting: calendar.meetings[meeting]}
+	for i, k := range keys {
+		if k == meeting {
+			if i > 0 {
+				w.Prev = keys[i-1]
+			}
+			if i+1 < len(keys) {
+				w.Next = keys[i+1]
+			}
+		}
+	}
+	for _, s := range calendar.sessions {
+		if s.Meeting != meeting {
+			continue
+		}
+		r := CalRow{CalSession: s, Status: "soon"}
+		switch {
+		case now.After(s.End):
+			r.Status = "done"
+		case now.After(s.Start):
+			r.Status = "live"
+		}
+		w.Sessions = append(w.Sessions, r)
+	}
+	calendar.Unlock()
+	plans := loadConfig().Plans
+	for i := range w.Sessions {
+		for j := range plans {
+			if plans[j].Session == w.Sessions[i].Key {
+				p := plans[j]
+				w.Sessions[i].Plan = &p
+			}
+		}
+	}
+	return w, nil
+}
+
+// f1tvReplay: the F1 TV content id of a session's replay (F1 TV's own search on the weekend).
+func f1tvReplay(s CalSession) (string, error) {
+	var out struct {
+		ResultObj struct {
+			Containers []struct {
+				Metadata struct {
+					ContentID      json.Number `json:"contentId"`
+					ContentSubtype string      `json:"contentSubtype"`
+					Emf            struct {
+						Series            string `json:"Series"`
+						MeetingSessionKey string `json:"MeetingSessionKey"`
+					} `json:"emfAttributes"`
+				} `json:"metadata"`
+			} `json:"containers"`
+		} `json:"resultObj"`
+	}
+	u := fmt.Sprintf("https://f1tv.formula1.com/2.0/R/ENG/WEB_DASH/ALL/PAGE/SEARCH/VOD/F1_TV_Pro_Annual/2?filter_MeetingKey=%d", s.Meeting)
+	if err := getJSON(u, &out); err != nil {
+		return "", errors.New("F1 TV can't be reached")
+	}
+	for _, c := range out.ResultObj.Containers {
+		m := c.Metadata
+		if m.ContentSubtype == "REPLAY" && m.Emf.Series == "FORMULA 1" && m.Emf.MeetingSessionKey == fmt.Sprint(s.Key) {
+			return m.ContentID.String(), nil
+		}
+	}
+	return "", errors.New("F1 TV has no replay of this session yet")
+}
+
+// openCalSession opens a session in MultiViewer the way you chose under "Open with": the Stream Deck plugin,
+// one of your setups, or just F1 Live. contentID "" = the live session (only the plugin can open that itself).
+func (p *Party) openCalSession(s CalSession, contentID string) error {
+	setup := p.Setup()
+	if setup == setupStreamDeck {
+		return pluginOpen(sessionKind(s.Type+" "+s.Name), contentID)
+	}
+	if err := mvStart(); err != nil {
+		return err
+	}
+	for i := 0; i < 40 && !mvRunning(); i++ {
+		time.Sleep(time.Second)
+	}
+	if contentID == "" {
+		return errors.New("open the live session in MultiViewer")
+	}
+	if ps, err := players(); err == nil && mainFeed(ps, contentID) != nil {
+		return nil // open already
+	}
+	if setup != "" && mvDebugReady() {
+		if err := mvOpenSetup(setup, contentID); err == nil {
+			return nil
+		}
+	}
+	if _, err := playerCreate(contentID, mainTitle); err != nil {
+		if _, err2 := playerCreate(contentID, "INTERNATIONAL"); err2 != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WatchNow (calendar): host this session now (a replay, or the live one), open it and, for a replay, go to a
+// minute before the start with the lights. Keeps the party you're hosting; a guest can't.
+func (p *Party) WatchNow(key int, name string) error {
+	s, m, ok := calSession(key)
+	if !ok {
+		return errors.New("unknown session")
+	}
+	if p.Snapshot().Mode == "guest" {
+		return errors.New("you're a guest in a party; leave it first")
+	}
+	contentID := ""
+	live := time.Now().After(s.Start) && time.Now().Before(s.End)
+	if !live {
+		id, err := f1tvReplay(s)
+		if err != nil {
+			return err
+		}
+		contentID = id
+	}
+	if p.Snapshot().Mode == "idle" {
+		p.Start("host", newCode(), name)
+	}
+	p.SetNote("Opening " + sessionTitle(s, m) + "…")
+	if contentID != "" {
+		contentTitles.Store(contentID, sessionTitle(s, m))
+	}
+	go func() {
+		if err := p.openCalSession(s, contentID); err != nil {
+			p.SetNote(err.Error())
+			return
+		}
+		if contentID != "" {
+			p.toStartWhenLoaded(contentID)
+		}
+	}()
+	return nil
+}
+
+// toStartWhenLoaded waits (up to 2 minutes) for the session's stream and its timing, then jumps to a minute
+// before the start: nobody sees how it ends while the stream loads at some later moment.
+func (p *Party) toStartWhenLoaded(contentID string) {
+	for i := 0; i < 60; i++ {
+		time.Sleep(2 * time.Second)
+		ps, err := players()
+		if err != nil || mainFeed(ps, contentID) == nil {
+			continue
+		}
+		if _, ok := sessionStart(); !ok {
+			continue
+		}
+		if _, ok := trackNow(); !ok {
+			continue
+		}
+		if err := p.Jump("start"); err != nil {
+			p.SetNote(err.Error())
+		}
+		return
+	}
+	p.SetNote("Session open. Start −1 min needs MultiViewer's live timing: a setup with a timing window, or the Stream Deck")
+}
+
+// Plan a watch party for a session: live at its start, or a replay at a time you pick (at = unix seconds).
+func Plan(key int, at int64, name string) (*plan, error) {
+	s, m, ok := calSession(key)
+	if !ok {
+		return nil, errors.New("unknown session")
+	}
+	pl := &plan{ID: newCode(), Session: s.Key, Meeting: s.Meeting, Title: sessionTitle(s, m), Type: s.Type, Code: newCode()}
+	if time.Now().Before(s.Start) && at == 0 {
+		pl.At = s.Start.Unix()
+	} else {
+		if at == 0 {
+			return nil, errors.New("pick a time for the replay")
+		}
+		if time.Unix(at, 0).Before(time.Now().Add(-time.Minute)) {
+			return nil, errors.New("that time has passed")
+		}
+		if time.Unix(at, 0).Before(s.End) {
+			return nil, errors.New("pick a time after the session has ended")
+		}
+		pl.At, pl.Replay = at, true
+	}
+	if wh := loadConfig().Webhook; wh != "" {
+		if err := announcePlan(wh, name, pl); err != nil {
+			log.Printf("plan announcement: %v", err)
+		} else {
+			pl.Announced = true
+		}
+	}
+	updateConfig(func(c *config) {
+		var keep []plan
+		for _, x := range c.Plans {
+			if x.Session != pl.Session {
+				keep = append(keep, x)
+			}
+		}
+		c.Plans = append(keep, *pl)
+	})
+	return pl, nil
+}
+
+func Unplan(id string) {
+	updateConfig(func(c *config) {
+		var keep []plan
+		for _, x := range c.Plans {
+			if x.ID != id {
+				keep = append(keep, x)
+			}
+		}
+		c.Plans = keep
+	})
+}
+
+// announcePlan: "🗓️ Stan plans an F1 Party · 2026 Abu Dhabi GP · Race (replay) · Sunday 20:00 (in 3 days)".
+func announcePlan(webhook, name string, pl *plan) error {
+	what := pl.Title
+	if pl.Replay {
+		what += " (replay)"
+	}
+	text := fmt.Sprintf("🗓️ **%s** plans an F1 Party\n📺 **%s**\n⏰ <t:%d:F> (<t:%d:R>)\nCode: **%s**", name, what, pl.At, pl.At, pl.Code)
+	if link := joinLink(pl.Code); link != "" {
+		text += fmt.Sprintf(" · [Join the party](<%s>) (from the start time)", link)
+	}
+	text += "\nNo F1 Party yet? [Download it](<https://github.com/Jeremy0538/f1party/releases/latest>)"
+	return postDiscord(webhook, text)
+}
+
+func remindPlan(webhook, name string, pl *plan) error {
+	text := fmt.Sprintf("⏰ **%s** starts <t:%d:R>: %s's F1 Party\nCode: **%s**", pl.Title, pl.At, name, pl.Code)
+	if link := joinLink(pl.Code); link != "" {
+		text += fmt.Sprintf(" · [Join the party](<%s>)", link)
+	}
+	return postDiscord(webhook, text)
+}
+
+// planLead: a planned party starts this long before its time: a replay a minute early (it then starts a
+// minute before the session, with the lights), a live session five minutes early so everyone is in.
+func planLead(pl plan) time.Duration {
+	if pl.Replay {
+		return time.Minute
+	}
+	return 5 * time.Minute
+}
+
+// remindBefore: the reminder goes out this long before a planned party.
+const remindBefore = 15 * time.Minute
+
+// runPlans checks the plans every 20 s: reminders, and starting a party at its time. A plan more than 30
+// minutes past its time (the app was closed) is dropped.
+func (p *Party) runPlans() {
+	for range time.Tick(20 * time.Second) {
+		c := loadConfig()
+		if len(c.Plans) == 0 {
+			continue
+		}
+		now := time.Now()
+		var due *plan
+		changed := false
+		var keep []plan
+		for _, pl := range c.Plans {
+			at := time.Unix(pl.At, 0)
+			switch {
+			case now.After(at.Add(30 * time.Minute)):
+				changed = true
+				continue // missed
+			case !now.Before(at.Add(-planLead(pl))):
+				if due == nil {
+					x := pl
+					due = &x
+				}
+				changed = true
+				continue
+			case !pl.Reminded && now.After(at.Add(-remindBefore)):
+				if c.Webhook != "" {
+					if err := remindPlan(c.Webhook, cleanName(c.Name), &pl); err != nil {
+						log.Printf("plan reminder: %v", err)
+					}
+				}
+				pl.Reminded, changed = true, true
+			}
+			keep = append(keep, pl)
+		}
+		if changed {
+			updateConfig(func(cc *config) { cc.Plans = keep })
+		}
+		if due != nil {
+			p.startPlan(*due, c)
+		}
+	}
+}
+
+// startPlan hosts the planned party with its code, posts "starting now" and opens the session.
+func (p *Party) startPlan(pl plan, c config) {
+	if s := p.Snapshot(); s.Mode != "idle" && s.Code != pl.Code {
+		p.SetNote("Planned party " + pl.Title + " skipped: you're in another party")
+		return
+	}
+	s, _, ok := calSession(pl.Session)
+	if !ok {
+		_ = loadCalendar()
+		if s, _, ok = calSession(pl.Session); !ok {
+			return
+		}
+	}
+	name := cleanName(c.Name)
+	if p.Snapshot().Mode == "idle" {
+		p.Start("host", pl.Code, name)
+	}
+	p.SetNote("Your planned party: " + pl.Title)
+	if c.Webhook != "" {
+		what := pl.Title
+		if pl.Replay {
+			what += " · replay"
+		} else {
+			what += " · LIVE"
+		}
+		if err := sendInvite(c.Webhook, name, pl.Code, what); err != nil {
+			log.Printf("plan start: %v", err)
+		}
+	}
+	go func() {
+		contentID := ""
+		if pl.Replay {
+			id, err := f1tvReplay(s)
+			if err != nil {
+				p.SetNote(err.Error())
+				return
+			}
+			contentID = id
+			contentTitles.Store(id, pl.Title)
+		}
+		if err := p.openCalSession(s, contentID); err != nil {
+			p.SetNote(err.Error())
+			return
+		}
+		if contentID != "" {
+			p.toStartWhenLoaded(contentID)
+		}
+	}()
+}

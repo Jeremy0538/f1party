@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,10 +44,13 @@ func envOr(k, def string) string {
 }
 
 func main() {
+	afterUpdate(os.Args[1:])
 	cfg := loadConfig()
 	party := NewParty(cfg.Name, cfg.Setup)
 	go party.watchUpdates()
 	go party.watchPresence()
+	go rememberParty(party)
+	go party.runPlans()
 
 	var appCtx context.Context
 	show := func() {
@@ -129,11 +133,16 @@ func main() {
 			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
 		OnStartup: func(ctx context.Context) {
 			appCtx = ctx
+			restartAfterUpdate = func() { markQuitting(); wruntime.Quit(appCtx) }
 			startTray(show, func() { wruntime.Quit(appCtx) })
-			if hostArg(os.Args[1:]) {
+			switch {
+			case hostArg(os.Args[1:]):
 				go hostAndInvite(true)
+			case hasJoinArg(os.Args[1:]):
+				go joinArg(os.Args[1:])
+			default:
+				go rejoinLast(party)
 			}
-			go joinArg(os.Args[1:])
 		},
 		// With the tray icon up, closing the window hides it and the party keeps running.
 		OnBeforeClose: func(ctx context.Context) bool {
@@ -205,6 +214,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	mux.HandleFunc("POST /api/leave", func(w http.ResponseWriter, r *http.Request) {
 		party.Leave()
+		updateConfig(func(c *config) { c.Last = nil }) // left on purpose: don't rejoin after a restart
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	// MultiViewer itself: running, setup support (debug port), its setups and the one chosen here.
@@ -291,8 +301,54 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/start", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.StartTogether())
 	})
+	// The session MultiViewer shows, and jumping to a moment in it (the host takes the party along).
+	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"session": party.Session()})
+	})
+	mux.HandleFunc("POST /api/session/jump", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ To string }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, party.Jump(in.To))
+	})
+	// The F1 calendar and planned watch parties.
+	mux.HandleFunc("GET /api/calendar", func(w http.ResponseWriter, r *http.Request) {
+		meeting, _ := strconv.Atoi(r.URL.Query().Get("meeting"))
+		wk, err := calendarWeekend(meeting)
+		if err != nil {
+			http.Error(w, err.Error(), 503)
+			return
+		}
+		writeJSON(w, map[string]any{"weekend": wk, "webhookSet": loadConfig().Webhook != ""})
+	})
+	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Session int }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, party.WatchNow(in.Session, cleanName(loadConfig().Name)))
+	})
+	mux.HandleFunc("POST /api/calendar/plan", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Session int
+			At      int64
+		}
+		json.NewDecoder(r.Body).Decode(&in)
+		pl, err := Plan(in.Session, in.At, cleanName(loadConfig().Name))
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		writeJSON(w, pl)
+	})
+	mux.HandleFunc("POST /api/calendar/unplan", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		Unplan(in.ID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())
+	})
+	mux.HandleFunc("POST /api/update", func(w http.ResponseWriter, r *http.Request) {
+		replyErr(w, party.InstallUpdate())
 	})
 	mux.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
@@ -312,6 +368,15 @@ func replyErr(w http.ResponseWriter, err error) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func hasJoinArg(args []string) bool {
+	for _, a := range args {
+		if joinCode(a) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // joinCode: the party code in an f1party://join/CODE link, or "".
@@ -355,10 +420,45 @@ func newCode() string {
 }
 
 type config struct {
-	Name         string `json:"name"`
-	Setup        string `json:"setup,omitempty"`        // MultiViewer setup opened on joining
-	Webhook      string `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
-	DiscordAppID string `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
+	Name         string     `json:"name"`
+	Setup        string     `json:"setup,omitempty"`        // MultiViewer setup opened on joining
+	Webhook      string     `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
+	DiscordAppID string     `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
+	Last         *lastParty `json:"last,omitempty"`
+	Plans        []plan     `json:"plans,omitempty"` // planned watch parties         // the party you were in, to rejoin after a restart
+}
+
+// lastParty: the party this app was in, kept up to date while in it and cleared by Leave.
+type lastParty struct {
+	Code string `json:"code"`
+	Host bool   `json:"host,omitempty"`
+	At   int64  `json:"at"` // unix seconds, last seen in it
+}
+
+// rejoinWindow: how long after closing the app it still goes back into the party on its own.
+const rejoinWindow = 3 * time.Hour
+
+// rememberParty keeps the current party in the config (every 15 s), so a restart can rejoin it.
+func rememberParty(party *Party) {
+	for range time.Tick(15 * time.Second) {
+		s := party.Snapshot()
+		if s.Mode == "idle" || s.Code == "" {
+			continue
+		}
+		updateConfig(func(c *config) { c.Last = &lastParty{Code: s.Code, Host: s.Mode == "host", At: time.Now().Unix()} })
+	}
+}
+
+// rejoinLast: on start-up, back into the last party if the app closed less than rejoinWindow ago.
+func rejoinLast(party *Party) {
+	c := loadConfig()
+	if c.Last == nil || c.Last.Code == "" || time.Since(time.Unix(c.Last.At, 0)) > rejoinWindow {
+		return
+	}
+	if party.Snapshot().Mode != "idle" {
+		return
+	}
+	party.Rejoin(c.Last.Code, cleanName(c.Name), c.Last.Host)
 }
 
 // updateConfig changes some settings and keeps the others.

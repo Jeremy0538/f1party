@@ -75,6 +75,8 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Checksums (the Windows app checks its self-update against these)
+        run: cd dist && sha256sum * > checksums.txt && cat checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

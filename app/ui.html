@@ -98,6 +98,41 @@
 	.infobox li { margin-bottom:3px; }
 	.infobox i { font-style:normal; color:var(--text); }
 	.infobox p { margin:0; }
+	/* the session MultiViewer shows */
+	.sess .name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.sess .when { font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; margin-bottom:10px; }
+	.tag { font:700 10px/1 var(--num); letter-spacing:.08em; padding:3px 6px; border-radius:4px; background:#20242b; color:var(--dim); }
+	.tag.live { background:var(--red); color:#fff; }
+	.jumps { display:flex; gap:6px; }
+	.jumps button { flex:1; height:30px; padding:0 8px; font-size:12px; }
+	/* tabs in the header */
+	.tabs { display:flex; gap:4px; margin-left:18px; }
+	.tabs button { height:26px; padding:0 11px; font-size:12px; border-color:transparent; background:none; color:var(--dim); }
+	.tabs button:hover { background:#181b20; color:var(--text); }
+	.tabs button[aria-selected="true"] { background:#181b20; border-color:var(--line-2); color:var(--text); }
+	.tabs .badge { display:inline-block; min-width:6px; height:6px; border-radius:50%; background:var(--red); margin-left:6px; vertical-align:2px; }
+	/* calendar */
+	#cal { display:flex; flex-direction:column; min-height:0; height:100%; }
+	.calhead { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+	.calhead .t { flex:1; min-width:0; }
+	.calhead h1 { margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.calhead .d { font-size:12px; color:var(--dim); }
+	.calhead button { width:32px; padding:0; font-size:15px; }
+	.sessions { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
+	.sessions li { display:flex; align-items:center; gap:12px; padding:0 2px; height:46px; border-bottom:1px solid var(--line); }
+	.sessions .nm { flex:1; min-width:0; }
+	.sessions .nm b { display:block; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.sessions .nm span { font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; }
+	.sessions .st { font-size:12px; color:var(--dim); white-space:nowrap; font-variant-numeric:tabular-nums; }
+	.sessions .st.live { color:var(--red-hi); font-weight:700; }
+	.sessions .st.planned { color:#7ee2a5; }
+	.sessions .acts { display:flex; gap:6px; }
+	.sessions .acts button { height:28px; padding:0 10px; font-size:12px; }
+	.sessions li.pick { height:auto; padding:8px 2px; flex-wrap:wrap; }
+	.pickrow { flex-basis:100%; display:flex; gap:6px; align-items:center; }
+	.pickrow input { height:28px; width:auto; flex:1; color-scheme:dark; }
+	.pickrow button { height:28px; font-size:12px; }
+	.calfoot { margin-top:auto; padding-top:10px; font-size:12px; color:var(--faint); }
 	aside .foot { margin-top:auto; font-size:11px; color:var(--faint); text-align:right; }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
@@ -112,6 +147,10 @@
 	<header>
 		<img src="/logo.png" alt="">
 		<b>F1 PARTY</b>
+		<nav class="tabs" role="tablist">
+			<button role="tab" id="tabparty" aria-selected="true">Party</button>
+			<button role="tab" id="tabcal" aria-selected="false">Calendar</button>
+		</nav>
 		<a class="update hidden" id="update"></a>
 		<span class="ver" id="ver"></span>
 	</header>
@@ -152,6 +191,16 @@
 				<div class="error" id="syncerr"></div>
 				<ul class="members" id="members"></ul>
 			</div>
+			<div id="cal" class="hidden" role="tabpanel">
+				<div class="calhead">
+					<button id="calprev" aria-label="Previous weekend" title="Previous weekend">‹</button>
+					<div class="t"><h1 id="calname">Calendar</h1><div class="d" id="caldates"></div></div>
+					<button id="calnext" aria-label="Next weekend" title="Next weekend">›</button>
+				</div>
+				<ul class="sessions" id="calsessions"></ul>
+				<div class="error" id="calerr"></div>
+				<div class="calfoot" id="calfoot"></div>
+			</div>
 		</main>
 
 		<aside>
@@ -164,6 +213,19 @@
 				<div class="row"><select id="setup" class="grow" aria-label="Open with"></select><button id="setupopen">Open</button></div>
 				<div class="hint" id="setuphint"></div>
 				<div class="error" id="mverr"></div>
+			</section>
+			<section class="sess hidden" id="sess">
+				<div class="row" style="justify-content:space-between; margin-bottom:6px">
+					<span class="label" style="margin:0">Session</span><span class="tag" id="sesstag"></span>
+				</div>
+				<div class="name" id="sessname"></div>
+				<div class="when" id="sesswhen"></div>
+				<div class="jumps">
+					<button id="jbegin" title="Back to the beginning of the broadcast">Beginning</button>
+					<button id="jstart" title="To 1 minute before the session starts, then the five lights and everyone plays together">Start −1 min</button>
+					<button id="jlive" class="hidden" title="To the live edge">Live</button>
+				</div>
+				<div class="error" id="sesserr"></div>
 			</section>
 			<section>
 				<div class="row" style="justify-content:space-between; margin-bottom:6px; height:22px">
@@ -228,8 +290,11 @@ $("invite").onclick = async () => {
 	setTimeout(() => { b.disabled = false; }, 1600);
 };
 $("together").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/start"); } catch (e) { $("syncerr").textContent = e.message; } };
-$("update").onclick = () => openURL(updateURL);
-let updateURL = "";
+$("update").onclick = async () => {
+	if (!updateAuto) return openURL(updateURL);
+	try { await post("/api/update"); } catch (e) { $("update").textContent = e.message; }
+};
+let updateURL = "", updateAuto = false;
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 $("pluginlink").onclick = () => openURL("https://github.com/StanvanDaalen/streamdeck-plugins#f1-race-control");
 
@@ -246,7 +311,8 @@ $("dcsave").onclick = async () => {
 	try { await post("/api/discord", { webhook: $("dchook").value }); $("dchook").value = ""; } catch (e) { $("dcerr").textContent = e.message; }
 	refreshDiscord();
 };
-function showInfo(on) { $("dcinfo").classList.toggle("hidden", !on); $("dcinfobtn").setAttribute("aria-expanded", String(on)); document.querySelector("aside .foot").classList.toggle("hidden", on); }
+let infoOpen = false;
+function showInfo(on) { infoOpen = on; $("dcinfo").classList.toggle("hidden", !on); $("dcinfobtn").setAttribute("aria-expanded", String(on)); document.querySelector("aside .foot").classList.toggle("hidden", on); refreshSession(); }
 $("dcinfobtn").onclick = () => showInfo($("dcinfo").classList.contains("hidden"));
 $("dcremove").onclick = async () => { await post("/api/discord", { webhook: "" }); refreshDiscord(); };
 
@@ -275,7 +341,7 @@ async function refreshMV() {
 	const want = ["", SD, ...names].join("|");
 	if (sel.dataset.list !== want) {
 		sel.innerHTML = "";
-		sel.append(new Option("World feed only", ""));
+		sel.append(new Option("F1 Live only", ""));
 		sel.append(new Option("Stream Deck", SD));
 		for (const s of m.setups || []) sel.append(new Option(s.name, s.name));
 		sel.dataset.list = want;
@@ -301,7 +367,11 @@ async function refresh() {
 	$("ver").textContent = s.version;
 	const up = s.update;
 	$("update").classList.toggle("hidden", !up);
-	if (up) { $("update").textContent = "Update to " + up.version; updateURL = up.url; }
+	if (up) {
+		updateURL = up.url; updateAuto = !!up.auto && !up.error;
+		$("update").textContent = up.busy || up.error || "Update to " + up.version;
+		$("update").title = up.error ? "Click to open the release page" : updateAuto ? "Installs the new version and restarts (you stay in your party)" : "Opens the release page";
+	}
 	const cd = s.countdown || 0;
 	$("countdown").classList.toggle("hidden", !(cd > 0));
 	if (cd > 0) {
@@ -311,8 +381,8 @@ async function refresh() {
 	}
 	const inParty = s.mode !== "idle";
 	if (mode !== s.mode) { mode = s.mode; refreshMV(); refreshDiscord(); }
-	$("start").classList.toggle("hidden", inParty);
-	$("party").classList.toggle("hidden", !inParty);
+	$("start").classList.toggle("hidden", inParty || tab !== "party");
+	$("party").classList.toggle("hidden", !inParty || tab !== "party");
 	if (!inParty) return;
 
 	$("roleline").textContent = s.mode === "host" ? "You're hosting" : "Party";
@@ -322,7 +392,7 @@ async function refresh() {
 	$("together").classList.toggle("hidden", s.mode !== "host");
 	$("status").textContent = s.status || "";
 	const f = s.feed;
-	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : "International"} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
+	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
 	const ok = s.mvOnline && s.connected;
 	$("dot").className = "dot " + (!ok ? "bad" : /in sync|hosting/i.test(s.status || "") ? "ok" : "warn");
 	const gap = $("gap");
@@ -346,7 +416,145 @@ async function refresh() {
 		li.append(name, val); ul.append(li);
 	}
 }
-refresh(); refreshMV(); refreshDiscord();
+// Session block: name, where the stream is, and jumps (the host takes the whole party along).
+let sessData = null;
+async function refreshSession() {
+	try { sessData = (await (await fetch("/api/session")).json()).session; } catch { sessData = null; }
+	const v = sessData;
+	$("sess").classList.toggle("hidden", !v || infoOpen);
+	if (!v) return;
+	$("sessname").textContent = v.name || (v.title === "F1 LIVE" ? "F1 Live" : v.title);
+	$("sesstag").textContent = v.live ? "LIVE" : "REPLAY";
+	$("sesstag").className = "tag" + (v.live ? " live" : "");
+	let when = v.live ? "Live stream" : fmtTime(v.time);
+	if (v.canStart) {
+		const t = Math.round(v.toStart);
+		when += t > 0 ? " · start in " + fmtTime(t) : " · " + fmtTime(-t) + " into the session";
+	}
+	if (v.paused) when += " · paused";
+	if (v.busy) when = v.busy;
+	$("sesswhen").textContent = when;
+	$("jlive").classList.toggle("hidden", !v.live);
+	for (const id of ["jbegin", "jstart", "jlive"]) {
+		const b = $(id);
+		b.disabled = !v.canJump || !!v.busy || (id === "jstart" && !v.canStart);
+		b.dataset.tip ??= b.title;
+		b.title = !v.canJump ? "The host moves the party"
+			: id === "jstart" && !v.canStart ? "Needs MultiViewer's live timing: open the session with a setup that has a timing window, or with the Stream Deck"
+			: b.dataset.tip;
+	}
+}
+const jump = (to) => async () => { $("sesserr").textContent = ""; try { await post("/api/session/jump", { to }); } catch (e) { $("sesserr").textContent = e.message; } refreshSession(); };
+$("jbegin").onclick = jump("begin"); $("jstart").onclick = jump("start"); $("jlive").onclick = jump("live");
+
+// ---- tabs and calendar
+let tab = "party", calMeeting = 0, calData = null, picking = 0;
+function showTab(t) {
+	tab = t;
+	$("tabparty").setAttribute("aria-selected", String(t === "party"));
+	$("tabcal").setAttribute("aria-selected", String(t === "cal"));
+	$("cal").classList.toggle("hidden", t !== "cal");
+	refresh();
+	if (t === "cal") refreshCal();
+}
+$("tabparty").onclick = () => showTab("party");
+$("tabcal").onclick = () => showTab("cal");
+$("calprev").onclick = () => { if (calData?.prev) { calMeeting = calData.prev; picking = 0; refreshCal(); } };
+$("calnext").onclick = () => { if (calData?.next) { calMeeting = calData.next; picking = 0; refreshCal(); } };
+
+// English like the rest of the app, in this computer's own time zone
+const dayFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
+const timeFmt = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+const whenFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+function inTime(ms) {
+	const m = Math.round(ms / 60000);
+	if (m < 60) return "in " + m + " min";
+	const h = Math.floor(m / 60);
+	if (h < 48) return "in " + h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+	return "in " + Math.floor(h / 24) + " days";
+}
+// a time for a replay: tonight 20:00, or tomorrow when that has passed (or the session isn't over by then)
+function defaultReplayTime(end) {
+	const d = new Date(); d.setHours(20, 0, 0, 0);
+	while (d <= new Date() || d <= end) d.setDate(d.getDate() + 1);
+	const pad = (n) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const btn = (text, title, onclick, cls = "") => Object.assign(document.createElement("button"), { textContent: text, title, onclick, className: cls });
+async function calAct(path, body) {
+	$("calerr").textContent = "";
+	try {
+		await post(path, body); picking = 0;
+		if (path.endsWith("/watch")) return showTab("party"); // the party (and the Session block) take it from here
+	} catch (e) { $("calerr").textContent = e.message; }
+	refreshCal();
+}
+
+async function refreshCal() {
+	if (tab !== "cal") return;
+	let d;
+	try {
+		const r = await fetch("/api/calendar" + (calMeeting ? "?meeting=" + calMeeting : ""));
+		if (!r.ok) throw new Error((await r.text()).trim());
+		d = await r.json();
+	} catch (e) { $("calerr").textContent = e.message; return; }
+	const w = d.weekend; calData = w; calMeeting = w.meeting.key;
+	$("calname").textContent = (w.meeting.name || "").replace("Grand Prix", "GP");
+	const ms = new Date(w.meeting.start), me = new Date(w.meeting.end);
+	$("caldates").textContent = `${w.meeting.location} · ${dayFmt.format(ms)} – ${dayFmt.format(me)} ${me.getFullYear()}`;
+	$("calprev").disabled = !w.prev; $("calnext").disabled = !w.next;
+	const guest = mode === "guest", ul = $("calsessions");
+	if (document.activeElement && ul.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return; // picking a time
+	ul.innerHTML = "";
+	const now = Date.now();
+	for (const x of w.sessions) {
+		const start = new Date(x.start), end = new Date(x.end);
+		const li = document.createElement("li");
+		const nm = document.createElement("div"); nm.className = "nm";
+		const b = document.createElement("b"); b.textContent = x.name;
+		const sp = document.createElement("span"); sp.textContent = `${dayFmt.format(start)} · ${timeFmt.format(start)}`;
+		nm.append(b, sp);
+		const st = document.createElement("span"); st.className = "st";
+		const acts = document.createElement("div"); acts.className = "acts";
+		if (x.plan) {
+			st.className = "st planned";
+			st.textContent = (x.plan.replay ? "Replay " : "Planned ") + whenFmt.format(new Date(x.plan.at * 1000));
+			st.title = "Party code " + x.plan.code;
+			acts.append(btn("Cancel", "Cancel this planned party", () => calAct("/api/calendar/unplan", { id: x.plan.id })));
+		} else if (x.status === "live") {
+			st.className = "st live"; st.textContent = "LIVE";
+			const wb = btn("Watch now", guest ? "You're a guest in a party" : "Host a party on the live session", () => calAct("/api/calendar/watch", { session: x.key }), "primary");
+			wb.disabled = guest; acts.append(wb);
+		} else if (x.status === "soon") {
+			st.textContent = inTime(start - now);
+			acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
+		} else {
+			st.textContent = "Replay";
+			const wb = btn("Watch", guest ? "You're a guest in a party" : "Host a party on the replay now, from a minute before the start", () => calAct("/api/calendar/watch", { session: x.key }));
+			wb.disabled = guest;
+			acts.append(wb, btn("Plan", "Plan a replay party at a time you pick", () => { picking = picking === x.key ? 0 : x.key; refreshCal(); }));
+		}
+		li.append(nm, st, acts);
+		if (picking === x.key) {
+			li.classList.add("pick");
+			const row = document.createElement("div"); row.className = "pickrow";
+			const inp = Object.assign(document.createElement("input"), { type: "datetime-local", value: defaultReplayTime(end) });
+			inp.setAttribute("aria-label", "Replay time");
+			row.append(inp,
+				btn("Plan replay", "", () => calAct("/api/calendar/plan", { session: x.key, at: Math.floor(new Date(inp.value).getTime() / 1000) }), "primary"),
+				btn("Cancel", "", () => { picking = 0; refreshCal(); }));
+			li.append(row);
+		}
+		ul.append(li);
+	}
+	$("calfoot").textContent = d.webhookSet
+		? "Planning posts it to your Discord channel, with a reminder 15 minutes before. F1 Party has to be running (the tray is enough)."
+		: "Set a Discord webhook to announce planned parties. F1 Party has to be running at the time (the tray is enough).";
+}
+
+refresh(); refreshMV(); refreshDiscord(); refreshSession();
+setInterval(refreshCal, 30000);
+setInterval(refreshSession, 2000);
 setInterval(refresh, 500);
 setInterval(refreshMV, 3000);
 </script>
