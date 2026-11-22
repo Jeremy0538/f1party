@@ -488,11 +488,16 @@
 </div>
 <script>
 // One scale from a 760×480 design; the layout then takes the window's full width and height at that scale.
+// Scale with the window, but only between 0.8× and 1.4×: full screen on a big monitor makes room, not
+// giant text. Past 1100 (scaled) wide the layout stops growing and stays in the middle.
+const ZOOM_MIN = 0.8, ZOOM_MAX = 1.4, MAX_W = 1100;
 function fit() {
-	const z = Math.max(0.6, Math.min(innerWidth / 760, innerHeight / 480));
+	const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, innerWidth / 760, innerHeight / 480));
+	const w = Math.min(innerWidth / z, MAX_W);
 	document.body.style.zoom = z;
-	document.body.style.width = innerWidth / z + "px";
+	document.body.style.width = w + "px";
 	document.body.style.height = innerHeight / z + "px";
+	document.body.style.marginLeft = Math.max(0, (innerWidth / z - w) / 2) + "px";
 }
 addEventListener("resize", fit); fit();
 
