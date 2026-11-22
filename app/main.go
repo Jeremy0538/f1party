@@ -172,9 +172,9 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
-		Width:            780,
+		Width:            880,
 		Height:           530,
-		MinWidth:         600,
+		MinWidth:         680,
 		MinHeight:        420,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
 		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
