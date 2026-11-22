@@ -7,7 +7,8 @@
 //   GET /f1party/join/CODE   (a page that opens f1party://join/CODE: the clickable link in Discord invites)
 //   POST /f1party/post       (group Discord invites: {key, kind, ...}; see postToDiscord)
 //   POST /f1party/team/create {name, webhook} -> {key, name}   POST /f1party/team/info {key} -> {name}
-//   POST /f1party/group/invite {key} -> {url}   GET /f1party/group/TOKEN (page)   POST /f1party/group/redeem {token} -> {key}
+//   POST /f1party/group/invite {key} -> {url}   GET /f1party/group/TOKEN (page)   POST /f1party/group/redeem {token, id} -> {key}
+//   POST /f1party/team/rename|leave|invitefriend|kick {id, secret, key, ...}  (kick: the owner removes {member})
 //
 // Messages (JSON):
 //   any   -> relay  {t:"ping", c}                        relay -> same  {t:"pong", c, s}
@@ -40,6 +41,7 @@ export default {
 				case "/team/rename": return teamAction(req, env, "teamRename");
 				case "/team/leave": return teamAction(req, env, "teamLeave");
 				case "/team/invitefriend": return teamAction(req, env, "teamInviteFriend");
+				case "/team/kick": return teamAction(req, env, "teamKick");
 				case "/friend/link": return friendLink(req, env, url.origin);
 				case "/friend/redeem": return friendRedeem(req, env);
 				case "/invite/send": return sendInvites(req, env);
@@ -154,7 +156,7 @@ export class Room extends DurableObject<Env> {
 
 	// People, teams and links, all in the one "__group" object (a friend group's worth of data):
 	//   u:<uid>     {secret (sha256), name, status, seen, friends[], teams[]}   the app's fixed id + its secret
-	//   team:<id>   {name, webhook, key, created, owner, members{uid: seen}}
+	//   team:<id>   {name, webhook, key, created, owner, members{uid: seen}, banned{uid: when}}
 	//   t:<token>   team link {team, exp, uses}      fl:<token> friend link {from, exp, uses}
 	//   inbox:<uid> [events]  friend made, party invite, team invite; handed over on the next presence call
 	// Caps keep keys and links from being guessed or farmed.
@@ -213,7 +215,7 @@ export class Room extends DurableObject<Env> {
 				if (!(await cap("created:" + cmd.team, 20, 86400_000))) return err("Too many team links today", 429);
 				return Response.json({ token: await teamLink(cmd.team, 5) });
 			}
-			case "redeem": { // team link -> team id
+			case "redeem": { // team link -> team id (a new link lets someone the owner removed back in)
 				if (!cmd.token) break;
 				if (!(await cap("tries", 60, 3600_000))) return err("Too many tries, try again later", 429);
 				const t = await st.get<{ team?: string; exp: number; uses: number }>("t:" + cmd.token);
@@ -224,6 +226,10 @@ export class Room extends DurableObject<Env> {
 				t.uses--;
 				if (t.uses > 0) await st.put("t:" + cmd.token, t);
 				else await st.delete("t:" + cmd.token);
+				if (/^[0-9a-f]{12}$/.test(cmd.uid || "")) {
+					const team = await st.get<TeamRec>("team:" + t.team);
+					if (team?.banned?.[cmd.uid] !== undefined) { delete team.banned[cmd.uid]; await st.put("team:" + t.team, team); }
+				}
 				return Response.json({ team: t.team });
 			}
 		}
@@ -250,7 +256,10 @@ export class Room extends DurableObject<Env> {
 				// friends made through a friend link the app hasn't heard about yet (still in its inbox) stay
 				const pending = ((await st.get<any[]>("inbox:" + cmd.uid)) || []).filter((e) => e.type === "friend").map((e) => e.id);
 				m.friends = [...new Set([...(cmd.friends as string[]), ...pending])].slice(0, 300);
-				const teams: string[] = cmd.teams.slice(0, 20);
+				let teams: string[] = cmd.teams.slice(0, 20);
+				const removed: string[] = []; // teams whose owner removed this app: it drops their key
+				for (const tid of teams) if ((await st.get<TeamRec>("team:" + tid))?.banned?.[cmd.uid] !== undefined) removed.push(tid);
+				teams = teams.filter((tid) => !removed.includes(tid));
 				for (const tid of new Set([...m.teams, ...teams])) {
 					const t = await st.get<TeamRec>("team:" + tid);
 					if (!t) continue;
@@ -289,7 +298,7 @@ export class Room extends DurableObject<Env> {
 				}
 				const events = (await st.get<object[]>("inbox:" + cmd.uid)) || [];
 				if (events.length) await st.delete("inbox:" + cmd.uid);
-				return Response.json({ people: [...people.values()], teams: teamsOut, inbox: events });
+				return Response.json({ people: [...people.values()], teams: teamsOut, inbox: events, removed });
 			}
 			case "teamRename": {
 				const t = await st.get<TeamRec>("team:" + cmd.team);
@@ -297,6 +306,17 @@ export class Room extends DurableObject<Env> {
 				if (t.owner !== cmd.uid) return err("Only the one who started the team can rename it", 403);
 				t.name = cmd.teamName;
 				await st.put("team:" + cmd.team, t);
+				return new Response("ok");
+			}
+			case "teamKick": { // the owner removes someone; they can come back only with a new team link
+				const t = await st.get<TeamRec>("team:" + cmd.team);
+				if (!t) return err("No such team", 404);
+				if (t.owner !== cmd.uid) return err("Only the one who started the team can remove people", 403);
+				if (!/^[0-9a-f]{12}$/.test(cmd.member) || cmd.member === cmd.uid) return err("Bad request");
+				if (t.members) delete t.members[cmd.member];
+				(t.banned ||= {})[cmd.member] = now;
+				await st.put("team:" + cmd.team, t);
+				await inbox(cmd.member, { type: "kicked", team: t.name, name: m.name });
 				return new Response("ok");
 			}
 			case "teamLeave": {
@@ -404,7 +424,7 @@ function sameKey(a: string, b: string): boolean {
 }
 
 type Team = { id: string; name: string; webhook: string; key: string };
-type TeamRec = { name: string; webhook: string; key: string; created: number; owner?: string; members?: Record<string, number> };
+type TeamRec = { name: string; webhook: string; key: string; created: number; owner?: string; members?: Record<string, number>; banned?: Record<string, number> };
 type User = { secret: string; name: string; status?: any; seen: number; friends: string[]; teams: string[] };
 const groupRoom = (env: Env) => env.ROOMS.get(env.ROOMS.idFromName("__group"));
 const groupCmd = (env: Env, cmd: object) => groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify(cmd) });
@@ -447,14 +467,17 @@ async function people(req: Request, env: Env): Promise<Response> {
 	if (!body) return new Response("Bad request", { status: 400 });
 	const friends = (Array.isArray(body.friends) ? body.friends : []).map(String).filter((f: string) => /^[0-9a-f]{12}$/.test(f));
 	const teams: string[] = [];
-	const lost: string[] = []; // keys that no longer work (team gone): the app drops them
+	const keyOf = new Map<string, string>();
+	const lost: string[] = []; // keys that no longer work (team gone, or the owner removed you): the app drops them
 	for (const key of (Array.isArray(body.teams) ? body.teams : []).slice(0, 20)) {
 		const t = await teamByKey(env, key);
-		if (t) teams.push(t.id); else lost.push(String(key));
+		if (t) { teams.push(t.id); keyOf.set(t.id, String(key)); } else lost.push(String(key));
 	}
 	const res = await groupCmd(env, { op: "presence", ...who(body), status: cleanStatus(body.status), friends, teams });
 	if (!res.ok) return forward(res);
-	return Response.json({ ...((await res.json()) as object), lost }, { headers: { "cache-control": "no-store" } });
+	const { removed, ...out } = (await res.json()) as { removed?: string[] };
+	for (const id of removed || []) if (keyOf.has(id)) lost.push(keyOf.get(id)!);
+	return Response.json({ ...out, lost }, { headers: { "cache-control": "no-store" } });
 }
 
 // A new team: name + the team's Discord webhook (checked with Discord first). Answers the team key.
@@ -486,6 +509,7 @@ async function teamAction(req: Request, env: Env, op: string): Promise<Response>
 	const extra: any = {};
 	if (op === "teamRename") { extra.teamName = clean(body.teamName, 32); if (!extra.teamName) return new Response("Give your team a name", { status: 400 }); }
 	if (op === "teamInviteFriend") extra.to = String(body.to || "");
+	if (op === "teamKick") extra.member = String(body.member || "");
 	return forward(await groupCmd(env, { op, ...who(body), team: team.id, ...extra }));
 }
 
@@ -566,9 +590,10 @@ async function groupInvite(req: Request, env: Env, origin: string): Promise<Resp
 }
 
 async function groupRedeem(req: Request, env: Env): Promise<Response> {
-	const token = String((await readJSON(req))?.token || "");
+	const body = await readJSON(req);
+	const token = String(body?.token || "");
 	if (!/^[A-Za-z0-9]{12,32}$/.test(token)) return new Response("Bad request", { status: 400 });
-	const res = await groupCmd(env, { op: "redeem", token });
+	const res = await groupCmd(env, { op: "redeem", token, uid: String(body?.id || "") });
 	if (!res.ok) return new Response(await res.text(), { status: res.status });
 	const team = await teamById(env, ((await res.json()) as { team: string }).team);
 	if (!team) return new Response("That team doesn't exist any more", { status: 410 });

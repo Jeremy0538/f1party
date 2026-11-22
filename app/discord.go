@@ -151,7 +151,8 @@ func relayJSON(path string, in, out any) error {
 // redeemGroupInvite trades a team link token for the team key and joins the team.
 func redeemGroupInvite(token string) error {
 	var r struct{ Key, Name string }
-	if err := relayJSON("/group/redeem", map[string]string{"token": token}, &r); err != nil {
+	// our id lets the relay take us back in when the team's owner had removed us before
+	if err := relayJSON("/group/redeem", map[string]string{"token": token, "id": persistentID()}, &r); err != nil {
 		return err
 	}
 	if !isGroupKey(r.Key) {
@@ -183,7 +184,7 @@ func createTeam(name, webhook string) error {
 // sendInvite posts the party code (and what the host is watching) to the Discord channel.
 func sendInvite(webhook, name, code, watching string) error {
 	if webhook == "" {
-		return errors.New("join a team or set a Discord channel under Friends first")
+		return errors.New("join a team or set a Discord channel under Teams first")
 	}
 	if isGroupKey(webhook) {
 		return postGroup(webhook, map[string]any{"kind": "invite", "name": name, "code": code, "title": watching})

@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -130,9 +131,16 @@ func compareVersions(a, b string) int {
 	return 0
 }
 
-// mvStart starts MultiViewer with its debug port. It does nothing when MultiViewer already runs.
+var (
+	mvStartMu sync.Mutex
+	mvStartAt time.Time // the last start; MultiViewer takes a while to answer, so no second start meanwhile
+)
+
+// mvStart starts MultiViewer with its debug port. It does nothing when MultiViewer already runs or is starting.
 func mvStart() error {
-	if mvRunning() {
+	mvStartMu.Lock()
+	defer mvStartMu.Unlock()
+	if mvRunning() || time.Since(mvStartAt) < 30*time.Second {
 		return nil
 	}
 	exe := mvExe()
@@ -152,7 +160,39 @@ func mvStart() error {
 		return fmt.Errorf("can't start MultiViewer: %w", err)
 	}
 	go cmd.Wait()
+	mvStartAt = time.Now()
 	return nil
+}
+
+// mvStartReady starts MultiViewer when it isn't running and waits (up to a minute) until its main window can
+// open setups. A MultiViewer that was already running without its debug port needs "Restart for setups".
+func mvStartReady() error {
+	wasRunning := mvRunning()
+	if !wasRunning {
+		if err := mvStart(); err != nil {
+			return err
+		}
+	}
+	mainUp := func() bool {
+		pages, err := cdpPages()
+		return err == nil && slices.ContainsFunc(pages, isMainWindow)
+	}
+	for i := 0; i < 60; i++ {
+		if mvRunning() && mainUp() {
+			if !wasRunning {
+				time.Sleep(2 * time.Second) // its setup manager loads right after the window
+			}
+			return nil
+		}
+		if wasRunning && !mvDebugReady() {
+			return errNoDebug
+		}
+		time.Sleep(time.Second)
+	}
+	if !mvRunning() {
+		return errors.New("MultiViewer didn't start")
+	}
+	return errNoDebug
 }
 
 // mvRestart closes MultiViewer and starts it again with its debug port (needed for setups).
@@ -168,6 +208,9 @@ func mvRestart() error {
 		mvQuit(true)
 		time.Sleep(1500 * time.Millisecond)
 	}
+	mvStartMu.Lock()
+	mvStartAt = time.Time{} // closed on purpose: start again now
+	mvStartMu.Unlock()
 	return mvStart()
 }
 

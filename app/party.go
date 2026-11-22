@@ -96,6 +96,8 @@ type Party struct {
 	hostWhen time.Time
 
 	setup     string // MultiViewer setup a guest opens on joining ("" = none)
+	setupBusy bool   // the Open button is starting MultiViewer and opening a setup: the guest loop waits
+	setupDone string // content id the Open button opened a setup for: the guest loop doesn't open it again
 	forceSync bool   // guest: correct the drift now, whatever its size
 
 	id          string  // this app's member id
@@ -785,7 +787,13 @@ func (p *Party) guestLoop(ctx context.Context) {
 			restAt = time.Time{}
 			go pluginRefreshRest()
 		}
-		if feed == nil && setup != "" && setup != setupStreamDeck && setupFor != host.ContentID && mvDebugReady() {
+		p.mu.Lock()
+		busy, done := p.setupBusy, p.setupDone
+		p.mu.Unlock()
+		if done != "" && done == host.ContentID {
+			setupFor = done
+		}
+		if feed == nil && !busy && setup != "" && setup != setupStreamDeck && setupFor != host.ContentID && mvDebugReady() {
 			// the chosen MultiViewer setup opens the host's session with all its windows (tried once)
 			setupFor = host.ContentID
 			status = "Opening your setup “" + setup + "”…"

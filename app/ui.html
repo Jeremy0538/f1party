@@ -222,7 +222,20 @@
 	button.accept:hover { background:var(--red-hi); }
 	.members .sent { font-size:11px; color:var(--faint); }
 	/* friends tab */
-	#friends { display:flex; flex-direction:column; }
+	#friends, #teams { display:flex; flex-direction:column; }
+	/* icon buttons (friends and teams) */
+	button.ib { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; flex:none; color:var(--dim); }
+	button.ib:hover { color:var(--text); }
+	button.ib svg { width:16px; height:16px; display:block; }
+	button.ib.green { color:var(--ok); border-color:rgba(34,197,94,.35); }
+	button.ib.green:hover { background:rgba(34,197,94,.12); }
+	button.ib.red { color:var(--bad); border-color:rgba(239,68,68,.3); }
+	button.ib.red:hover { background:rgba(239,68,68,.12); }
+	.flist button.ib { width:28px; height:28px; }
+	.mlist { list-style:none; margin:6px 0 0; padding:0; border-top:1px solid var(--line); }
+	.mlist li { display:flex; align-items:center; gap:10px; min-height:38px; border-bottom:1px solid var(--line); }
+	.mlist li span { flex:1; }
+	.mlist li .you { flex:none; color:var(--faint); font-size:11px; }
 	.flist { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
 	.flist li { display:flex; align-items:center; gap:12px; min-height:46px; border-bottom:1px solid var(--line); padding:6px 2px; }
 	.flist .nm { flex:1; min-width:0; }
@@ -244,8 +257,8 @@
 	.flist .mate { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--dim); min-height:24px; }
 	.flist .mate b { color:var(--text); font-weight:500; }
 	.flist .mate button { height:24px; font-size:11px; padding:0 9px; }
-	#inbox:empty { display:none; }
-	#inbox { display:flex; flex-direction:column; gap:8px; margin:0 0 18px; }
+	#inbox:empty, #tinbox:empty { display:none; }
+	#inbox, #tinbox { display:flex; flex-direction:column; gap:8px; margin:0 0 18px; }
 	.invite-card { display:flex; align-items:center; gap:10px; border:1px solid rgba(225,6,0,.45); background:rgba(225,6,0,.07); border-radius:10px; padding:10px 12px; }
 	.invite-card .t { flex:1; min-width:0; }
 	.invite-card .t span { display:block; font-size:12px; color:var(--dim); }
@@ -278,6 +291,7 @@
 			<button role="tab" id="tabparty" aria-selected="true">Party</button>
 			<button role="tab" id="tabcal" aria-selected="false">Calendar</button>
 			<button role="tab" id="tabfriends" aria-selected="false">Friends</button>
+			<button role="tab" id="tabteams" aria-selected="false">Teams</button>
 		</nav>
 		<a class="update hidden" id="update"></a>
 		<span class="ver" id="ver"></span>
@@ -321,31 +335,32 @@
 			</div>
 			<div id="friends" class="hidden" role="tabpanel">
 				<div id="inbox"></div>
-				<section class="fsec">
-					<div class="fhead">
-						<h1>Friends</h1>
-						<button id="friendinv" title="Copies a link to send anyone (in Discord, for example): it gets them F1 Party and makes you friends">Invite people</button>
-					</div>
-					<p class="hint" id="friendmsg"></p>
-					<ul class="flist" id="flist"></ul>
-					<p class="empty hidden" id="fempty">No friends yet. Click Invite people and send the link, or add someone in a party with the add-friend icon next to their name.</p>
-				</section>
-				<section class="fsec">
-					<div class="fhead">
-						<h1>Teams</h1>
-						<button id="teamstart">Start a team</button>
-					</div>
-					<p class="hint" style="margin:0 0 10px">A party is one session you watch together, with a 5-letter code. A team is a group of friends with one Discord channel: anyone in it can post party invites there.</p>
-					<div id="teamform" class="team hidden">
-						<div class="row"><input id="teamname" class="grow" placeholder="Team name" maxlength="32" autocomplete="off"></div>
-						<div class="row" style="margin-top:8px"><input id="teamhook" class="grow" placeholder="Discord webhook URL of the team's channel" autocomplete="off" spellcheck="false"><button id="teamcreate">Create</button></div>
-						<p class="hint">In Discord: <i>Server settings</i> → <i>Integrations</i> → <i>Webhooks</i> → <i>New webhook</i>, pick the channel, <i>Copy webhook URL</i>. It's kept safe on the F1 Party server, never on anyone's computer.</p>
-					</div>
-					<ul class="flist" id="tlist"></ul>
-					<div class="row" style="margin-top:12px"><input id="dchook" class="grow" placeholder="Paste a team link or friend link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
-					<div class="row hidden" id="ownhook" style="justify-content:space-between; margin-top:10px"><span class="hint" style="margin:0"><span class="dot ok"></span>Your own Discord channel (webhook) is set</span><button class="link" id="ownremove">Remove</button></div>
-					<div class="error" id="dcerr"></div>
-				</section>
+				<div class="fhead">
+					<h1>Friends</h1>
+					<button class="ib green" id="friendinv" title="Invite people: copies a link to send anyone (in Discord, for example). It gets them F1 Party and makes you friends" aria-label="Invite people"></button>
+				</div>
+				<p class="hint" style="margin:0 0 10px">Friends see what you watch and can invite you to their party, right in F1 Party.</p>
+				<p class="hint" id="friendmsg"></p>
+				<ul class="flist" id="flist"></ul>
+				<p class="empty hidden" id="fempty">No friends yet. Click the green button and send the link, or add someone in a party with the add-friend icon next to their name.</p>
+			</div>
+			<div id="teams" class="hidden" role="tabpanel">
+				<div id="tinbox" class="inbox"></div>
+				<div class="fhead">
+					<h1>Teams</h1>
+					<button class="ib" id="teamstart" title="Start a team" aria-label="Start a team" aria-expanded="false"></button>
+				</div>
+				<p class="hint" style="margin:0 0 10px">A team is a group of friends with one Discord channel: anyone in it can post party invites there. A party is one session you watch together, with a 5-letter code.</p>
+				<div id="teamform" class="team hidden">
+					<div class="row"><input id="teamname" class="grow" placeholder="Team name" maxlength="32" autocomplete="off"></div>
+					<div class="row" style="margin-top:8px"><input id="teamhook" class="grow" placeholder="Discord webhook URL of the team's channel" autocomplete="off" spellcheck="false"><button id="teamcreate">Create</button></div>
+					<p class="hint">In Discord: <i>Server settings</i> → <i>Integrations</i> → <i>Webhooks</i> → <i>New webhook</i>, pick the channel, <i>Copy webhook URL</i>. It's kept safe on the F1 Party server, never on anyone's computer.</p>
+				</div>
+				<ul class="flist" id="tlist"></ul>
+				<p class="empty hidden" id="tempty">No teams yet. Start one with the + button, or paste a team link a friend sent you.</p>
+				<div class="row" style="margin-top:12px"><input id="dchook" class="grow" placeholder="Paste a team link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
+				<div class="row hidden" id="ownhook" style="justify-content:space-between; margin-top:10px"><span class="hint" style="margin:0"><span class="dot ok"></span>Your own Discord channel (webhook) is set</span><button class="link" id="ownremove">Remove</button></div>
+				<div class="error" id="dcerr"></div>
 			</div>
 			<div id="cal" class="hidden" role="tabpanel">
 				<div class="calhead">
@@ -480,29 +495,56 @@ document.addEventListener("click", () => showDownloads(false));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") showDownloads(false); });
 const installed = (id, yes) => { $(id).textContent = yes ? "✓ Installed" : "Download"; $(id).className = yes ? "ok" : ""; };
 
-// ---- Friends and teams (people.go). Refreshed every few seconds while the Friends tab is open.
+// ---- Friends and teams (people.go). Refreshed every few seconds while the Friends or Teams tab is open.
 let people = { friends: [], teams: [], invites: [], teamInvites: [], ownWebhook: false };
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null)); return e; };
 const watching = (st) => st ? (st.title || "an F1 Party") + (st.live ? " · LIVE" : "") : "";
 async function joinParty(code, from) {
-	try { await post("/api/joinparty", { to: code, from: from || "" }); showTab("party"); } catch (e) { $("dcerr").textContent = e.message; }
+	try { await post("/api/joinparty", { to: code, from: from || "" }); showTab("party"); } catch (e) { peopleErr(e.message); }
 }
 async function refreshDiscord() {
 	try { people = await (await fetch("/api/people")).json(); } catch { return; }
 	for (const k of ["friends", "teams", "invites", "teamInvites"]) people[k] = people[k] || [];
 	webhookSet = people.teams.length > 0 || people.ownWebhook;
 	$("invite").classList.toggle("hidden", mode === "idle" || (!webhookSet && !people.friends.length));
-	if (tab === "friends") renderPeople();
+	renderPeople();
 }
+const PERSON = '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>';
+const personSVG = (extra, fill = "none") => `<svg viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${PERSON}${extra}</svg>`;
+// Small icon buttons; the title doubles as the tooltip and the screen-reader label.
+const ICON = {
+	userPlus: PERSON + '<path d="M19 8v6M22 11h-6"/>',
+	userMinus: PERSON + '<path d="M22 11h-6"/>',
+	toTeam: PERSON + '<path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+	plus: '<path d="M12 5v14M5 12h14"/>',
+	pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+	leave: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+};
+const svgOf = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+function iconBtn(icon, title, onclick, cls = "") {
+	const b = btn("", title, onclick, ("ib " + cls).trim());
+	b.setAttribute("aria-label", title); b.innerHTML = svgOf(ICON[icon]);
+	return b;
+}
+const peopleErr = (msg) => { $(tab === "teams" ? "dcerr" : "friendmsg").textContent = msg; };
+// teams a friend isn't in yet (only mutual friends can be invited)
+const teamsWithout = (f) => f.mutual ? people.teams.filter((t) => !(t.people || []).some((m) => m.id === f.id)) : [];
+
 function renderPeople() {
 	const d = people;
-	// waiting invites
+	// a red dot on the tab when something is waiting there
+	const dot = (id, on) => { const t = $(id); t.querySelector(".badge")?.remove(); if (on) t.append(el("span", { className: "badge" })); };
+	dot("tabfriends", d.invites.length > 0); dot("tabteams", d.teamInvites.length > 0);
+	if (tab !== "friends" && tab !== "teams") return;
+
+	// waiting invites: party invites on Friends, team invites on Teams
 	const inbox = $("inbox"); inbox.innerHTML = "";
 	for (const i of d.invites) inbox.append(el("div", { className: "invite-card" },
 		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to their party" }), el("span", { textContent: i.title || "Code " + i.code })),
 		btn("Join", "Join " + i.name + "'s party", () => joinParty(i.code, i.from), "primary"),
 		btn("Not now", "", async () => { await post("/api/partyinvite/dismiss", { from: i.from }); refreshDiscord(); })));
-	for (const i of d.teamInvites) inbox.append(el("div", { className: "invite-card" },
+	const tinbox = $("tinbox"); tinbox.innerHTML = "";
+	for (const i of d.teamInvites) tinbox.append(el("div", { className: "invite-card" },
 		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to team " + i.team }), el("span", { textContent: "Party invites can then go to the team's Discord channel" })),
 		btn("Accept", "", async () => { try { await post("/api/teaminvite/accept", { token: i.token }); } catch (e) { $("dcerr").textContent = e.message; } refreshDiscord(); }, "primary"),
 		btn("Not now", "", async () => { await post("/api/teaminvite/dismiss", { token: i.token }); refreshDiscord(); })));
@@ -515,18 +557,21 @@ function renderPeople() {
 		const line = f.status ? el("span", { className: "st" + (f.status.live ? " live" : ""), textContent: "Watching " + watching(f.status) })
 			: f.online ? el("span", { className: "on", textContent: "Online" })
 			: el("span", { textContent: "Last watched together " + dateFmt.format(new Date((f.seen || f.since) * 1000)) });
+		const open = teamsWithout(f);
 		fl.append(el("li", {},
 			el("div", { className: "nm" }, el("b", { textContent: f.name }), line),
 			el("div", { className: "acts" },
 				f.status && f.status.code ? btn("Join", "Join " + f.name + "'s party", () => joinParty(f.status.code), "primary") : null,
-				btn("Remove", "Remove " + f.name + " from your friends", async () => {
+				open.length ? iconBtn("toTeam", open.length === 1 ? "Invite " + f.name + " to team " + open[0].name : "Invite " + f.name + " to one of your teams", () => friendTeamDialog(f)) : null,
+				iconBtn("userMinus", "Remove " + f.name + " from your friends", async () => {
 					if (!confirm("Remove " + f.name + " from your friends?")) return;
 					await post("/api/friend/remove", { id: f.id }); refreshDiscord();
-				}))));
+				}, "red"))));
 	}
 
 	// teams
 	const tl = $("tlist"); tl.innerHTML = "";
+	$("tempty").classList.toggle("hidden", d.teams.length > 0);
 	for (const t of d.teams) {
 		const mates = el("div", { className: "mates" });
 		for (const m of (t.people || []).slice().sort((a, b) => (b.status ? 1 : 0) - (a.status ? 1 : 0))) {
@@ -538,18 +583,59 @@ function renderPeople() {
 			el("div", { className: "nm" }, el("b", { textContent: t.name || "Team" }),
 				el("span", { textContent: t.members + (t.members === 1 ? " member" : " members") + (t.owner ? " · you started it" : "") })),
 			el("div", { className: "acts" },
-				btn("Invite", "Invite a friend to " + t.name + ", or copy a team link", () => teamInviteDialog(t)),
-				t.owner ? btn("Rename", "", async () => {
-					const name = prompt("New name for the team", t.name); if (!name) return;
-					try { await post("/api/team/rename", { id: t.id, name }); } catch (e) { $("dcerr").textContent = e.message; } refreshDiscord();
-				}) : null,
-				btn("Leave", "", async () => {
-					if (!confirm("Leave team " + t.name + "? You can join again with a team link.")) return;
-					try { await post("/api/team/leave", { id: t.id }); } catch (e) { $("dcerr").textContent = e.message; } refreshDiscord();
-				})),
+				iconBtn("userPlus", "Invite someone to " + t.name, () => teamInviteDialog(t), "green"),
+				t.owner ? iconBtn("pencil", "Edit team " + t.name + ": name and members", () => teamEditDialog(t))
+					: iconBtn("leave", "Leave team " + t.name, () => leaveTeamAsk(t))),
 			t.people && t.people.length ? mates : null));
 	}
 	$("ownhook").classList.toggle("hidden", !d.ownWebhook);
+}
+
+async function leaveTeamAsk(t) {
+	if (!confirm("Leave team " + t.name + "? You can join again with a team link.")) return false;
+	try { await post("/api/team/leave", { id: t.id }); } catch (e) { $("dcerr").textContent = e.message; }
+	refreshDiscord();
+	return true;
+}
+
+// Friend > invite to a team: the teams this friend isn't in yet.
+function friendTeamDialog(f) {
+	const open = teamsWithout(f);
+	const body = el("div", {},
+		el("p", { className: "hint", style: "margin:0 0 6px", textContent: f.name + " gets the invite in F1 Party and joins with one click." }),
+		picker([["Your teams", open.map((t) => ["t:" + t.id, t.name, t.members + (t.members === 1 ? " member" : " members"), open.length === 1])]]));
+	dialog("Invite " + f.name + " to a team", body, "Send invite", async () => {
+		const ids = picked(body, "t:");
+		if (!ids.length) throw new Error("Tick a team");
+		for (const id of ids) await post("/api/team/invitefriend", { id, to: f.id });
+		peopleErr("Invite sent to " + f.name);
+	});
+}
+
+// Team > edit (only the one who started it): the name, and remove members.
+function teamEditDialog(t) {
+	const name = el("input", { className: "grow", value: t.name, maxLength: 32, autocomplete: "off" });
+	const list = el("ul", { className: "mlist" }, el("li", {}, el("span", { textContent: $("name").value || "You" }), el("span", { className: "you", textContent: "you" })));
+	for (const m of t.people || []) {
+		const li = el("li", {}, el("span", { textContent: m.name }));
+		li.append(iconBtn("userMinus", "Remove " + m.name + " from " + t.name, async () => {
+			if (!confirm("Remove " + m.name + " from team " + t.name + "? They can only come back with a new team link.")) return;
+			try { await post("/api/team/kick", { id: t.id, to: m.id }); li.remove(); refreshDiscord(); } catch (e) { $("modalerr").textContent = e.message; }
+		}, "red"));
+		list.append(li);
+	}
+	const body = el("div", {},
+		el("label", { className: "label", textContent: "Name" }), el("div", { className: "row" }, name),
+		el("div", { className: "label", style: "margin-top:14px", textContent: "Members" }), list,
+		(t.people || []).length ? null : el("p", { className: "hint", textContent: "Nobody else has joined yet." }),
+		el("div", { className: "row", style: "margin-top:14px" }, btn("Leave team", "", async () => { if (await leaveTeamAsk(t)) $("modal").classList.add("hidden"); }, "link")));
+	dialog("Edit team " + t.name, body, "Save", async () => {
+		const n = name.value.trim();
+		if (!n) throw new Error("Give your team a name");
+		if (n !== t.name) await post("/api/team/rename", { id: t.id, name: n });
+		refreshDiscord();
+	});
+	name.focus();
 }
 
 // A small dialog: title, body, OK button text and what OK does (throw to show an error and stay open).
@@ -609,7 +695,7 @@ async function partyInviteDialog() {
 			.concat(people.ownWebhook ? [["o:own", "My own Discord channel", "webhook", !!last.own]] : [])],
 		["Friends · in F1 Party", people.friends.filter((f) => f.mutual).map((f) => ["f:" + f.id, f.name, f.status ? "watching" : f.online ? "online" : "", has(last.friends, f.id)])],
 	]);
-	if (!body.children.length) body.append(el("p", { className: "hint", textContent: "Add friends or start a team under Friends first." }));
+	if (!body.children.length) body.append(el("p", { className: "hint", textContent: "Add friends under Friends or start a team under Teams first." }));
 	dialog("Invite to your party", body, "Send", async () => {
 		const sel = { teams: picked(body, "t:"), friends: picked(body, "f:"), own: picked(body, "o:").length > 0 };
 		await post("/api/invite", sel);
@@ -628,7 +714,13 @@ $("dcsave").onclick = async () => {
 	refreshDiscord();
 };
 $("ownremove").onclick = async () => { await post("/api/addlink", { link: "" }); refreshDiscord(); };
-$("teamstart").onclick = () => { $("teamform").classList.toggle("hidden"); $("teamname").focus(); };
+$("friendinv").innerHTML = svgOf(ICON.userPlus);
+$("teamstart").innerHTML = svgOf(ICON.plus);
+$("teamstart").onclick = () => {
+	const open = $("teamform").classList.toggle("hidden") === false;
+	$("teamstart").setAttribute("aria-expanded", String(open));
+	if (open) $("teamname").focus();
+};
 $("teamcreate").onclick = async () => {
 	$("dcerr").textContent = ""; $("teamcreate").disabled = true;
 	try {
@@ -638,7 +730,7 @@ $("teamcreate").onclick = async () => {
 	$("teamcreate").disabled = false;
 	refreshDiscord();
 };
-setInterval(() => { if (tab === "friends" || mode !== "idle") refreshDiscord(); }, 5000);
+setInterval(() => { if (tab === "friends" || tab === "teams" || mode !== "idle") refreshDiscord(); }, 5000);
 
 const mvAct = (btn, path, body) => async () => {
 	$("mverr").textContent = ""; btn.disabled = true;
@@ -650,11 +742,22 @@ $("mvrestart").onclick = async () => {
 	if (!confirm("MultiViewer closes and opens again, so F1 Party can open your setups. Continue?")) return;
 	await mvAct($("mvrestart"), "/api/mv/restart")();
 };
-$("setup").onchange = async () => { await post("/api/setup", { name: $("setup").value }); refreshMV(); };
-$("setupopen").onclick = mvAct($("setupopen"), "/api/setup/open", () => ({ name: $("setup").value }));
+let mvNow = {};
+$("setup").onchange = async () => {
+	await post("/api/setup", { name: $("setup").value });
+	await refreshMV();
+	// in a party with MultiViewer closed: start it and open the chosen setup right away
+	const v = $("setup").value;
+	if (mode !== "idle" && v && v !== SD && mvNow.installed && !mvNow.running) $("setupopen").click();
+};
+$("setupopen").onclick = async () => {
+	if (!mvNow.running && $("setup").value !== SD) { $("mvstate").textContent = "Starting…"; $("mvstart").classList.add("hidden"); }
+	await mvAct($("setupopen"), "/api/setup/open", () => ({ name: $("setup").value }))();
+};
 
 async function refreshMV() {
 	let m; try { m = await (await fetch("/api/mv")).json(); } catch { return; }
+	mvNow = m;
 	const pl = m.plugin || {};
 	pluginDownload = pl.download || "";
 	installed("dlmv", m.installed); installed("dluf1", m.uf1); installed("dlsd", pl.installed);
@@ -683,7 +786,8 @@ async function refreshMV() {
 	} else if (sd) {
 		hint.append("The Stream Deck plugin picks your Race, Qualifying or Practice setup for the session and opens Ultimate F1 Viewer too.");
 	}
-	$("setupopen").disabled = sd ? !pl.running : (!m.setupsReady || !sel.value);
+	// closed MultiViewer is fine: Open starts it first. Running without setup support needs a restart.
+	$("setupopen").disabled = sd ? !pl.running : (!sel.value || !m.installed || (m.running && !m.setupsReady));
 }
 
 async function refresh() {
@@ -797,8 +901,6 @@ const jump = (to) => async () => { $("sesserr").textContent = ""; try { await po
 $("jbegin").onclick = jump("begin"); $("jstart").onclick = jump("start"); $("jlive").onclick = jump("live");
 
 // Friend control next to a member: a friend (filled icon), their request (Accept), ours (Request sent), or add.
-const PERSON = '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>';
-const personSVG = (extra, fill = "none") => `<svg viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${PERSON}${extra}</svg>`;
 function friendControl(m) {
 	if (m.friend) {
 		const s = document.createElement("span"); s.className = "fricon"; s.title = "Friend";
@@ -821,13 +923,16 @@ function showTab(t) {
 	$("tabparty").setAttribute("aria-selected", String(t === "party"));
 	$("tabcal").setAttribute("aria-selected", String(t === "cal"));
 	$("tabfriends").setAttribute("aria-selected", String(t === "friends"));
+	$("tabteams").setAttribute("aria-selected", String(t === "teams"));
 	$("cal").classList.toggle("hidden", t !== "cal");
 	$("friends").classList.toggle("hidden", t !== "friends");
+	$("teams").classList.toggle("hidden", t !== "teams");
 	refresh();
 	if (t === "cal") refreshCal();
-	if (t === "friends") refreshFriends();
+	if (t === "friends" || t === "teams") refreshFriends();
 }
 $("tabfriends").onclick = () => showTab("friends");
+$("tabteams").onclick = () => showTab("teams");
 const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 function refreshFriends() { refreshDiscord(); }
 $("tabparty").onclick = () => showTab("party");
@@ -861,7 +966,7 @@ async function calAct(path, body) {
 		if (path.endsWith("/plan") && res && !res.announced) {
 			$("calerr").textContent = webhookSet
 				? "Planned. Discord didn't take the announcement yet; F1 Party tries again in a moment."
-				: "Planned, but not posted to Discord: join a team (or set your own Discord channel) under Friends and it's posted right away.";
+				: "Planned, but not posted to Discord: join a team (or set your own Discord channel) under Teams and it's posted right away.";
 		}
 		if (path.endsWith("/watch")) return showTab("party"); // the party (and the Session block) take it from here
 	} catch (e) { $("calerr").textContent = e.message; }

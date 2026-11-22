@@ -316,7 +316,21 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			replyErr(w, pluginOpen(sessionKind(sessionType), contentID))
 			return
 		}
-		replyErr(w, mvOpenSetup(in.Name, contentID))
+		// MultiViewer closed: start it, wait until it can open setups, then open this one
+		party.mu.Lock()
+		party.setupBusy = true
+		party.mu.Unlock()
+		err := mvStartReady()
+		if err == nil {
+			err = mvOpenSetup(in.Name, contentID)
+		}
+		party.mu.Lock()
+		party.setupBusy = false
+		if err == nil && contentID != "" {
+			party.setupDone = contentID
+		}
+		party.mu.Unlock()
+		replyErr(w, err)
 	})
 	mux.HandleFunc("POST /api/openurl", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ URL string }
@@ -328,7 +342,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		openURL(in.URL)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
-	// Friends and teams (people.go): what the Friends tab shows, and its actions.
+	// Friends and teams (people.go): what the Friends and Teams tabs show, and their actions.
 	mux.HandleFunc("GET /api/people", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, peopleView()) })
 	mux.HandleFunc("GET /api/invitechoice", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, loadConfig().InviteTo) })
 	// copyLink copies a made link and answers it (or says what went wrong).
@@ -364,6 +378,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	handle("/api/team/invitefriend", func(w http.ResponseWriter, in *peopleReq) {
 		replyErr(w, teamCall("/team/invitefriend", in.ID, "to", in.To))
+	})
+	handle("/api/team/kick", func(w http.ResponseWriter, in *peopleReq) {
+		replyErr(w, teamCall("/team/kick", in.ID, "member", in.To))
 	})
 	// The join field: a team link, a friend link, a team key or an own Discord webhook ("" removes the webhook).
 	handle("/api/addlink", func(w http.ResponseWriter, in *peopleReq) {

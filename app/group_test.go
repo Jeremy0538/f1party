@@ -57,6 +57,7 @@ func TestFriendLinkToken(t *testing.T) {
 // The Friends tab walks these lists: they must be [] in JSON, never null, also with no friends or teams.
 func TestPeopleViewEmptyLists(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("APPDATA", t.TempDir()) // Windows settings folder
 	b, _ := json.Marshal(peopleView())
 	for _, k := range []string{`"friends":[]`, `"teams":[]`, `"invites":[]`, `"teamInvites":[]`} {
 		if !strings.Contains(string(b), k) {

@@ -3,7 +3,8 @@ package main
 // People: friends and teams through the relay. Every 30 s (and right after the party changes) the app tells the
 // relay who it is (its fixed id plus a secret only this app knows), what it is doing, who its friends are and
 // which teams it is in. The relay answers with what its mutual friends and teammates are doing, its teams and
-// anything waiting for it: a new friend from a friend link, a party invite, a team invite. Strangers never see
+// anything waiting for it: a new friend from a friend link, a party invite, a team invite, a removal from a team
+// (the relay then lists that team's key as lost and the app drops it). Strangers never see
 // what you watch.
 
 import (
@@ -279,19 +280,22 @@ func (p *Party) handleInbox(ev map[string]any) {
 		peopleNow.teamInvites = append(peopleNow.teamInvites, inv)
 		peopleNow.mu.Unlock()
 		if sendNotification != nil {
-			_ = sendNotification(inv.Name+" invites you to team "+inv.Team, "Open F1 Party and click Accept under Friends.")
+			_ = sendNotification(inv.Name+" invites you to team "+inv.Team, "Open F1 Party and click Accept under Teams.")
 		}
+	case "kicked": // the team's owner removed us; the next check-in drops the key (see Lost)
+		p.SetNote(str("name") + " removed you from team " + str("team"))
+		pokePeople()
 	}
 }
 
-// peopleReq: the fields the Friends tab's actions send (each uses a few).
+// peopleReq: the fields the Friends and Teams tabs' actions send (each uses a few).
 type peopleReq struct {
 	ID, Name, Webhook, To, Token, From, Link string
 	Teams, Friends                           []string
 	Own                                      bool
 }
 
-// PeopleView: what the Friends tab shows.
+// PeopleView: what the Friends and Teams tabs show.
 type PeopleView struct {
 	Online      bool          `json:"online"`
 	Friends     []FriendView  `json:"friends"`
