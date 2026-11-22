@@ -636,7 +636,12 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		Unplan(in.ID)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	// Sync: a host has everyone (and their own onboards) sync to their main stream; a guest jumps to the host.
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
+		if party.Snapshot().Mode == "host" {
+			replyErr(w, party.ResyncAll())
+			return
+		}
 		replyErr(w, party.SyncNow())
 	})
 	// Settings (the gear at the top right).

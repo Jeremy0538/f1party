@@ -391,6 +391,22 @@
 	.note { font-size:12px; color:var(--dim); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.note:empty { display:none; }
 	/* who's in the party: one row per person, status under the name */
+	/* the party: one box with who you are, the code and its buttons, End party as a cross */
+	.pcard { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+	.ptop { display:flex; align-items:center; gap:10px; }
+	.ptop .boxtitle { white-space:nowrap; }
+	.ptop #leave { margin:-4px -6px -4px 0; }
+	.ptop #leave:hover { color:var(--bad); border-color:rgba(239,68,68,.4); }
+	.pmid { display:flex; align-items:center; gap:12px; margin-top:6px; }
+	.pmid .code { flex:1; min-width:0; }
+	.pbtns { display:flex; gap:8px; flex:none; }
+	button.ib.big { width:40px; height:40px; border-radius:10px; }
+	button.ib.big svg { width:18px; height:18px; }
+	button.ib.discord { color:#fff; background:#5865f2; border-color:#5865f2; }
+	button.ib.discord:hover { background:#4752c4; color:#fff; }
+	button.ib.done { color:var(--ok); border-color:rgba(34,197,94,.5); }
+	.pcard .feedline { margin:8px 0 0; }
+	.pcard .feedline:has(#feed:empty):has(.gap:empty) { display:none; }
 	.mcard { margin-top:14px; display:flex; flex-direction:column; min-height:0; flex:1; }
 	.mhead { display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid var(--line); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
 	.mhead .count { margin-left:auto; font:600 11px/1 var(--ui); letter-spacing:0; padding:3px 7px; border-radius:999px; background:#20242b; color:var(--text); text-transform:none; }
@@ -495,25 +511,21 @@
 			</div>
 
 			<div id="party" class="hidden">
-				<div class="phead">
-					<h2 id="roleline">You're hosting</h2>
-					<span class="pstatus" id="pstatus"><span class="dot" id="dot"></span><span id="status">…</span></span>
-					<button class="danger" id="leave">End party</button>
-				</div>
-				<div class="codeline">
-					<div class="code" id="bigcode"></div>
-					<div class="codeacts">
-					<button class="chip" id="copycode" title="Copy the party code">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
-						<span>Copy code</span>
-					</button>
-					<button class="chip discord hidden" id="invite" title="Invite friends, or post the party to a team's Discord channel">
-						<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
-						<span>Invite</span>
-					</button>
+				<section class="pcard">
+					<div class="ptop">
+						<span class="boxtitle" id="roleline">You're hosting</span>
+						<span class="pstatus" id="pstatus"><span class="dot" id="dot"></span><span id="status">…</span></span>
+						<button class="ib" id="leave" title="End the party" aria-label="End the party"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
 					</div>
-				</div>
-				<div class="feedline"><span id="feed"></span><span class="gap" id="gap"></span></div>
+					<div class="pmid">
+						<div class="code" id="bigcode"></div>
+						<div class="pbtns">
+							<button class="ib big" id="copycode" title="Copy the party code" aria-label="Copy the party code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+							<button class="ib big discord hidden" id="invite" title="Invite friends, or post the party to a team's Discord channel" aria-label="Invite"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></button>
+						</div>
+					</div>
+					<div class="feedline"><span id="feed"></span><span class="gap" id="gap"></span></div>
+				</section>
 				<div class="row pacts"><button class="primary hidden" id="together">Start together</button><button id="sync">Sync</button>
 					<label class="autosync hidden" id="autosyncrow" title="Follow the host by itself: their pause, play and skips, and your onboards stay with the main stream. Off: only when you click Sync to host."><input type="checkbox" id="autosync" checked> Auto-sync</label></div>
 				<div class="note" id="note"></div>
@@ -680,8 +692,16 @@ let myCode = "", mode = "idle", nameFilled = false, webhookSet = false, pluginDo
 $("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", { name: $("name").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { name: $("name").value, code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("join").click(); });
-$("leave").onclick = async () => { await post("/api/leave"); refresh(); };
-$("copycode").onclick = async () => { try { await post("/api/copycode"); flash($("copycode"), "Copied ✓"); } catch { flash($("copycode"), "Couldn't copy", false); } };
+$("leave").onclick = async () => {
+	if (mode === "host" && !confirm("End the party? Everyone leaves it; the session stays open for you.")) return;
+	await post("/api/leave"); refresh();
+};
+// icon buttons: a green tick-colour for a moment instead of a text change
+const flashIcon = (btn, ok, title) => {
+	const old = btn.dataset.title || btn.title; btn.dataset.title = old; btn.title = title; btn.classList.toggle("done", ok);
+	clearTimeout(btn._t); btn._t = setTimeout(() => { btn.title = old; btn.classList.remove("done"); }, 1600);
+};
+$("copycode").onclick = async () => { try { await post("/api/copycode"); flashIcon($("copycode"), true, "Copied"); toast("Party code copied", myCode); } catch { flashIcon($("copycode"), false, "Couldn't copy"); } };
 $("invite").onclick = async () => {
 	const b = $("invite"); $("syncerr").textContent = ""; b.disabled = true;
 	try { await post("/api/invite"); flash(b, "Shared ✓", false); } catch (e) { $("syncerr").textContent = e.message; }
@@ -1123,10 +1143,11 @@ async function refresh() {
 	$("bigcode").textContent = s.code;
 	if (($("note").textContent || "") !== (s.note || "")) refreshDiscord(); // e.g. a group invite link just set up Discord
 	$("note").textContent = s.note || "";
-	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
+	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync everyone";
+	$("sync").title = s.mode === "guest" ? "Jump to the host and take your onboards along" : "Everyone, and your own onboards, to your main stream";
 	$("pstatus").title = s.status || "";
-	$("leave").textContent = s.mode === "host" ? "End party" : "Leave party";
-	$("leave").title = s.mode === "host" ? "Stop hosting and leave the party" : "Leave this party";
+	$("leave").title = s.mode === "host" ? "End the party" : "Leave the party";
+	$("leave").setAttribute("aria-label", $("leave").title);
 	$("together").classList.toggle("hidden", s.mode !== "host");
 	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
 	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
