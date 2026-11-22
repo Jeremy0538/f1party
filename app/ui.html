@@ -337,7 +337,12 @@
 	.setpane { min-height:300px; }
 	.setlbl { min-width:140px; font-size:12px; color:var(--dim); }
 	.setrow select { max-width:280px; }
-	.modal .box { width:380px; max-height:80%; overflow:auto; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
+	/* title on top, buttons at the bottom always in view; only the content between them scrolls */
+	.modal .box { display:flex; flex-direction:column; }
+	#modalbody { flex:1 1 auto; min-height:0; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; margin:0 -18px; padding:0 18px; }
+	.modal .box > .row { flex:none; padding-top:12px; border-top:1px solid var(--line); }
+	.settabs { position:sticky; top:0; z-index:1; }
+	.modal .box { width:380px; max-height:86%; overflow:hidden; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
 	.modal .box > b { display:block; font-size:15px; margin-bottom:10px; }
 	.pick { display:flex; flex-direction:column; gap:2px; }
 	.pick .lbl { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:10px 0 4px; }
@@ -774,7 +779,8 @@ function dialog(title, body, okText, onOk) {
 	};
 }
 $("modalcancel").onclick = () => $("modal").classList.add("hidden");
-new MutationObserver(() => { if ($("modal").classList.contains("hidden")) $("modal").classList.remove("wide"); }).observe($("modal"), { attributes: true, attributeFilter: ["class"] });
+// a closed dialog drops "wide" (only when it has it: changing the class again would call this again, endlessly)
+new MutationObserver(() => { const m = $("modal"); if (m.classList.contains("hidden") && m.classList.contains("wide")) m.classList.remove("wide"); }).observe($("modal"), { attributes: true, attributeFilter: ["class"] });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.add("hidden"); });
 
 // checkbox list: groups of [value, label, sublabel, checked]
