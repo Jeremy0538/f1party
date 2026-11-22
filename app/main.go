@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
@@ -16,7 +17,6 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -327,7 +327,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		party.mu.Unlock()
 		err := mvStartReady()
 		if err == nil {
-			err = mvOpenSetup(in.Name, contentID)
+			err = openChosenSetup(in.Name, contentID, sessionType)
 		}
 		party.mu.Lock()
 		party.setupBusy = false
@@ -597,37 +597,24 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		replyErr(w, party.SyncNow())
 	})
 	// Settings (the gear at the top right).
-	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
-		c := loadConfig()
-		name := c.DesktopName
-		if name == "" {
-			name = f1DesktopName
-		}
-		writeJSON(w, map[string]any{"desktop": !c.DesktopOff, "desktopName": name, "taskbar": c.Taskbar,
-			"autoSync": !c.AutoSyncOff, "windows": runtime.GOOS == "windows"})
-	})
+	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, settingsView()) })
 	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Desktop     bool
-			DesktopName string
-			Taskbar     string
-			AutoSync    bool
+		var raw map[string]any
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		var in settingsIn
+		if json.Unmarshal(body, &in) != nil || json.Unmarshal(body, &raw) != nil {
+			http.Error(w, "Bad settings", 400)
+			return
 		}
-		json.NewDecoder(r.Body).Decode(&in)
-		if in.Taskbar != "main" && in.Taskbar != "autohide" {
-			in.Taskbar = ""
+		applySettings(in, party)
+		if settingsApplyExtra != nil {
+			settingsApplyExtra(raw)
 		}
-		name := strings.TrimSpace(in.DesktopName)
-		if len([]rune(name)) > 40 {
-			name = string([]rune(name)[:40])
-		}
-		updateConfig(func(c *config) {
-			c.DesktopOff, c.DesktopName, c.Taskbar, c.AutoSyncOff = !in.Desktop, name, in.Taskbar, !in.AutoSync
-		})
-		if in.Taskbar == "" {
-			taskbarRestore() // switched off: put back what F1 Party changed
-		}
-		party.SetAutoSync(in.AutoSync)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Close F1: MultiViewer and Ultimate F1 Viewer closed, desktop, lights and taskbar back (as set).
+	mux.HandleFunc("POST /api/closef1", func(w http.ResponseWriter, r *http.Request) {
+		go closeF1()
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	// Ultimate F1 Viewer layout with a MultiViewer setup ("-" = none, "" = the one with the same name).
@@ -762,6 +749,22 @@ type config struct {
 	TaskbarRestore     bool              `json:"taskbarRestore,omitempty"`     // F1 Party turned "on all displays" off: put it back
 	TaskbarRestoreHide bool              `json:"taskbarRestoreHide,omitempty"` // F1 Party turned auto-hide on: put it back
 	Uf1For             map[string]string `json:"uf1For,omitempty"`             // MultiViewer setup -> Ultimate F1 Viewer layout id ("-" = none)
+	// Sessions: a MultiViewer setup per session type (with the setup choice "Automatic per session type")
+	SetupRace     string   `json:"setupRace,omitempty"`     // "" = found by its name
+	SetupQuali    string   `json:"setupQuali,omitempty"`    //
+	SetupPractice string   `json:"setupPractice,omitempty"` //
+	Uf1CloseFirst bool     `json:"uf1CloseFirst,omitempty"` // close the viewer's open windows before its layout opens
+	FitTiming     bool     `json:"fitTiming,omitempty"`     // zoom Live Timing to fill its window
+	RestOn        bool     `json:"restOn,omitempty"`        // best of the rest in the onboards outside the top teams
+	RestLive      bool     `json:"restLive,omitempty"`      // keep them up to date during the session
+	TopTeams      []string `json:"topTeams,omitempty"`      // nil = McLaren, Ferrari, Mercedes, Red Bull Racing
+	BattleOn      bool     `json:"battleOn,omitempty"`      // pick battle mode's drivers in Ultimate F1 Viewer
+	BattleLive    bool     `json:"battleLive,omitempty"`    // keep them up to date during the race
+	BattleRight   string   `json:"battleRight,omitempty"`   // "" championship top 3, "p5to8" positions 5 to 8
+	// Close F1
+	CloseMVOff   bool `json:"closeMvOff,omitempty"`   // leave MultiViewer open
+	CloseUf1Off  bool `json:"closeUf1Off,omitempty"`  // leave Ultimate F1 Viewer open
+	CloseDesktop bool `json:"closeDesktop,omitempty"` // remove the watching desktop
 }
 
 // f1DesktopName: the desktop for watching unless the settings name another (the F1 Race Control plugin's name).

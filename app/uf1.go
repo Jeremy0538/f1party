@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -189,18 +188,4 @@ func uf1Open(layoutID, contentID string) error {
 		return nil // before a session starts the viewer keeps waiting for it, and carries on by itself
 	}
 	return err
-}
-
-// uf1WithSetup opens the layout that belongs to a MultiViewer setup, if any (in the background: the
-// setup's own windows are open already).
-func uf1WithSetup(setup, contentID string) {
-	id := uf1LayoutFor(setup)
-	if id == "" || !uf1Installed() {
-		return
-	}
-	go func() {
-		if err := uf1Open(id, contentID); err != nil {
-			log.Printf("ultimate f1 viewer: %v", err)
-		}
-	}()
 }

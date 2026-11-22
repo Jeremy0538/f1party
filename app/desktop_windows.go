@@ -79,6 +79,7 @@ const (
 	vkLeft      = 0x25
 	vkRight     = 0x27
 	vkD         = 0x44
+	vkF4        = 0x73
 	keyExtended = 0x1
 	keyUp       = 0x2
 )
@@ -161,5 +162,36 @@ func newDesktop(name string, had int) {
 			time.Sleep(300 * time.Millisecond)
 			return
 		}
+	}
+}
+
+// leaveF1Desktop (Close F1): back to the first desktop; with remove, the watching desktop is removed when it
+// shows (Ctrl+Win+F4, as a person would: anything still on it moves to the desktop next to it, nothing closes).
+func leaveF1Desktop(remove bool) {
+	c := loadConfig()
+	if c.DesktopOff {
+		return
+	}
+	name := strings.TrimSpace(c.DesktopName)
+	if name == "" {
+		name = f1DesktopName
+	}
+	ids, cur := desktops()
+	if len(ids) < 2 || cur >= len(ids) {
+		return
+	}
+	if remove && strings.EqualFold(strings.TrimSpace(desktopName(ids[cur])), name) {
+		keyEvent(vkLControl, 0)
+		keyEvent(vkLWin, keyExtended)
+		keyEvent(vkF4, 0)
+		keyEvent(vkF4, keyUp)
+		keyEvent(vkLWin, keyExtended|keyUp)
+		keyEvent(vkLControl, keyUp)
+		time.Sleep(500 * time.Millisecond)
+		ids, cur = desktops()
+	}
+	for i := 0; i < cur; i++ {
+		ctrlWin(vkLeft)
+		time.Sleep(350 * time.Millisecond)
 	}
 }

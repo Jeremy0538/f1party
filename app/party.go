@@ -893,9 +893,9 @@ func (p *Party) guestLoop(ctx context.Context) {
 		if feed == nil && !busy && setup != "" && setup != setupStreamDeck && setupFor != host.ContentID && mvDebugReady() {
 			// the chosen MultiViewer setup opens the host's session with all its windows (tried once)
 			setupFor = host.ContentID
-			status = "Opening your setup “" + setup + "”…"
+			status = "Opening your setup “" + resolveSetup(setup, host.SessionType) + "”…"
 			report()
-			if err := mvOpenSetup(setup, host.ContentID); err != nil {
+			if err := openChosenSetup(setup, host.ContentID, host.SessionType); err != nil {
 				log.Printf("setup %q: %v", setup, err)
 				status = "Setup didn't open (" + err.Error() + "), opening F1 Live"
 				report()

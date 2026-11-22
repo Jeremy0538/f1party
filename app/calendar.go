@@ -550,7 +550,7 @@ func (p *Party) openCalSession(s CalSession, contentID string) error {
 		return nil // open already
 	}
 	if setup != "" && mvDebugReady() {
-		if err := mvOpenSetup(setup, contentID); err == nil {
+		if err := openChosenSetup(setup, contentID, s.Type+" "+s.Name); err == nil {
 			return nil
 		}
 	}
