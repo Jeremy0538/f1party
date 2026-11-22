@@ -583,7 +583,6 @@
 				<div class="me">
 					<span class="av" id="asav"></span>
 					<div class="metext"><span class="melbl">Your name</span><b id="asname">…</b></div>
-					<button id="namechange" title="Others see this name in the party and in invites">Edit name</button>
 				</div>
 				<section class="pcard startcard">
 					<span class="boxtitle">Host</span>
@@ -777,7 +776,6 @@ let myCode = "", mode = "idle", savedName = "", webhookSet = false, pluginDownlo
 // your name lives in Settings → General; host and join use the saved one
 $("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", {}); refresh(); } catch (e) { $("err").textContent = e.message; } };
 $("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
-$("namechange").onclick = () => { setTab = "party"; openSettings(); };
 // the join code boxes: one character each, on to the next as you type, back with Backspace, paste fills them all
 (() => {
 	const boxes = [...document.querySelectorAll("#codeboxes .cbox")];
