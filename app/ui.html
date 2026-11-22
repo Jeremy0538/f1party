@@ -78,6 +78,9 @@
 
 	.body { display:grid; grid-template-columns:1fr 380px; min-height:0; border-top:1px solid var(--line); }
 	main { padding:22px 26px; min-height:0; display:flex; flex-direction:column; }
+	.body.solo { grid-template-columns:1fr; }
+	.body.solo aside { display:none; }
+	.body.solo main > div { margin:0 auto; }
 	/* a wide window: the left column keeps to the left edge at a readable width, the room goes in between */
 	main > div { width:100%; max-width:600px; }
 	/* too much to fit: the page scrolls inside its own column (a thin bar shows only when needed) */
@@ -1380,6 +1383,8 @@ async function refreshSession() {
 	$("mvclose").classList.toggle("hidden", !(mode === "idle" && !v && mvWasRunning));
 	// not in a party: the Setup box only while MultiViewer runs (to see it and close it)
 	$("setupbox").classList.toggle("hidden", mode === "idle" && !v && !mvWasRunning);
+	// nothing on the right: one column, no split
+	document.querySelector(".body").classList.toggle("solo", $("sess").classList.contains("hidden") && $("setupbox").classList.contains("hidden"));
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v && !v.stopped ? "Change" : "Select";
 	$("sesschange").title = v ? "Pick another session in the calendar: the whole party switches to it" : "Pick a session in the calendar to watch together";
