@@ -40,8 +40,8 @@ Also in the app:
   through the relay's join page). The installer and `app/install-windows.ps1` register the link type.
 - **Discord status**: your Discord profile shows the session you watch and, for guests, whose party; with a
   "Join party" button when join links work. Needs the F1 Party Discord application id (`discordAppID`).
-- **Closing quits**: the X closes F1 Party completely (you leave the party). While it runs, Windows also shows
-  an icon by the clock (Open / Quit). Starting F1 Party again brings back the window.
+- **Keeps running**: on Windows, closing the window keeps the party going in the tray (icon by the clock: Open /
+  Quit). Starting F1 Party again brings the window back.
 - **Updates**: a "Update to x.y" button appears when a newer release is out. On Windows it installs the new
   version itself (checked against the release's `checksums.txt`) and restarts; right after starting, outside a
   party, it updates on its own. Elsewhere the button opens the release page.
@@ -60,7 +60,7 @@ Also in the app:
   loads), or **Plan** a party: a live session at its start, or a replay at a time you pick. Planning posts an
   announcement to Discord (with the time in everyone's own time zone and the party code), a reminder 15 minutes
   before, and at the time the app hosts the party with that code and opens the session. F1 Party has to be
-  running then.
+  running then (the tray is enough).
 - **Notifications** (the bell at the top of the calendar): which sessions (races only, races and qualifyings,
   every session, or single sessions with their own bell) and when (1 day, 3 h, 1 h, 30 min, 15 min, 5 min
   before, at the start; any combination). Planned parties notify too. Clicking one opens F1 Party.

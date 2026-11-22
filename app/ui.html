@@ -702,7 +702,7 @@ async function refreshCal() {
 	$("notifbtn").innerHTML = bellSVG(anyOn && (d.leads || []).length ? "currentColor" : "none");
 	if (document.activeElement !== $("notifymode")) $("notifymode").value = d.notify || "";
 	renderLeads(d.leads || []);
-	$("calfoot").textContent = "Single sessions: the bell next to them. F1 Party has to be running.";
+	$("calfoot").textContent = "Single sessions: the bell next to them. F1 Party has to be running (the tray is enough).";
 }
 // When notifications come: any of these moments before the start, several at once.
 const LEADS = [[1440, "1 day"], [180, "3 h"], [60, "1 h"], [30, "30 min"], [15, "15 min"], [5, "5 min"], [0, "At start"]];
