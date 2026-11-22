@@ -110,8 +110,11 @@
 	.codechars span, input.cbox { width:40px; height:48px; flex:none; display:grid; place-items:center; padding:0; border-radius:8px;
 		border:1px solid var(--line-2); background:#0f1114; font:700 24px/1 var(--num); text-align:center; text-transform:uppercase; color:var(--text); }
 	.codechars.big span { width:44px; height:54px; font-size:28px; user-select:all; }
-	.joinrow { align-items:center; gap:10px; }
-	.joinrow #join { height:48px; flex:1; }
+	.codechars.fill { gap:8px; margin-top:10px; }
+	.codechars.fill input.cbox { flex:1; width:auto; min-width:0; height:58px; font-size:28px; }
+	.startcard .hint { margin:4px 0 0; }
+	.startcard button.wide { width:100%; height:44px; margin-top:12px; }
+	#start .lead b { color:var(--text); }
 
 	/* in a party */
 	#party { display:flex; flex-direction:column; min-height:0; height:100%; }
@@ -507,18 +510,21 @@
 		<main>
 			<div id="start">
 				<h1>Watch together</h1>
-				<p class="lead">Host a party and share the code, or join a friend's.</p>
-				<label class="label" for="name">Your name</label>
-				<input id="name" maxlength="24" placeholder="Name">
-				<button class="primary" id="host" style="width:100%; margin-top:12px">Host a party</button>
-				<div class="or">or join</div>
-				<div class="row joinrow">
-					<div class="codechars" id="codeboxes" role="group" aria-label="Party code">
+				<p class="lead">You watch as <b id="asname">…</b> · <button class="link" id="namechange">Change</button></p>
+				<section class="pcard startcard">
+					<span class="boxtitle">Host</span>
+					<p class="hint">Start a party and share its code with your friends.</p>
+					<button class="primary wide" id="host">Host a party</button>
+				</section>
+				<section class="pcard startcard">
+					<span class="boxtitle">Join</span>
+					<p class="hint">Fill in the code a friend sent you.</p>
+					<div class="codechars fill" id="codeboxes" role="group" aria-label="Party code">
 						<input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 1"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 2"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 3"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 4"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 5">
 					</div>
 					<input type="hidden" id="code">
-					<button id="join">Join</button>
-				</div>
+					<button class="wide" id="join">Join</button>
+				</section>
 				<div class="error" id="err"></div>
 			</div>
 
@@ -699,10 +705,12 @@ const flash = (btn, text, ok = true, ms = 1600) => {
 };
 const openURL = (url) => post("/api/openurl", { url });
 const SD = "@streamdeck";
-let myCode = "", mode = "idle", nameFilled = false, webhookSet = false, pluginDownload = "";
+let myCode = "", mode = "idle", savedName = "", webhookSet = false, pluginDownload = "";
 
-$("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", { name: $("name").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
-$("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { name: $("name").value, code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
+// your name lives in Settings → General; host and join use the saved one
+$("host").onclick = async () => { $("err").textContent = ""; try { await post("/api/host", {}); refresh(); } catch (e) { $("err").textContent = e.message; } };
+$("join").onclick = async () => { $("err").textContent = ""; try { await post("/api/join", { code: $("code").value }); refresh(); } catch (e) { $("err").textContent = e.message; } };
+$("namechange").onclick = () => { setTab = "general"; openSettings(); };
 // the join code boxes: one character each, on to the next as you type, back with Backspace, paste fills them all
 (() => {
 	const boxes = [...document.querySelectorAll("#codeboxes .cbox")];
@@ -908,7 +916,7 @@ function renderPeople() {
 	for (const t of d.teams) {
 		const isMod = (id) => id === "me" ? t.owner : !!t.ownerId && id === t.ownerId;
 		const grid = el("div", { className: "mgrid" });
-		const myName = $("name").value || "You";
+		const myName = savedName || "You";
 		const all = [{ id: "me", name: myName, status: null }, ...(t.people || [])]
 			.sort((a, b) => (isMod(b.id) ? 1 : 0) - (isMod(a.id) ? 1 : 0) || (b.status ? 1 : 0) - (a.status ? 1 : 0));
 		for (const m of all) {
@@ -1150,7 +1158,7 @@ async function refresh() {
 	let s;
 	try { s = await (await fetch("/api/status")).json(); }
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
-	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
+	savedName = s.name || ""; $("asname").textContent = savedName || "Guest";
 	$("ver").textContent = s.version;
 	welcome(s.welcome);
 	if (s.open === "cal") showTab("cal");
@@ -1343,6 +1351,9 @@ async function openSettings(opts = {}) {
 
 	const tabs = {
 		general: ["General", el("div", {},
+			group("You",
+				row("Your name", text("name", c.name || "", { maxLength: 24, placeholder: "Name", style: "width:180px" })),
+				hint("Others see this name in the party and in invites.")),
 			group("Apps",
 				uf1Switch,
 				hint(c.uf1 ? "Optional: next to MultiViewer for flag bars, battle mode and more." : "Ultimate F1 Viewer isn't installed on this computer, so its options are greyed out. Get it under Downloads.")),

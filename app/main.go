@@ -173,9 +173,9 @@ func main() {
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
 		Width:            880,
-		Height:           530,
+		Height:           660,
 		MinWidth:         680,
-		MinHeight:        420,
+		MinHeight:        480,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
 		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
 			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
@@ -270,7 +270,11 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		s := party.Snapshot()
-		s.Welcome = welcomeFor(loadConfig())
+		cfg := loadConfig()
+		s.Welcome = welcomeFor(cfg)
+		if s.Mode == "idle" {
+			s.Name = cfg.Name // the name from Settings (shown on the start screen)
+		}
 		// open: a tab the window should show once (the Stream Deck's Start session asks for the calendar)
 		open, _ := uiOpen.Swap("").(string)
 		writeJSON(w, struct {
@@ -286,6 +290,10 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/host", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Name string }
 		json.NewDecoder(r.Body).Decode(&in)
+		// the name from Settings, unless one is sent (older windows)
+		if strings.TrimSpace(in.Name) == "" {
+			in.Name = loadConfig().Name
+		}
 		name := cleanName(in.Name)
 		updateConfig(func(c *config) { c.Name = name })
 		code := newCode()
@@ -304,6 +312,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		if len(code) < 4 || len(code) > 8 {
 			http.Error(w, "That doesn't look like a party code", 400)
 			return
+		}
+		if strings.TrimSpace(in.Name) == "" {
+			in.Name = loadConfig().Name
 		}
 		name := cleanName(in.Name)
 		updateConfig(func(c *config) { c.Name = name })
