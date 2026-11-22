@@ -58,8 +58,8 @@ var defaultTopTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racin
 var knownTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racing", "Aston Martin", "Alpine", "Williams",
 	"Racing Bulls", "Haas F1 Team", "Audi", "Cadillac"}
 
-// knownDrivers: the grid's drivers (2026) by team, for the Settings tick boxes; the open session's timing
-// adds and corrects them. Code is the three letters the timing and MultiViewer use.
+// knownDrivers: the grid's drivers (2026) by team: the Settings list when there's no line-up from the latest
+// session yet (see lineup.go). Code is the three letters the timing and MultiViewer use.
 type driverInfo struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
@@ -75,15 +75,27 @@ var knownDrivers = []driverInfo{
 	{"GAS", "Gasly", "Alpine"}, {"COL", "Colapinto", "Alpine"},
 	{"ALB", "Albon", "Williams"}, {"SAI", "Sainz", "Williams"},
 	{"LAW", "Lawson", "Racing Bulls"}, {"LIN", "Lindblad", "Racing Bulls"},
-	{"OCO", "Ocon", "Haas F1 Team"}, {"BEA", "Bearman", "Haas F1 Team"},
+	{"CAM", "Camara", "Haas F1 Team"}, {"BEA", "Bearman", "Haas F1 Team"},
 	{"HUL", "Hülkenberg", "Audi"}, {"BOR", "Bortoleto", "Audi"},
 	{"PER", "Pérez", "Cadillac"}, {"BOT", "Bottas", "Cadillac"},
 }
 
-// allDrivers: the known drivers, with the open session's timing on top (a new driver, a driver who moved
-// team) and the chosen ones that are in neither.
+// allDrivers: the line-up the Settings show: the open session's (also an older season's) while one is open,
+// else the latest session's, else the built-in one. Chosen drivers who aren't in it come last, without a
+// team (the Settings put them under Other drivers), so they can be kept for older sessions or unticked.
 func allDrivers() []driverInfo {
-	out := append([]driverInfo{}, knownDrivers...)
+	var out []driverInfo
+	if t, ok := timingNow(); ok && len(t.DriverList) >= 10 {
+		for _, d := range t.DriverList {
+			if d.Tla != "" {
+				out = append(out, driverInfo{strings.ToUpper(d.Tla), d.LastName, d.TeamName})
+			}
+		}
+	} else if l := savedLineup(); len(l.Drivers) >= 10 {
+		out = append(out, l.Drivers...)
+	} else {
+		out = append(out, knownDrivers...)
+	}
 	put := func(d driverInfo) {
 		if d.Code == "" {
 			return
@@ -103,11 +115,6 @@ func allDrivers() []driverInfo {
 			d.Name = d.Code
 		}
 		out = append(out, d)
-	}
-	if t, ok := timingNow(); ok {
-		for _, d := range t.DriverList {
-			put(driverInfo{strings.ToUpper(d.Tla), d.LastName, d.TeamName})
-		}
 	}
 	for _, code := range keepDrivers() {
 		put(driverInfo{Code: code}) // only adds one that's in neither list; never renames
@@ -151,6 +158,9 @@ func allTeams() []string {
 		for _, d := range t.DriverList {
 			add(d.TeamName)
 		}
+	}
+	for _, d := range savedLineup().Drivers {
+		add(d.Team)
 	}
 	for _, t := range topTeams() {
 		add(t)
@@ -372,8 +382,9 @@ type timing struct {
 	} `json:"TimingData"`
 	DriverList map[string]struct {
 		TeamName string `json:"TeamName"`
-		Tla      string `json:"Tla"`
-		LastName string `json:"LastName"`
+		Tla        string `json:"Tla"`
+		LastName   string `json:"LastName"`
+		TeamColour string `json:"TeamColour"`
 	} `json:"DriverList"`
 	ChampionshipPrediction struct {
 		Drivers map[string]struct {

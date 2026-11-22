@@ -48,9 +48,14 @@
 	.setmaster { margin:4px 0; padding:8px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.03); }
 	.setmaster label { font-weight:700; font-size:13.5px; }
 	.setsub { margin:6px 0 0 14px; padding-left:12px; border-left:2px solid var(--line-2); }
-	.teamgrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2px 12px; }
-	.teamgrid label { display:flex; align-items:center; gap:8px; min-height:28px; cursor:pointer; font-size:12.5px; }
-	.teamgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
+	/* Fixed onboards: a card per team in its colour */
+	.tcards, .dcards { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin-top:4px; }
+	.tcard { display:flex; align-items:center; gap:8px; min-height:34px; padding:0 10px; border:1px solid var(--line-2); border-left:3px solid var(--tc); border-radius:8px; background:rgba(255,255,255,.02); cursor:pointer; font-size:12.5px; }
+	.dcard { padding:7px 10px 5px; border:1px solid var(--line-2); border-top:3px solid var(--tc); border-radius:8px; background:rgba(255,255,255,.02); }
+	.dcard.other { border-top-style:dashed; }
+	.dteam { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.dcard label { display:flex; align-items:center; gap:8px; min-height:25px; cursor:pointer; font-size:12.5px; }
+	.tcard input, .dcard input { width:15px; height:15px; accent-color:var(--red); margin:0; flex:none; }
 	/* a two-way switch: Teams | Drivers */
 
 	/* battle mode: a small table of its windows */
@@ -1474,24 +1479,37 @@ async function openSettings(opts = {}) {
 			return box;
 		})();
 	tabs.drivers[1] = (() => {
-			// onboards that always stay: whole teams or single drivers, one or the other (a switch); only the
-			// chosen list shows. The rest of the setup's onboards follow the order.
+			// Fixed onboards: whole teams or single drivers, one or the other (a switch); only the chosen list
+			// shows. Each team in its colour; drivers in a card per team, team mates together. The line-up is
+			// the open session's, else the latest session's; chosen drivers who aren't in it: Other drivers.
 			const keep = new Set((c.topTeams || []).map((t) => t.toLowerCase()));
 			const keepD = new Set((c.keepDrivers || []).map((d) => d.toUpperCase()));
-			const teamGrid = el("div", { className: "teamgrid" }), driverGrid = el("div", { className: "teamgrid" });
+			const colours = c.teamColours || {};
+			const colourOf = (t) => colours[t] || Object.entries(colours).find(([k]) => k.toLowerCase() === (t || "").toLowerCase())?.[1] || "#5a5f68";
+			const teamGrid = el("div", { className: "tcards" }), driverGrid = el("div", { className: "dcards" });
 			const boxes = [], dboxes = [];
 			for (const t of c.teams || []) {
 				const i = el("input", { type: "checkbox", checked: keep.has(t.toLowerCase()) });
 				boxes.push([t, i]);
-				teamGrid.append(el("label", {}, i, el("span", { textContent: t })));
+				const card = el("label", { className: "tcard" }, i, el("span", { textContent: t }));
+				card.style.setProperty("--tc", colourOf(t));
+				teamGrid.append(card);
 			}
-			// drivers in team order, so team mates sit next to each other
+			// the drivers' teams in the teams' order (a team only the open session has goes after them), then
+			// Other drivers
 			const order = (c.teams || []).map((t) => t.toLowerCase());
-			const rank = (d) => { const k = order.indexOf((d.team || "").toLowerCase()); return k < 0 ? order.length : k; };
-			for (const d of [...(c.drivers || [])].sort((a, b) => rank(a) - rank(b))) {
-				const i = el("input", { type: "checkbox", checked: keepD.has(d.code) });
-				dboxes.push([d.code, i]);
-				driverGrid.append(el("label", { title: d.team || "" }, i, el("span", { textContent: d.name })));
+			const byTeam = new Map();
+			for (const d of c.drivers || []) { const k = d.team || ""; if (!byTeam.has(k)) byTeam.set(k, []); byTeam.get(k).push(d); }
+			const rank = (t) => { if (!t) return 1e9; const k = order.indexOf(t.toLowerCase()); return k < 0 ? 1e6 : k; };
+			for (const t of [...byTeam.keys()].sort((a, b) => rank(a) - rank(b))) {
+				const card = el("div", { className: "dcard" + (t ? "" : " other") }, el("div", { className: "dteam", textContent: t || "Other drivers" }));
+				card.style.setProperty("--tc", t ? colourOf(t) : "#3a3f48");
+				for (const d of byTeam.get(t)) {
+					const i = el("input", { type: "checkbox", checked: keepD.has(d.code) });
+					dboxes.push([d.code, i]);
+					card.append(el("label", { title: d.code }, i, el("span", { textContent: d.name })));
+				}
+				driverGrid.append(card);
 			}
 			let by = c.keepBy === "drivers" ? "drivers" : "teams";
 			const seg = el("div", { className: "seg", role: "radiogroup" });
@@ -1508,11 +1526,11 @@ async function openSettings(opts = {}) {
 			ids.keepDrivers = () => dboxes.filter(([, i]) => i.checked).map(([d]) => d);
 			return el("div", {},
 				group("Best of the rest",
-					hint("Your setup has onboards that always stay (below), and other onboards that F1 Party fills with the best-placed of all other drivers."),
+					hint("Your setup has fixed onboards (below), and other onboards that F1 Party fills with the best-placed of all other drivers."),
 					check("restOn", c.restOn, "Fill those onboards when a setup opens"),
 					check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits.")),
-				group("Onboards that always stay",
-					hint("Choose whole teams or single drivers; the switch shows one list at a time."),
+				group("Fixed onboards",
+					hint("These onboards stay in your setup; best of the rest fills the others. Choose whole teams or single drivers."),
 					el("div", { className: "setrow" }, seg),
 					teamGrid, driverGrid),
 				uf1((() => {

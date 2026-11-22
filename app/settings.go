@@ -12,6 +12,7 @@ import (
 
 // settingsView: everything the Settings tabs show.
 func settingsView() map[string]any {
+	refreshLineup() // the latest session's line-up for Fixed onboards (quick: only every 6 hours)
 	c := loadConfig()
 	name := c.DesktopName
 	if name == "" {
@@ -35,7 +36,7 @@ func settingsView() map[string]any {
 		"fitTiming": c.FitTiming,
 		// Drivers
 		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(), "teams": allTeams(),
-		"keepDrivers": keepDrivers(), "drivers": allDrivers(), "keepBy": keepBy(),
+		"keepDrivers": keepDrivers(), "drivers": allDrivers(), "keepBy": keepBy(), "teamColours": teamColours(),
 		"battleOn": c.BattleOn, "battleLaps": battleLaps(), "battleRight": c.BattleRight,
 		"battleMax1": bm1, "battleMax2": bm2,
 		// Close F1

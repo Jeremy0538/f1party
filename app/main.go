@@ -58,6 +58,7 @@ func main() {
 	go rememberParty(party)
 	go party.runPlans()
 	go followMainStream()
+	go refreshLineup()
 	go func() { // friend requests in the party
 		for range time.Tick(2 * time.Second) {
 			if party.Snapshot().Mode != "idle" {
