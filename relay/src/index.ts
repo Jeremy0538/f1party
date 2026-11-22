@@ -225,7 +225,7 @@ function sameKey(a: string, b: string): boolean {
 }
 
 async function postToDiscord(req: Request, env: Env, origin: string): Promise<Response> {
-	if (!env.GROUP_KEY || !env.DISCORD_WEBHOOK) return new Response("Group invites aren't set up on this relay", { status: 503 });
+	if (!env.GROUP_KEY || !env.DISCORD_WEBHOOK) return new Response("Teams aren't set up on this relay", { status: 503 });
 	let body: any;
 	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
 	if (typeof body?.key !== "string" || !sameKey(body.key, env.GROUP_KEY)) return new Response("Wrong group key", { status: 403 });
@@ -269,7 +269,7 @@ async function postToDiscord(req: Request, env: Env, origin: string): Promise<Re
 const groupRoom = (env: Env) => env.ROOMS.get(env.ROOMS.idFromName("__group"));
 
 async function groupInvite(req: Request, env: Env, origin: string): Promise<Response> {
-	if (!env.GROUP_KEY) return new Response("Group invites aren't set up on this relay", { status: 503 });
+	if (!env.GROUP_KEY) return new Response("Teams aren't set up on this relay", { status: 503 });
 	let body: any;
 	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
 	if (typeof body?.key !== "string" || !sameKey(body.key, env.GROUP_KEY)) return new Response("Wrong group key", { status: 403 });
@@ -280,7 +280,7 @@ async function groupInvite(req: Request, env: Env, origin: string): Promise<Resp
 }
 
 async function groupRedeem(req: Request, env: Env): Promise<Response> {
-	if (!env.GROUP_KEY) return new Response("Group invites aren't set up on this relay", { status: 503 });
+	if (!env.GROUP_KEY) return new Response("Teams aren't set up on this relay", { status: 503 });
 	let body: any;
 	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
 	const token = String(body?.token || "");
@@ -293,15 +293,15 @@ async function groupRedeem(req: Request, env: Env): Promise<Response> {
 function groupPage(token: string): Response {
 	const app = `f1party://group/${token}`;
 	const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Join the F1 Party group</title>
-<meta property="og:title" content="Join our F1 Party group">
-<meta property="og:description" content="One click sets up F1 Party's Discord invites for our group.">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Join our F1 Party team</title>
+<meta property="og:title" content="Join our F1 Party team">
+<meta property="og:description" content="One click puts you in our team: party invites go to our Discord channel.">
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0c0d10;color:#eef0f3;font:15px/1.5 system-ui,sans-serif}
 main{max-width:400px;padding:24px;text-align:center}h1{font-size:22px;margin:0 0 10px}
 a.btn{display:inline-block;background:#e10600;color:#fff;text-decoration:none;font-weight:600;padding:11px 18px;border-radius:7px;margin:8px 0}
 p{color:#8a909c}a{color:#ff7a72}</style></head><body><main>
-<h1>Join the F1 Party group</h1>
-<p>This sets up Discord invites in F1 Party for our group. You don't have to paste anything.</p>
+<h1>Join our F1 Party team</h1>
+<p>Your team is our group of friends: every party invite goes to our Discord channel. One click and you're in, nothing to paste.</p>
 <a class="btn" href="${app}">Open in F1 Party</a>
 <p>Nothing happens? Get F1 Party from <a href="https://github.com/Jeremy0538/f1party/releases/latest">GitHub</a>, start it once, then click the button again.</p>
 <p>The link works for 7 days.</p>

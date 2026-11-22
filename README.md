@@ -30,12 +30,14 @@ Also in the app:
   the setup and the viewer's layout. F1 Party waits until it is done, then syncs. Without the plugin the app
   shows a download link.
 - **Copy code**: puts the party code on the clipboard, ready to paste in a chat.
-- **Discord invites**: paste a Discord webhook URL once (Server settings → Integrations → Webhooks); **Invite on
+- **Own Discord channel**: no team? Paste a Discord webhook URL once (Server settings → Integrations → Webhooks); **Invite on
   Discord** then posts the party code to that channel. The URL stays in this computer's settings.
-  A group can share one **group key** (starts with `f1p_`) instead: paste it in the same field and invites go
-  to the group's channel through the relay, which keeps the webhook as a secret (`wrangler secret put
-  DISCORD_WEBHOOK` and `GROUP_KEY`). The relay only posts ordinary invites, plans and reminders for real
-  parties, at most one of each per party every 2 minutes and 30 per hour in total.
+- **Team** (Friends tab): a party is one session you watch together with a 5-letter code; your team is
+  your group of friends with one shared Discord channel. Anyone in the team clicks **Invite a friend to the
+  team** to copy a team link (works 7 days, 5 times); opening it puts F1 Party in the team, nothing to paste.
+  The team key (starts with `f1p_`) can also be pasted by hand. Invites go through the relay, which keeps the
+  channel's webhook secret (`wrangler secret put DISCORD_WEBHOOK` and `GROUP_KEY`) and only posts ordinary
+  invites, plans and reminders for real parties (one of each per party every 2 minutes, 30 an hour in total).
 - **Stream Deck Sync key** (F1 Race Control 1.15+): press = sync (a guest goes to the host first); hold 1 s =
   host a party and post the Discord invite. F1 Party listens on `127.0.0.1:47821` for this (`/control/status`,
   `/control/sync`, `/control/host`) and refuses web pages. `F1Party --host` does the same from a shortcut.

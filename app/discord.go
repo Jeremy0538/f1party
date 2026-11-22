@@ -66,7 +66,7 @@ func relayBase() string {
 func postGroup(key string, facts map[string]any) error {
 	base := relayBase()
 	if base == "" {
-		return errors.New("no relay for group invites")
+		return errors.New("no relay for team invites")
 	}
 	facts["key"] = key
 	body, _ := json.Marshal(facts)
@@ -133,7 +133,7 @@ func redeemGroupInvite(token string) error {
 		return err
 	}
 	if !isGroupKey(r.Key) {
-		return errors.New("the relay sent no group key")
+		return errors.New("the relay sent no team key")
 	}
 	updateConfig(func(c *config) { c.Webhook = r.Key })
 	return nil
@@ -143,7 +143,7 @@ func redeemGroupInvite(token string) error {
 func newGroupInvite() (string, error) {
 	key := loadConfig().Webhook
 	if !isGroupKey(key) {
-		return "", errors.New("join the group first")
+		return "", errors.New("join a team first")
 	}
 	var r struct{ URL string }
 	if err := relayJSON("/group/invite", map[string]string{"key": key}, &r); err != nil {
@@ -155,7 +155,7 @@ func newGroupInvite() (string, error) {
 // sendInvite posts the party code (and what the host is watching) to the Discord channel.
 func sendInvite(webhook, name, code, watching string) error {
 	if webhook == "" {
-		return errors.New("set a Discord webhook first")
+		return errors.New("join a team or set a Discord channel under Friends first")
 	}
 	if isGroupKey(webhook) {
 		return postGroup(webhook, map[string]any{"kind": "invite", "name": name, "code": code, "title": watching})

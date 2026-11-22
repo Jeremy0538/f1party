@@ -137,9 +137,9 @@ func main() {
 		for _, a := range args {
 			if t := groupToken(a); t != "" {
 				if err := redeemGroupInvite(t); err != nil {
-					party.SetNote("Group invite: " + err.Error())
+					party.SetNote("Team link: " + err.Error())
 				} else {
-					party.SetNote("You're in the group: Discord invites are set up")
+					party.SetNote("You joined the team: party invites now go to the team's Discord channel")
 				}
 				return true
 			}
@@ -340,7 +340,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		json.NewDecoder(r.Body).Decode(&in)
 		in.Webhook = strings.TrimSpace(in.Webhook)
 		if in.Webhook != "" && !validDiscordDest(in.Webhook) {
-			http.Error(w, "That isn't a Discord webhook URL (https://discord.com/api/webhooks/…) or a group key (f1p_…)", 400)
+			http.Error(w, "That isn't a team key (f1p_…) or a Discord webhook URL (https://discord.com/api/webhooks/…)", 400)
 			return
 		}
 		updateConfig(func(c *config) { c.Webhook = in.Webhook })
