@@ -156,3 +156,11 @@ invites show the one-click link (the app checks for it and leaves the link out u
 
     cd relay && npx wrangler login && npx wrangler deploy     # route jeremyklootwijk.nl/f1party/*
 
+
+## Contributing
+Collaborators: clone this repo, work on a branch and open a pull request against master.
+Everyone else: fork the repo, push to your fork and open a pull request.
+Please test a change with the local relay (see Test locally) before opening the pull request.
+
+## License
+MIT, see LICENSE.
