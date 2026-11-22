@@ -96,10 +96,11 @@ func uf1Layouts() []UF1Layout {
 // uf1LayoutFor: the layout chosen for a MultiViewer setup: the saved choice ("-" = none), else the layout
 // with the same name, else none.
 func uf1LayoutFor(setup string) string {
-	if setup == "" || setup == setupStreamDeck {
+	c := loadConfig()
+	if setup == "" || setup == setupStreamDeck || c.Uf1Off {
 		return ""
 	}
-	if id, ok := loadConfig().Uf1For[setup]; ok {
+	if id, ok := c.Uf1For[setup]; ok {
 		if id == "-" {
 			return ""
 		}

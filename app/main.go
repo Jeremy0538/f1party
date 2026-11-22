@@ -283,7 +283,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
-			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed()}
+			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed() && !loadConfig().Uf1Off}
 		if out["uf1"] == true {
 			c := loadConfig()
 			out["uf1Layouts"], out["uf1For"], out["uf1Auto"] = uf1Layouts(), c.Uf1For, uf1LayoutFor(party.Setup())
@@ -754,6 +754,7 @@ type config struct {
 	SetupRace     string   `json:"setupRace,omitempty"`     // "" = found by its name
 	SetupQuali    string   `json:"setupQuali,omitempty"`    //
 	SetupPractice string   `json:"setupPractice,omitempty"` //
+	Uf1Off        bool     `json:"uf1Off,omitempty"`        // don't use Ultimate F1 Viewer (even when it's installed)
 	Uf1CloseFirst bool     `json:"uf1CloseFirst,omitempty"` // close the viewer's open windows before its layout opens
 	FitTiming     bool     `json:"fitTiming,omitempty"`     // zoom Live Timing to fill its window
 	RestOn        bool     `json:"restOn,omitempty"`        // best of the rest in the onboards outside the top teams

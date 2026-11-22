@@ -35,7 +35,12 @@
 	.setrow { display:flex; align-items:center; gap:10px; min-height:34px; }
 	.setrow label { display:flex; align-items:center; gap:8px; cursor:pointer; }
 	.setrow input[type=checkbox] { width:15px; height:15px; accent-color:var(--red); margin:0; }
-	.setsec { margin:14px 0 4px; }
+	.setgroup + .setgroup { margin-top:14px; padding-top:12px; border-top:1px solid var(--line-2); }
+	.sethead { display:flex; align-items:center; gap:8px; margin:0 0 6px; font:700 13.5px/1.3 var(--ui); color:var(--text); }
+	.sethead::before { content:""; width:3px; height:13px; border-radius:2px; background:var(--red); flex:none; }
+	.sethint { margin:0 0 6px; }
+	.setoff { opacity:.4; }
+	.setoff label, .setoff select, .setoff input { cursor:not-allowed; }
 	.uf1row { margin-top:8px; gap:8px; }
 	.uf1row .label { margin:0; white-space:nowrap; }
 	/* Start together countdown */
@@ -1047,76 +1052,89 @@ async function refreshSession() {
 	}
 }
 $("sesschange").onclick = () => showTab("calendar");
-// Settings (gear at the top right): tabs per subject. Everything is optional; what isn't available here
-// (Ultimate F1 Viewer not installed, desktops and taskbar outside Windows, Hue without a bridge) says so.
+// Settings (gear at the top right): tabs per subject, groups with a heading and a line between them.
+// Everything is optional. Ultimate F1 Viewer has its own switch; its options are greyed out while it's off
+// or not installed. Desktops, taskbar and window positions are Windows only.
 let setTab = "general";
 $("settingsbtn").onclick = async () => {
 	let c = {}; try { c = await (await fetch("/api/settings")).json(); } catch {}
-	const ids = {};
+	const ids = {}, uf1Parts = [];
+	const win = c.windows !== false;
 	const check = (key, on, text, tip) => { const i = el("input", { type: "checkbox", checked: !!on }); ids[key] = () => i.checked;
-		return el("div", { className: "setrow" }, el("label", { title: tip || "" }, i, el("span", { textContent: text }))); };
+		const r = el("div", { className: "setrow" }, el("label", { title: tip || "" }, i, el("span", { textContent: text }))); r.input = i; return r; };
 	const pick = (key, value, options, tip) => { const sel = el("select", { title: tip || "" }); for (const [v, t] of options) sel.append(new Option(t, v));
-		sel.value = value ?? ""; ids[key] = () => sel.value; return sel; };
+		sel.value = value ?? ""; if (key) ids[key] = () => sel.value; return sel; };
 	const text = (key, value, attrs = {}) => { const i = el("input", { value: value ?? "", autocomplete: "off", ...attrs }); ids[key] = () => i.value; return i; };
 	const row = (label, ...kids) => el("div", { className: "setrow" }, el("span", { className: "setlbl", textContent: label }), ...kids);
-	const hint = (t) => el("p", { className: "hint", textContent: t });
-	const sec = (t) => el("div", { className: "label setsec", textContent: t });
-	const win = c.windows !== false;
+	const hint = (t) => el("p", { className: "hint sethint", textContent: t });
+	// a group: heading + its rows; groups are separated by a line
+	const group = (title, ...kids) => el("section", { className: "setgroup" }, el("h3", { className: "sethead", textContent: title }), ...kids);
+	// parts that need Ultimate F1 Viewer: greyed out while it's off or missing
+	const uf1 = (node) => { uf1Parts.push(node); return node; };
+	const uf1Usable = () => !!c.uf1 && (!uf1Switch || uf1Switch.input.checked);
+	let uf1Switch = null;
+	const syncUf1 = () => { const on = uf1Usable();
+		for (const n of uf1Parts) { n.classList.toggle("setoff", !on); for (const i of n.querySelectorAll("input, select, button")) i.disabled = !on; } };
+
+	uf1Switch = check("uf1On", c.uf1 && c.uf1On !== false, "Use Ultimate F1 Viewer", "Opens its layout with each setup, battle mode and the rest");
+	if (!c.uf1) { uf1Switch.input.disabled = true; uf1Switch.classList.add("setoff"); }
+	uf1Switch.input.addEventListener("change", syncUf1);
 
 	const tabs = {
 		general: ["General", el("div", {},
-			sec("Desktop"),
-			win ? check("desktop", c.desktop, "Open everything on its own desktop", "MultiViewer, setups and Ultimate F1 Viewer open on this virtual desktop; made when it isn't there yet") : hint("Desktops: Windows only."),
-			win ? row("Desktop name", text("desktopName", c.desktopName || "F1", { maxLength: 40, style: "width:120px" })) : null,
-			sec("Taskbar while watching"),
-			win ? row("Taskbar", pick("taskbar", c.taskbar, [["", "Leave it as it is"], ["main", "Only on the main monitor"], ["autohide", "Hide automatically"]])) : hint("Taskbar: Windows only."),
-			win ? hint("Put back as it was when the party or the session ends, or F1 Party closes.") : null,
-			sec("Party"),
-			check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host"))],
+			group("Apps",
+				uf1Switch,
+				hint(c.uf1 ? "Optional: next to MultiViewer for flag bars, battle mode and more." : "Ultimate F1 Viewer isn't installed on this computer, so its options are greyed out. Get it under Downloads.")),
+			group("Desktop",
+				win ? check("desktop", c.desktop, "Open everything on its own desktop", "MultiViewer, setups and Ultimate F1 Viewer open on this virtual desktop; made when it isn't there yet") : hint("Desktops are Windows only."),
+				win ? row("Desktop name", text("desktopName", c.desktopName || "F1", { maxLength: 40, style: "width:140px" })) : null),
+			group("Taskbar while watching",
+				win ? row("Taskbar", pick("taskbar", c.taskbar, [["", "Leave it as it is"], ["main", "Only on the main monitor"], ["autohide", "Hide automatically"]])) : hint("The taskbar setting is Windows only."),
+				win ? hint("Put back as it was when the party or the session ends, or F1 Party closes.") : null),
+			group("Party",
+				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host")))],
 		sessions: ["Sessions", (() => {
 			const setups = c.setups || [], layouts = c.uf1Layouts || [], uf1For = { ...(c.uf1For || {}) };
-			const box = el("div", {}, hint("With \"Automatic per session type\" chosen under MultiViewer, each kind of session opens its own setup. Automatic = the setup with that word in its name."));
-			const uf1Pickers = [];
+			const box = el("div", {}, hint("Used when \"Automatic per session type\" is chosen under MultiViewer. Automatic picks the setup with that word in its name."));
 			for (const [k, label, auto] of [["setupRace", "Race", c.autoRace], ["setupQuali", "Qualifying", c.autoQuali], ["setupPractice", "Practice", c.autoPractice]]) {
-				const setupSel = pick(k, c[k], [["", "Automatic" + (auto ? ": " + auto : " (none found)")], ...setups.map((n) => [n, n])]);
-				box.append(sec(label), row("MultiViewer setup", setupSel));
-				if (c.uf1 && layouts.length) {
-					const l = el("select", {});
-					const fill = () => {
-						const name = setupSel.value || auto || "";
-						l.innerHTML = ""; l.disabled = !name;
-						l.append(new Option("Same name as the setup", ""), new Option("None", "-"));
-						for (const x of layouts) l.append(new Option(x.name, x.id));
-						l.value = name && uf1For[name] !== undefined ? uf1For[name] : "";
-					};
-					l.onchange = () => { const name = setupSel.value || auto || ""; if (!name) return; if (l.value) uf1For[name] = l.value; else delete uf1For[name]; };
-					setupSel.addEventListener("change", fill); fill(); uf1Pickers.push(l);
-					box.append(row("Ultimate F1 Viewer", l));
-				}
+				const setupSel = pick(k, c[k], [["", "Automatic" + (auto ? " (" + auto + ")" : ", none found")], ...setups.map((n) => [n, n])]);
+				const l = el("select", {});
+				const fill = () => {
+					const name = setupSel.value || auto || "";
+					l.innerHTML = "";
+					l.append(new Option("Same name as the setup", ""), new Option("None", "-"));
+					for (const x of layouts) l.append(new Option(x.name, x.id));
+					l.value = name && uf1For[name] !== undefined ? uf1For[name] : "";
+				};
+				l.onchange = () => { const name = setupSel.value || auto || ""; if (!name) return; if (l.value) uf1For[name] = l.value; else delete uf1For[name]; };
+				setupSel.addEventListener("change", fill); fill();
+				box.append(group(label, row("MultiViewer setup", setupSel), uf1(row("Ultimate F1 Viewer layout", l))));
 			}
 			ids.uf1For = () => uf1For;
-			box.append(sec("Opening"),
-				c.uf1 ? check("uf1CloseFirst", c.uf1CloseFirst, "Close the open Ultimate F1 Viewer windows first") : hint("Ultimate F1 Viewer isn't installed: its layouts are skipped (optional)."),
-				check("fitTiming", c.fitTiming, "Fit Live Timing to its window", "Zooms the Live Timing rows to the bottom of the window (at most 40% larger)"));
+			box.append(group("While opening",
+				check("fitTiming", c.fitTiming, "Fit Live Timing to its window", "Zooms the Live Timing rows to the bottom of the window (at most 40% larger)"),
+				uf1(check("uf1CloseFirst", c.uf1CloseFirst, "Close the open Ultimate F1 Viewer windows first"))));
 			return box;
 		})()],
 		drivers: ["Drivers", el("div", {},
-			sec("Best of the rest"),
-			check("restOn", c.restOn, "Fill the onboards outside the top teams", "The setup's onboards of other teams show the best-placed drivers outside the top teams"),
-			check("restLive", c.restLive, "Keep up during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Quali: only drivers back in the pits."),
-			row("Top teams", text("topTeams", (c.topTeams || []).join(", "), { style: "flex:1", title: "Comma separated, as in the timing" })),
-			sec("Battle mode (Ultimate F1 Viewer)"),
-			c.uf1 ? el("div", {},
-				check("battleOn", c.battleOn, "Pick the drivers automatically (races)"),
+			group("Best of the rest",
+				hint("The setup's onboards of drivers outside the top teams show the best-placed of them."),
+				check("restOn", c.restOn, "Fill these onboards when a setup opens"),
+				check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits."),
+				row("Top teams", text("topTeams", (c.topTeams || []).join(", "), { style: "flex:1", title: "Comma separated, as in the timing" }))),
+			uf1(group("Battle mode",
+				hint("In Ultimate F1 Viewer's battle mode windows, races only."),
+				check("battleOn", c.battleOn, "Pick the drivers automatically", "Left: the top 4 of the race"),
 				row("Right side", pick("battleRight", c.battleRight, [["", "Championship top 3"], ["p5to8", "Positions 5 to 8"]])),
-				check("battleLive", c.battleLive, "Keep up during the race")) : hint("Needs Ultimate F1 Viewer (optional)."))],
-		lights: ["Lights", lightsTab(c, { check, pick, row, hint, sec, ids })],
-		windows: ["Windows", windowsTab(c, { check, row, hint, sec, ids })],
+				check("battleLive", c.battleLive, "Keep them up to date during the race"))))],
+		lights: ["Lights", lightsTab(c, { check, pick, row, hint, group, ids })],
+		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
 		close: ["Close", el("div", {},
-			hint("The Close F1 button (under MultiViewer) closes what's ticked here and puts the lights and taskbar back."),
-			check("closeMv", c.closeMv !== false, "Close MultiViewer"),
-			c.uf1 ? check("closeUf1", c.closeUf1 !== false, "Close Ultimate F1 Viewer") : null,
-			win ? check("closeDesktop", c.closeDesktop, "Remove the watching desktop", "Anything else still on it moves to the desktop next to it") : null)],
+			group("Close F1 closes",
+				hint("The Close F1 button under MultiViewer closes what's ticked here, and puts the lights and the taskbar back."),
+				check("closeMv", c.closeMv !== false, "MultiViewer"),
+				uf1(check("closeUf1", c.closeUf1 !== false, "Ultimate F1 Viewer")),
+				win ? check("closeDesktop", c.closeDesktop, "The watching desktop", "Anything else still on it moves to the desktop next to it") : null))],
 	};
 	const bar = el("div", { className: "settabs", role: "tablist" }), pane = el("div", { className: "setpane" });
 	const show = (k) => { setTab = k; for (const b of bar.children) b.setAttribute("aria-selected", String(b.dataset.k === k));
@@ -1126,10 +1144,12 @@ $("settingsbtn").onclick = async () => {
 		pane.append(node);
 	}
 	show(tabs[setTab] ? setTab : "general");
+	syncUf1();
 	$("modal").classList.add("wide");
 	dialog("Settings", el("div", {}, bar, pane), "Save", async () => {
 		const out = {};
 		for (const [k, f] of Object.entries(ids)) out[k] = f();
+		if (!c.uf1) delete out.uf1On; // not installed: keep what was set
 		if (typeof out.topTeams === "string") out.topTeams = out.topTeams.split(",").map((t) => t.trim()).filter(Boolean);
 		await post("/api/settings", out);
 		refresh(); refreshMV();
@@ -1139,39 +1159,43 @@ $("settingsbtn").onclick = async () => {
 function lightsTab(c, h) {
 	const hue = c.hue;
 	if (!hue) return h.hint("Philips Hue isn't available in this version.");
-	const st = el("p", { className: "hint" });
+	const st = el("p", { className: "hint sethint" });
 	const pairBtn = btn(hue.paired ? "Pair again" : "Pair bridge", "Press the button on your Hue bridge first", async () => {
 		st.textContent = "Looking for your bridge…";
-		try { await post("/api/hue/pair", {}); st.textContent = "Paired. Choose the lights below (save and open Settings again)."; } catch (e) { st.textContent = e.message; }
+		try { await post("/api/hue/pair", {}); st.textContent = "Paired. Save, then open Settings again to choose the lights."; } catch (e) { st.textContent = e.message; }
 	});
 	const testBtn = btn("Test the flags now", "", async () => { st.textContent = ""; try { await post("/api/hue/test", {}); } catch (e) { st.textContent = e.message; } });
 	return el("div", {},
-		h.sec("Bridge"),
-		h.row("Bridge", el("span", { textContent: hue.paired ? (hue.bridge || "paired") : "not paired" }), pairBtn),
-		st,
-		hue.paired ? h.row("Lights", h.pick("hueGroup", hue.group, [["", "Choose a room or zone"], ...(hue.groups || []).map((g) => [g, g])])) : null,
-		h.sec("Flags on the lights"),
-		h.check("hueEnabled", hue.enabled, "Show track flags on the lights"),
-		h.check("hueYellow", hue.showYellow !== false, "Yellow flag"),
-		h.check("hueSafetyCar", hue.showSafetyCar !== false, "Safety Car and VSC (orange)"),
-		h.check("hueVscPulse", hue.vscPulse !== false, "Pulse during VSC"),
-		h.check("hueRed", hue.showRed !== false, "Red flag"),
-		h.check("hueChequered", hue.showChequered !== false, "Chequered flag (white, pulsing)"),
-		hue.paired ? el("div", { className: "setrow" }, testBtn) : null);
+		h.group("Bridge",
+			h.row("Bridge", el("span", { textContent: hue.paired ? (hue.bridge || "paired") : "Not paired yet" }), pairBtn),
+			hue.paired ? null : h.hint("Press the round button on your Hue bridge, then click Pair bridge."),
+			st,
+			hue.paired ? h.row("Lights", h.pick("hueGroup", hue.group, [["", "Choose a room or zone"], ...(hue.groups || []).map((g) => [g, g])])) : null),
+		h.group("Flags on the lights",
+			h.check("hueEnabled", hue.enabled, "Show track flags on the lights"),
+			h.check("hueYellow", hue.showYellow !== false, "Yellow flag"),
+			h.check("hueSafetyCar", hue.showSafetyCar !== false, "Safety Car and VSC (orange)"),
+			h.check("hueVscPulse", hue.vscPulse !== false, "Pulse during VSC"),
+			h.check("hueRed", hue.showRed !== false, "Red flag"),
+			h.check("hueChequered", hue.showChequered !== false, "Chequered flag (white, pulsing)"),
+			hue.paired ? el("div", { className: "setrow" }, testBtn) : null));
 }
 function windowsTab(c, h) {
 	const pl = c.places;
-	if (!pl) return h.hint("Window positions: Windows only.");
-	const st = el("p", { className: "hint" });
+	if (!pl) return h.hint("Window positions are Windows only.");
+	const st = el("p", { className: "hint sethint" });
+	const saved = (yes) => el("span", { className: "hint", style: "margin:0", textContent: yes ? "Saved" : "Not saved yet" });
 	return el("div", {},
-		h.hint("Put MultiViewer and Ultimate F1 Viewer where you want them, then save: they open there from now on."),
-		h.row("MultiViewer", el("span", { className: "hint", style: "margin:0", textContent: pl.mv ? "saved" : "–" })),
-		h.row("Ultimate F1 Viewer", el("span", { className: "hint", style: "margin:0", textContent: pl.uf1 ? "saved" : "–" })),
-		el("div", { className: "setrow" },
-			btn("Save current positions", "", async () => { try { await post("/api/windows/save", {}); st.textContent = "Saved"; } catch (e) { st.textContent = e.message; } }),
-			btn("Tidy up now", "Stack the windows by height and close the seams between them", async () => { try { const r = await post("/api/windows/tidy", {}); st.textContent = (r.moved || 0) + " windows adjusted"; } catch (e) { st.textContent = e.message; } })),
-		st,
-		h.check("placeApps", pl.on !== false, "Put the windows in place when they open"));
+		h.group("Positions",
+			h.hint("Put MultiViewer and Ultimate F1 Viewer where you want them, then save: they open there from now on."),
+			h.row("MultiViewer", saved(pl.mv)),
+			h.uf1(h.row("Ultimate F1 Viewer", saved(pl.uf1))),
+			el("div", { className: "setrow" }, btn("Save current positions", "", async () => { try { await post("/api/windows/save", {}); st.textContent = "Saved"; } catch (e) { st.textContent = e.message; } })),
+			st,
+			h.check("placeApps", pl.on !== false, "Put the windows in place when a setup opens")),
+		h.group("Tidy up",
+			h.hint("Stacks the windows by height (higher in front) and closes the small seams between them."),
+			el("div", { className: "setrow" }, btn("Tidy up now", "", async () => { try { const r = await post("/api/windows/tidy", {}); st.textContent = (r.moved || 0) + " windows adjusted"; } catch (e) { st.textContent = e.message; } }))));
 }
 $("sessend").onclick = async () => {
 	const msg = mode === "host" ? "End this session for everyone? Their streams close too, the party stays."

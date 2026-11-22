@@ -517,7 +517,7 @@ func updateBattle() bool {
 func closeF1() {
 	c := loadConfig()
 	stopLights()
-	if !c.CloseUf1Off {
+	if !c.CloseUf1Off && !c.Uf1Off {
 		killApp(uf1Process)
 	}
 	if !c.CloseMVOff {

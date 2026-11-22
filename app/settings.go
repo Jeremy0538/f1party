@@ -27,7 +27,7 @@ func settingsView() map[string]any {
 		// Sessions
 		"setups": setups, "setupRace": c.SetupRace, "setupQuali": c.SetupQuali, "setupPractice": c.SetupPractice,
 		"autoRace": setupForKind("race"), "autoQuali": setupForKind("quali"), "autoPractice": setupForKind("practice"),
-		"uf1": uf1Installed(), "uf1Layouts": uf1Layouts(), "uf1For": c.Uf1For, "uf1CloseFirst": c.Uf1CloseFirst,
+		"uf1": uf1Installed(), "uf1On": !c.Uf1Off, "uf1Layouts": uf1Layouts(), "uf1For": c.Uf1For, "uf1CloseFirst": c.Uf1CloseFirst,
 		"fitTiming": c.FitTiming,
 		// Drivers
 		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(),
@@ -57,6 +57,7 @@ type settingsIn struct {
 	SetupQuali    *string
 	SetupPractice *string
 	Uf1For        map[string]string
+	Uf1On         *bool
 	Uf1CloseFirst *bool
 	FitTiming     *bool
 	RestOn        *bool
@@ -111,6 +112,7 @@ func applySettings(in settingsIn, party *Party) {
 				}
 			}
 		}
+		set(&c.Uf1Off, in.Uf1On, true)
 		set(&c.Uf1CloseFirst, in.Uf1CloseFirst, false)
 		set(&c.FitTiming, in.FitTiming, false)
 		set(&c.RestOn, in.RestOn, false)
