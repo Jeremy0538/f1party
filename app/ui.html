@@ -107,9 +107,9 @@
 	.or::before, .or::after { content:""; flex:1; height:1px; background:var(--line-2); }
 	/* a party code: one box per character, to read and to fill in */
 	.codechars { display:flex; gap:6px; min-width:0; }
-	.codechars span, input.cbox { width:40px; height:48px; flex:none; display:grid; place-items:center; padding:0; border-radius:8px;
-		border:1px solid var(--line-2); background:#0f1114; font:700 24px/1 var(--num); text-align:center; text-transform:uppercase; color:var(--text); }
-	.codechars.big span { flex:1 1 0; width:auto; max-width:46px; min-width:0; height:54px; font-size:28px; user-select:all; } /* shrink to fit next to the buttons */
+	.codechars span, input.cbox { width:46px; height:54px; flex:none; display:grid; place-items:center; padding:0; border-radius:8px;
+		border:1px solid var(--line-2); background:#0f1114; font:700 28px/1 var(--num); text-align:center; text-transform:uppercase; color:var(--text); }
+	.codechars.big span { user-select:all; }
 	.codechars.fill { gap:8px; margin-top:10px; }
 	/* the box you type in: red edge with a soft glow and a blinking bar at the bottom as the cursor */
 	input.cbox { caret-color:transparent; }
@@ -117,7 +117,7 @@
 		background-image:linear-gradient(var(--red), var(--red)); background-repeat:no-repeat; background-size:40% 3px;
 		background-position:50% calc(100% - 9px); animation:cboxblink 1s steps(1) infinite; }
 	@keyframes cboxblink { 50% { background-size:40% 0; } }
-	.codechars.fill input.cbox { flex:1; width:auto; min-width:0; height:58px; font-size:28px; }
+
 	.startcard .hint { margin:4px 0 0; }
 	.startcard button.wide { width:100%; height:44px; margin-top:12px; }
 	#start .lead b { color:var(--text); }
@@ -412,9 +412,8 @@
 	.ptop #leave { width:26px; height:26px; margin:-4px -6px -4px auto; border-color:transparent; }
 	.ptop #leave svg { width:14px; height:14px; }
 	.ptop #leave:hover { color:var(--bad); border-color:rgba(239,68,68,.4); }
-	.pmid { display:flex; align-items:center; gap:12px; margin-top:16px; }
-	.pmid .codechars { flex:1; }
-	.pbtns { display:flex; gap:8px; flex:none; }
+	.pmid { margin-top:14px; }
+	.pbtns { display:flex; gap:8px; margin-top:12px; }
 	button.ib.big { width:40px; height:40px; border-radius:10px; }
 	button.ib.big svg { width:18px; height:18px; }
 	button.ib.discord { color:#fff; background:#5865f2; border-color:#5865f2; }
@@ -544,8 +543,8 @@
 					<div class="pmid">
 						<div class="codechars big" id="bigcode" aria-label="Party code"></div>
 						<div class="pbtns">
-							<button class="ib big" id="copycode" title="Copy the party code" aria-label="Copy the party code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
-							<button class="ib big discord hidden" id="invite" title="Invite friends, or post the party to a team's Discord channel" aria-label="Invite"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></button>
+							<button class="chip" id="copycode" title="Copy the party code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>Copy code</span></button>
+							<button class="chip discord hidden" id="invite" title="Invite friends, or post the party to a team's Discord channel"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg><span>Invite</span></button>
 						</div>
 					</div>
 					<div class="feedline"><span id="feed"></span><span class="gap" id="gap"></span></div>
@@ -579,6 +578,7 @@
 					<button class="ib" id="teamstart" title="Start a team" aria-label="Start a team" aria-expanded="false"></button>
 				</div>
 				<p class="hint" style="margin:0 0 10px">A team is a group of friends with one Discord channel: anyone in it can post party invites there. A party is one session you watch together, with a 5-letter code.</p>
+				<div class="row" style="margin-bottom:12px"><input id="dchook" class="grow" placeholder="Paste a team link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
 				<div id="teamform" class="team hidden">
 					<div class="row"><input id="teamname" class="grow" placeholder="Team name" maxlength="32" autocomplete="off"></div>
 					<div class="row" style="margin-top:8px"><input id="teamhook" class="grow" placeholder="Discord webhook URL of the team's channel" autocomplete="off" spellcheck="false"><button id="teamcreate">Create</button></div>
@@ -586,8 +586,6 @@
 				</div>
 				<div class="cards" id="tlist"></div>
 				<p class="empty hidden" id="tempty">No teams yet. Start one with the + button, or paste a team link a friend sent you.</p>
-				<div class="row" style="margin-top:12px"><input id="dchook" class="grow" placeholder="Paste a team link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
-				<div class="row hidden" id="ownhook" style="justify-content:space-between; margin-top:10px"><span class="hint" style="margin:0"><span class="dot ok"></span>Your own Discord channel (webhook) is set</span><button class="link" id="ownremove">Remove</button></div>
 				<div class="error" id="dcerr"></div>
 			</div>
 			<div id="cal" class="hidden" role="tabpanel">
@@ -950,7 +948,6 @@ function renderPeople() {
 						: iconBtn("leave", "Leave team " + t.name, () => leaveTeamAsk(t)))),
 			grid));
 	}
-	$("ownhook").classList.toggle("hidden", !d.ownWebhook);
 }
 
 async function leaveTeamAsk(t) {
@@ -1093,7 +1090,6 @@ $("dcsave").onclick = async () => {
 	try { await post("/api/addlink", { link: $("dchook").value }); $("dchook").value = ""; } catch (e) { $("dcerr").textContent = e.message; }
 	refreshDiscord();
 };
-$("ownremove").onclick = async () => { await post("/api/addlink", { link: "" }); refreshDiscord(); };
 $("friendinv").innerHTML = svgOf(ICON.userPlus);
 $("teamstart").innerHTML = svgOf(ICON.plus);
 $("teamstart").onclick = () => {
@@ -1370,7 +1366,9 @@ async function openSettings(opts = {}) {
 				win ? row("Taskbar", pick("taskbar", c.taskbar, [["", "Leave it as it is"], ["main", "Only on the main monitor"], ["autohide", "Hide automatically"]])) : hint("The taskbar setting is Windows only."),
 				win ? hint("Put back as it was when the party or the session ends, or F1 Party closes.") : null),
 			group("Party",
-				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host")))],
+				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host"),
+				people.ownWebhook ? row("Own Discord channel", el("span", { className: "hint", style: "margin:0", textContent: "Set (party invites go there too)" }),
+					btn("Remove", "Stop sending party invites to your own Discord webhook", async (e) => { await post("/api/addlink", { link: "" }); e.target.closest(".setrow")?.remove(); refreshDiscord(); }, "link")) : null))],
 		sessions: ["Sessions", (() => {
 			const setups = c.setups || [], layouts = c.uf1Layouts || [], uf1For = { ...(c.uf1For || {}) };
 			const pl = c.plugin || {};
