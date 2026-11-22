@@ -30,6 +30,12 @@
 	header .update:not(.hidden) ~ .gear { margin-left:8px; }
 	button.gear { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; margin-left:auto; color:var(--dim); border-color:transparent; background:none; }
 	button.gear:hover { color:var(--text); background:#1c1f25; }
+	/* a red dot: something waits there (an update) */
+	button.gear { position:relative; }
+	button.gear.hasdot::after, .settabs button.hasdot::after { content:""; position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); box-shadow:0 0 0 2px var(--bg); }
+	button.gear.hasdot::after { top:4px; right:4px; }
+	.settabs button { position:relative; }
+	.settabs button.hasdot::after { top:5px; right:3px; box-shadow:none; }
 	button.gear svg { width:17px; height:17px; }
 	.inparty { font-size:11px; color:var(--ok); border:1px solid rgba(34,197,94,.4); border-radius:999px; padding:2px 8px; white-space:nowrap; }
 	.setrow { display:flex; align-items:center; gap:10px; min-height:34px; }
@@ -1097,6 +1103,8 @@ async function refresh() {
 	welcome(s.welcome);
 	const up = s.update;
 	$("update").classList.toggle("hidden", !up);
+	$("settingsbtn").classList.toggle("hasdot", !!up);
+	document.querySelector('.settabs button[data-k="updates"]')?.classList.toggle("hasdot", !!up);
 	if (up) {
 		updateURL = up.url; updateAuto = !!up.auto && !up.error;
 		$("update").textContent = up.busy || up.error || "Update to " + up.version;
@@ -1358,6 +1366,7 @@ async function openSettings(opts = {}) {
 		for (const [key, [, node]] of Object.entries(tabs)) node.classList.toggle("hidden", key !== k); };
 	for (const [k, [label, node]] of Object.entries(tabs)) {
 		const b = btn(label, "", () => show(k)); b.dataset.k = k; b.setAttribute("role", "tab"); bar.append(b);
+		if (k === "updates" && $("settingsbtn").classList.contains("hasdot")) { b.classList.add("hasdot"); b.title = "There's an update"; }
 		pane.append(node);
 	}
 	if (opts.tab && tabs[opts.tab]) setTab = opts.tab;
