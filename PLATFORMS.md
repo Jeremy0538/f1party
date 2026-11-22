@@ -45,7 +45,7 @@ the computer you run on.
 - Window placement uses user32 callbacks: make a syscall.NewCallback once at package level, never per call
   (Windows never frees them and a process gets about 2000).
 - Linux-only code (hypr_linux.go, winplace_linux.go) cannot run there: compile it with GOOS=linux go vet.
-- The automatic update (update.go) only exists on Windows; test it with a pre-release, never by pushing to master.
+- The automatic update (update.go) runs on Windows and Linux; test it with a pre-release, never by pushing to master.
 
 ## In the cloud or another headless machine
 

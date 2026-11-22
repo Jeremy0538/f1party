@@ -1074,7 +1074,7 @@ async function refreshSession() {
 $("sesschange").onclick = () => showTab("cal");
 // Settings (gear at the top right): tabs per subject, groups with a heading and a line between them.
 // Everything is optional. Ultimate F1 Viewer has its own switch; its options are greyed out while it's off
-// or not installed. Desktops, taskbar and window positions are Windows only.
+// or not installed. The taskbar is Windows only; desktops and window positions Windows and Hyprland.
 let setTab = "general";
 $("settingsbtn").onclick = async () => {
 	let c = {}; try { c = await (await fetch("/api/settings")).json(); } catch {}
