@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -543,8 +544,62 @@ func f1tvReplay(s CalSession) (string, error) {
 	return "", errors.New("F1 TV has no replay of this session yet")
 }
 
+// f1tvLive: the F1 TV content id of a session while it is live. F1 TV's home page lists the live session
+// (contentSubtype LIVE) under its session key; the replay later keeps the same id.
+func f1tvLive(s CalSession) (string, error) {
+	var page any
+	if err := getJSON("https://f1tv.formula1.com/2.0/R/ENG/WEB_DASH/ALL/PAGE/395/F1_TV_Pro_Annual/2", &page); err != nil {
+		return "", errors.New("F1 TV can't be reached")
+	}
+	if id := f1tvFindLive(page, fmt.Sprint(s.Key)); id != "" {
+		return id, nil
+	}
+	return "", errors.New("F1 TV doesn't show the live session yet: open it in MultiViewer")
+}
+
+// f1tvFindLive walks F1 TV's page for the Formula 1 video of this session that is live (or already a replay).
+func f1tvFindLive(o any, sessionKey string) string {
+	switch v := o.(type) {
+	case map[string]any:
+		if m, ok := v["metadata"].(map[string]any); ok {
+			emf, _ := m["emfAttributes"].(map[string]any)
+			sub, _ := m["contentSubtype"].(string)
+			if emf != nil && jsonText(emf["MeetingSessionKey"]) == sessionKey && emf["Series"] == "FORMULA 1" &&
+				(sub == "LIVE" || sub == "REPLAY") {
+				if id := jsonText(m["contentId"]); id != "" {
+					return id
+				}
+			}
+		}
+		for _, x := range v {
+			if id := f1tvFindLive(x, sessionKey); id != "" {
+				return id
+			}
+		}
+	case []any:
+		for _, x := range v {
+			if id := f1tvFindLive(x, sessionKey); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+// jsonText: a JSON string or number as text ("" for anything else).
+func jsonText(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	}
+	return ""
+}
+
 // openCalSession opens a session in MultiViewer the way you chose under "Open with": the Stream Deck plugin,
-// one of your setups, or just F1 Live. contentID "" = the live session (only the plugin can open that itself).
+// one of your setups, or just F1 Live. contentID "" = the live session (the plugin finds it itself, otherwise
+// F1 TV's home page says which content it is).
 func (p *Party) openCalSession(s CalSession, contentID string) error {
 	setup := p.Setup()
 	if setup == setupStreamDeck {
@@ -557,7 +612,11 @@ func (p *Party) openCalSession(s CalSession, contentID string) error {
 		time.Sleep(time.Second)
 	}
 	if contentID == "" {
-		return errors.New("open the live session in MultiViewer")
+		id, err := f1tvLive(s)
+		if err != nil {
+			return err
+		}
+		contentID = id
 	}
 	if ps, err := players(); err == nil && mainFeed(ps, contentID) != nil {
 		return nil // open already

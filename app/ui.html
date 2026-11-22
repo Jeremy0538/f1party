@@ -1080,6 +1080,7 @@ $("settingsbtn").onclick = async () => {
 	let c = {}; try { c = await (await fetch("/api/settings")).json(); } catch {}
 	const ids = {}, uf1Parts = [];
 	const win = c.windows !== false;
+	const desk = c.desktops !== false;
 	const check = (key, on, text, tip) => { const i = el("input", { type: "checkbox", checked: !!on }); ids[key] = () => i.checked;
 		const r = el("div", { className: "setrow" }, el("label", { title: tip || "" }, i, el("span", { textContent: text }))); r.input = i; return r; };
 	const pick = (key, value, options, tip) => { const sel = el("select", { title: tip || "" }); for (const [v, t] of options) sel.append(new Option(t, v));
@@ -1106,8 +1107,8 @@ $("settingsbtn").onclick = async () => {
 				uf1Switch,
 				hint(c.uf1 ? "Optional: next to MultiViewer for flag bars, battle mode and more." : "Ultimate F1 Viewer isn't installed on this computer, so its options are greyed out. Get it under Downloads.")),
 			group("Desktop",
-				win ? check("desktop", c.desktop, "Open everything on its own desktop", "MultiViewer, setups and Ultimate F1 Viewer open on this virtual desktop; made when it isn't there yet") : hint("Desktops are Windows only."),
-				win ? row("Desktop name", text("desktopName", c.desktopName || "F1", { maxLength: 40, style: "width:140px" })) : null),
+				desk ? check("desktop", c.desktop, "Open everything on its own desktop", win ? "MultiViewer, setups and Ultimate F1 Viewer open on this virtual desktop; made when it isn't there yet" : "MultiViewer, setups and Ultimate F1 Viewer open on this Hyprland workspace") : hint("Desktops work on Windows and Hyprland."),
+				desk ? row(desk && !win ? "Workspace name" : "Desktop name", text("desktopName", c.desktopName || "F1", { maxLength: 40, style: "width:140px" })) : null),
 			group("Taskbar while watching",
 				win ? row("Taskbar", pick("taskbar", c.taskbar, [["", "Leave it as it is"], ["main", "Only on the main monitor"], ["autohide", "Hide automatically"]])) : hint("The taskbar setting is Windows only."),
 				win ? hint("Put back as it was when the party or the session ends, or F1 Party closes.") : null),
@@ -1175,7 +1176,7 @@ $("settingsbtn").onclick = async () => {
 				hint("The Close F1 button under MultiViewer closes what's ticked here, and puts the lights and the taskbar back."),
 				check("closeMv", c.closeMv !== false, "MultiViewer"),
 				uf1(check("closeUf1", c.closeUf1 !== false, "Ultimate F1 Viewer")),
-				win ? check("closeDesktop", c.closeDesktop, "The watching desktop", "Anything else still on it moves to the desktop next to it") : null))],
+				desk ? check("closeDesktop", c.closeDesktop, win ? "The watching desktop" : "The watching workspace", win ? "Anything else still on it moves to the desktop next to it" : "Anything else still on it moves back to the workspace you came from") : null))],
 	};
 	const bar = el("div", { className: "settabs", role: "tablist" }), pane = el("div", { className: "setpane" });
 	const show = (k) => { setTab = k; for (const b of bar.children) b.setAttribute("aria-selected", String(b.dataset.k === k));
@@ -1254,7 +1255,7 @@ function lightsTab(c, h) {
 }
 function windowsTab(c, h) {
 	const pl = c.places;
-	if (!pl) return h.hint("Window positions are Windows only.");
+	if (!pl) return h.hint("Window positions work on Windows and Hyprland.");
 	const st = el("p", { className: "hint sethint" });
 	const saved = (yes) => el("span", { className: "hint", style: "margin:0", textContent: yes ? "Saved" : "Not saved yet" });
 	return el("div", {},

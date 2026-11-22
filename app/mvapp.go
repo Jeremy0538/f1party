@@ -101,7 +101,7 @@ func mvExe() string {
 		if p, err := exec.LookPath("multiviewer"); err == nil {
 			return p
 		}
-		for _, p := range []string{"/usr/bin/multiviewer-for-f1", "/opt/MultiViewer/multiviewer", "/opt/multiviewer/multiviewer",
+		for _, p := range []string{"/usr/bin/multiviewer-for-f1", "/opt/f1multiviewer-bin/multiviewer", "/opt/MultiViewer/multiviewer", "/opt/multiviewer/multiviewer",
 			"/usr/lib/multiviewer/multiviewer", "/usr/lib/multiviewer-for-f1/multiviewer-for-f1"} {
 			if fileExists(p) {
 				return p
@@ -234,7 +234,8 @@ func mvQuit(force bool) {
 		if force {
 			sig = "-KILL"
 		}
-		cmd = exec.Command("pkill", sig, "-f", "multiviewer")
+		// Only the MultiViewer program itself, not every command line that mentions the word.
+		cmd = exec.Command("pkill", sig, "-f", `(^|/)multiviewer(-for-f1)?( |$)`)
 	}
 	detach(cmd)
 	_ = cmd.Run()

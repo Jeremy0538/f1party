@@ -139,11 +139,23 @@ func uf1Ensure() error {
 	if exe == "" {
 		return errors.New("Ultimate F1 Viewer isn't installed")
 	}
-	if runtime.GOOS == "windows" {
-		stop := exec.Command("taskkill", "/IM", uf1Process+".exe")
+	// Running without the port (opened by hand): close it and start it again with the port. A second copy
+	// would only hand over to the running one and quit.
+	var stop *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		stop = exec.Command("taskkill", "/IM", uf1Process+".exe")
+	case "darwin":
+		if exec.Command("pgrep", "-x", uf1Process).Run() == nil {
+			stop = exec.Command("osascript", "-e", `quit app "`+uf1Process+`"`)
+		}
+	default:
+		stop = exec.Command("pkill", "-f", `(^|/)(ultimate-f1viewer-with-f1mv|ultimate-f1viewer)( |$)`)
+	}
+	if stop != nil {
 		detach(stop)
 		if stop.Run() == nil {
-			time.Sleep(1500 * time.Millisecond) // it ran without the port: start it again with it
+			time.Sleep(1500 * time.Millisecond)
 		}
 	}
 	arg := fmt.Sprintf("--remote-debugging-port=%d", uf1Port)
