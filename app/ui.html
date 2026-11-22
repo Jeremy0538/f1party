@@ -53,9 +53,11 @@
 	.teamgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
 	/* a two-way switch: Teams | Drivers */
 
-	/* battle mode: what a window shows, then its most drivers, in two even columns */
-	.setval, .setrow select.setsrc { flex:none; width:188px; }
-	.setrow select.setnum { flex:none; width:110px; }
+	/* battle mode: a small table of its windows */
+	.battlegrid { display:grid; grid-template-columns:64px minmax(0, 1fr) 112px; gap:6px 10px; align-items:center; margin:2px 0 4px; }
+	.battlegrid .bthead { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
+	.battlegrid select { width:100%; }
+	.battlegrid .setval { padding-left:11px; }
 	.seg { display:inline-flex; padding:3px; gap:2px; background:var(--bg); border:1px solid var(--line-2); border-radius:8px; }
 	.seg button { height:26px; padding:0 14px; border:0; border-radius:6px; background:none; color:var(--dim); font-size:12.5px; }
 	.seg button[aria-checked="true"] { background:#262a31; color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
@@ -1404,8 +1406,10 @@ async function openSettings(opts = {}) {
 	const uf1 = (node) => { uf1Parts.push(node); return node; };
 	const uf1Usable = () => !!c.uf1 && (!uf1Switch || uf1Switch.input.checked);
 	let uf1Switch = null;
+	const uf1After = []; // parts with their own switch inside an Ultimate F1 Viewer part: they look again after it
 	const syncUf1 = () => { const on = uf1Usable();
-		for (const n of uf1Parts) { n.classList.toggle("setoff", !on); for (const i of n.querySelectorAll("input, select, button")) i.disabled = !on; } };
+		for (const n of uf1Parts) { n.classList.toggle("setoff", !on); for (const i of n.querySelectorAll("input, select, button")) i.disabled = !on; }
+		for (const f of uf1After) f(); };
 
 	uf1Switch = check("uf1On", c.uf1 && c.uf1On !== false, "Use Ultimate F1 Viewer", "Opens its layout with each setup, battle mode and the rest");
 	if (!c.uf1) { uf1Switch.input.disabled = true; uf1Switch.classList.add("setoff"); }
@@ -1511,17 +1515,33 @@ async function openSettings(opts = {}) {
 					hint("Choose whole teams or single drivers; the switch shows one list at a time."),
 					el("div", { className: "setrow" }, seg),
 					teamGrid, driverGrid),
-				uf1(group("Battle mode",
-					hint("For races, in Ultimate F1 Viewer's battle mode windows, filled from left to right. Each window gets as many drivers as fit in it, up to the most you set."),
-					check("battleOn", c.battleOn, "Pick the drivers automatically"),
-					row("First window", el("span", { className: "setval", textContent: "Top of the race" }), battleMaxPick("battleMax1", c.battleMax1)),
-					row("Second window", battleSrc(pick("battleRight", c.battleRight || "", [["p5to8", "Next places in the race"], ["", "Top of the championship"]])), battleMaxPick("battleMax2", c.battleMax2)),
-					hint("Next places: carries on where the first window stopped, so with 2 in the first, the second starts at P3."),
-					row("Update", pick("battleLaps", String(c.battleLaps ?? 5), [["0", "Only when the layout opens"], ["1", "Every lap"], ["2", "Every 2 laps"], ["5", "Every 5 laps"], ["10", "Every 10 laps"]])))));
+				uf1((() => {
+					// one switch; what it picks sits below it, as a small table: window, what it shows, at most
+					const master = check("battleOn", c.battleOn, "Pick the drivers automatically");
+					master.classList.add("setmaster");
+					const src = pick("battleRight", c.battleRight || "", [["p5to8", "Next places in the race"], ["", "Top of the championship"]]);
+					const most = (key, v) => pick(key, String(v || 4), [["1", "1 driver"], ["2", "2 drivers"], ["3", "3 drivers"], ["4", "4 drivers"]]);
+					const note = el("p", { className: "hint sethint" });
+					const explain = () => { note.textContent = src.value === "p5to8"
+						? "The second window carries on where the first stopped: with 2 drivers in the first, it starts at P3."
+						: "The second window shows the championship top, whatever the first one shows."; };
+					src.addEventListener("change", explain); explain();
+					const cell = (t) => el("span", { className: "bthead", textContent: t });
+					const table = el("div", { className: "battlegrid" },
+						cell("Window"), cell("Shows"), cell("At most"),
+						el("span", { textContent: "First" }), el("span", { className: "setval", textContent: "Top of the race" }), most("battleMax1", c.battleMax1),
+						el("span", { textContent: "Second" }), src, most("battleMax2", c.battleMax2));
+					const sub = el("div", { className: "setsub" }, table, note,
+						row("Update", pick("battleLaps", String(c.battleLaps ?? 5), [["0", "Only when the layout opens"], ["1", "Every lap"], ["2", "Every 2 laps"], ["5", "Every 5 laps"], ["10", "Every 10 laps"]])));
+					const sync = () => { const on = master.input.checked && uf1Usable();
+						sub.classList.toggle("setoff", !on); for (const i of sub.querySelectorAll("select")) i.disabled = !on; };
+					master.input.addEventListener("change", sync); uf1After.push(sync);
+					return group("Battle mode",
+						hint("For races. Ultimate F1 Viewer's battle mode windows fill from left to right, and each one shows as many drivers as fit in it."),
+						master, sub);
+				})()));
 		})();
 	tabs.lights[1] = lightsTab(c, { check, pick, row, hint, group, ids });
-	function battleMaxPick(key, v) { const s = pick(key, String(v || 4), [["1", "At most 1"], ["2", "At most 2"], ["3", "At most 3"], ["4", "At most 4"]]); s.className = "setnum"; return s; }
-	function battleSrc(s) { s.className = "setsrc"; return s; }
 	tabs.end[1] = el("div", {},
 		group("End session closes",
 			hint("End session closes the streams and what's ticked here, and puts the lights and the taskbar back. The party stays."),
