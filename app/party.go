@@ -474,6 +474,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 	var lastSentAt time.Time
 	var sessionType string
 	var typeAt time.Time
+	var typeFor string     // the session sessionType belongs to
 	var startedFor float64 // countdown that has been started
 	var held *FeedState    // pause just for the host: the party's position when it started
 	t := time.NewTicker(250 * time.Millisecond)
@@ -496,7 +497,12 @@ func (p *Party) hostLoop(ctx context.Context) {
 		}
 		fs := FeedState{T: "state", None: true}
 		if feed != nil {
-			if time.Since(typeAt) > 5*time.Second || (sessionType == "" && time.Since(typeAt) > time.Second) {
+			if id := feed.StreamData.ContentID; id != typeFor {
+				typeFor, sessionType, typeAt = id, "", time.Time{} // another session: don't send the old type
+			}
+			if t, ok := contentTypes.Load(typeFor); ok {
+				sessionType = t.(string) // opened from the calendar: known at once
+			} else if time.Since(typeAt) > 5*time.Second || (sessionType == "" && time.Since(typeAt) > time.Second) {
 				sessionType, typeAt = mvSessionType(), time.Now()
 			}
 			tm, _ := feed.Time()
@@ -608,6 +614,8 @@ func (p *Party) guestLoop(ctx context.Context) {
 		mvStartTried bool      // MultiViewer was closed and has been started (once per party)
 		restAt       time.Time // ask the Stream Deck plugin for its best of the rest then (after syncing)
 		pluginErr    string    // the Stream Deck plugin couldn't be asked (shown; asked again later)
+		hostContent  string    // the host's session last seen (a change = the party switched sessions)
+		switchAt     time.Time // when it was first seen
 		pluginRetry  time.Time
 		startedFor   float64 // "Start together" countdown this guest has already started playing on
 		resyncSeen   = -1    // host's resync number last acted on (-1: none seen yet)
@@ -664,7 +672,12 @@ func (p *Party) guestLoop(ctx context.Context) {
 			status = err.Error()
 			p.mu.Lock()
 			host, setup := p.host, p.setup
+			hostGone := p.st.Connected && !p.st.HostOnline
 			p.mu.Unlock()
+			// no host (also back after a restart as the old host): take over, with or without MultiViewer
+			if hostGone && p.takeOverHost() {
+				return
+			}
 			// MultiViewer is closed: once the host's session is known, the Stream Deck plugin (which starts
 			// MultiViewer itself) or F1 Party starts it.
 			known := host != nil && !host.None && host.ContentID != ""
@@ -719,8 +732,26 @@ func (p *Party) guestLoop(ctx context.Context) {
 			continue
 		}
 
+		if host.ContentID != hostContent {
+			if hostContent != "" {
+				// the host switched to another session: close the old one first (with a setup or the Stream
+				// Deck also its timing windows), then the new one opens below, with the layout for its type
+				mvCloseOthers(host.ContentID, setup != "")
+				setupFor, pluginUntil, pluginRetry, creatingAt = "", time.Time{}, time.Time{}, time.Time{}
+				status = "The host switched to another session…"
+				report()
+			}
+			hostContent, switchAt = host.ContentID, time.Now()
+			continue
+		}
 		feed := mainFeed(ps, host.ContentID)
 		p.set(func(s *Status) { s.Feed = feedInfo(feed) })
+		if setup == setupStreamDeck && host.SessionType == "" && time.Since(switchAt) < 10*time.Second {
+			// the Stream Deck opens the layout for the session's type: wait a moment for the host to know it
+			status = "Waiting for the host's session…"
+			report()
+			continue
+		}
 		if setup == setupStreamDeck && setupFor != host.ContentID {
 			// the Stream Deck plugin opens everything: its desktop, MultiViewer, setup and the viewer's layout
 			// (also when the session is open already: it skips what is in place)

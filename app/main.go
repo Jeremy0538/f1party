@@ -542,7 +542,11 @@ func rememberParty(party *Party) {
 			end = partyEnd{}
 			continue
 		}
-		updateConfig(func(c *config) { c.Last = &lastParty{Code: s.Code, Host: s.Mode == "host", At: time.Now().Unix()} })
+		updateConfig(func(c *config) {
+			// back as a guest after a restart: still remember that this was our party to host
+			wasHost := c.Last != nil && c.Last.Code == s.Code && c.Last.Host
+			c.Last = &lastParty{Code: s.Code, Host: s.Mode == "host" || wasHost, At: time.Now().Unix()}
+		})
 	}
 }
 

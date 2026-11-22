@@ -106,6 +106,10 @@
 	.tag.live { background:var(--red); color:#fff; }
 	.jumps { display:flex; gap:6px; }
 	.jumps button { flex:1; height:30px; padding:0 8px; font-size:12px; }
+	/* the host picks or changes the party's session (in the calendar) */
+	.sess .sesshead { display:flex; align-items:center; gap:8px; }
+	.sess .sesshead .name { flex:1; min-width:0; }
+	.sess .sesshead button.link { font-size:12px; flex:none; }
 	/* tabs in the header */
 	.tabs { display:flex; gap:4px; margin-left:18px; }
 	.tabs button { height:26px; padding:0 11px; font-size:12px; border-color:transparent; background:none; color:var(--dim); }
@@ -297,7 +301,7 @@
 				<div class="row" style="justify-content:space-between; margin-bottom:6px">
 					<span class="label" style="margin:0">Session</span><span class="tag" id="sesstag"></span>
 				</div>
-				<div class="name" id="sessname"></div>
+				<div class="sesshead"><div class="name" id="sessname"></div><button class="link hidden" id="sesschange" title="Pick a session in the calendar: the whole party switches to it">Change</button></div>
 				<div class="when" id="sesswhen"></div>
 				<div class="jumps">
 					<button id="jbegin" title="Back to the beginning of the broadcast">Beginning</button>
@@ -527,8 +531,18 @@ let sessData = null;
 async function refreshSession() {
 	try { sessData = (await (await fetch("/api/session")).json()).session; } catch { sessData = null; }
 	const v = sessData;
-	$("sess").classList.toggle("hidden", !v || infoOpen);
-	if (!v) return;
+	const hosting = mode === "host";
+	$("sess").classList.toggle("hidden", (!v && !hosting) || infoOpen);
+	$("sesschange").classList.toggle("hidden", !hosting);
+	$("sesschange").textContent = v ? "Change" : "Choose";
+	document.querySelector(".sess .jumps").classList.toggle("hidden", !v);
+	if (!v) {
+		$("sessname").textContent = "No session open";
+		$("sesstag").textContent = "";
+		$("sesstag").className = "";
+		$("sesswhen").textContent = "Pick one in the calendar to watch together";
+		return;
+	}
 	$("sessname").textContent = v.name || (v.title === "F1 LIVE" ? "F1 Live" : v.title);
 	$("sesstag").textContent = v.live ? "LIVE" : "REPLAY";
 	$("sesstag").className = "tag" + (v.live ? " live" : "");
@@ -550,6 +564,7 @@ async function refreshSession() {
 			: b.dataset.tip;
 	}
 }
+$("sesschange").onclick = () => showTab("calendar");
 const jump = (to) => async () => { $("sesserr").textContent = ""; try { await post("/api/session/jump", { to }); } catch (e) { $("sesserr").textContent = e.message; } refreshSession(); };
 $("jbegin").onclick = jump("begin"); $("jstart").onclick = jump("start"); $("jlive").onclick = jump("live");
 
@@ -654,7 +669,7 @@ async function refreshCal() {
 	const ms = new Date(w.meeting.start), me = new Date(w.meeting.end);
 	$("caldates").textContent = `${w.meeting.location} · ${dayFmt.format(ms)} – ${dayFmt.format(me)} ${me.getFullYear()}`;
 	$("calprev").disabled = !w.prev; $("calnext").disabled = !w.next;
-	const guest = mode === "guest", ul = $("calsessions");
+	const guest = mode === "guest", hosting = mode === "host", ul = $("calsessions");
 	if (document.activeElement && ul.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return; // picking a time
 	ul.innerHTML = "";
 	const now = Date.now();
@@ -674,7 +689,7 @@ async function refreshCal() {
 			acts.append(btn("Cancel", "Cancel this planned party", () => calAct("/api/calendar/unplan", { id: x.plan.id })));
 		} else if (x.status === "live") {
 			st.className = "st live"; st.textContent = "LIVE";
-			const wb = btn("Watch now", guest ? "You're a guest in a party" : "Host a party on the live session", () => calAct("/api/calendar/watch", { session: x.key }), "primary");
+			const wb = btn(hosting ? "Switch" : "Watch now", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to the live session" : "Host a party on the live session", () => calAct("/api/calendar/watch", { session: x.key }), "primary");
 			wb.disabled = guest; acts.append(wb);
 		} else if (x.status === "soon") {
 			st.textContent = inTime(start - now);
@@ -682,7 +697,7 @@ async function refreshCal() {
 			acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
 		} else {
 			st.textContent = "Replay";
-			const wb = btn("Watch", guest ? "You're a guest in a party" : "Host a party on the replay now, from a minute before the start", () => calAct("/api/calendar/watch", { session: x.key }));
+			const wb = btn(hosting ? "Switch" : "Watch", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to this replay, from a minute before the start" : "Host a party on the replay now, from a minute before the start", () => calAct("/api/calendar/watch", { session: x.key }));
 			wb.disabled = guest;
 			acts.append(wb, btn("Plan", "Plan a replay party at a time you pick", () => { picking = picking === x.key ? 0 : x.key; refreshCal(); }));
 		}

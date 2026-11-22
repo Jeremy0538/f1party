@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -152,6 +153,35 @@ func playerSeek(id string, abs float64) error {
 
 func playerPause(id string, paused bool) error {
 	return gql(`mutation($id: ID!, $p: Boolean) { playerSetPaused(id: $id, paused: $p) }`, map[string]any{"id": id, "p": paused}, nil)
+}
+
+// mvCloseOthers closes every player that shows another session than keep ("" = all of them) and, with
+// timing, MultiViewer's live timing windows too (a setup or the Stream Deck opens the new session's own).
+// Before switching the party to another session, so the old one doesn't play on behind the new one.
+func mvCloseOthers(keep string, timing bool) int {
+	ps, err := players()
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, p := range ps {
+		if p.StreamData == nil || (keep != "" && p.StreamData.ContentID == keep) {
+			continue
+		}
+		if gql(`mutation($id: ID!) { playerDelete(id: $id) }`, map[string]any{"id": p.ID}, nil) == nil {
+			n++
+		}
+	}
+	if timing {
+		if pages, err := cdpPages(); err == nil {
+			for _, pg := range pages {
+				if strings.Contains(pg.URL, "#/live-timing") {
+					cdpEval(pg, "window.close(); true", 2*time.Second)
+				}
+			}
+		}
+	}
+	return n
 }
 
 // playerSync: MultiViewer's own "sync other players to this one" (onboards follow the world feed).

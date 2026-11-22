@@ -65,6 +65,11 @@ var calendar struct {
 // (MultiViewer only knows the name once its timing has loaded).
 var contentTitles sync.Map
 
+// contentTypes: F1 TV content id → the session's name ("Qualifying", "Sprint", "Practice 2") for sessions
+// opened from the calendar, so guests get the right layout at once (MultiViewer's timing still shows the
+// previous session for a moment after a switch).
+var contentTypes sync.Map
+
 var calHTTP = &http.Client{Timeout: 12 * time.Second}
 
 // getJSON with a short back-off when the service says "too many requests" (OpenF1 allows a few per second).
@@ -413,14 +418,28 @@ func (p *Party) WatchNow(key int, name string) error {
 		}
 		contentID = id
 	}
-	if p.Snapshot().Mode == "idle" {
+	if contentID == "" { // the live session: open already?
+		if ps, err := players(); err == nil {
+			if f := mainFeed(ps, ""); f != nil && f.State != nil && f.State.Live {
+				return errors.New("the live session is open already")
+			}
+		}
+	}
+	switching := p.Snapshot().Mode == "host"
+	if !switching {
 		p.Start("host", newCode(), name)
 	}
 	p.SetNote("Opening " + sessionTitle(s, m) + "…")
 	if contentID != "" {
 		contentTitles.Store(contentID, sessionTitle(s, m))
+		contentTypes.Store(contentID, s.Name)
 	}
 	go func() {
+		if switching {
+			// another session for the party: the old one closes first (with a setup or the Stream Deck also its
+			// timing windows, as the new layout brings its own); guests do the same when they see the switch
+			mvCloseOthers(contentID, p.Setup() != "")
+		}
 		if err := p.openCalSession(s, contentID); err != nil {
 			p.SetNote(err.Error())
 			return

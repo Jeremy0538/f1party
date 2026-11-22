@@ -58,6 +58,10 @@ Also in the app:
 - **Session**: the session MultiViewer shows, and jumps for the whole party (host): **Beginning**, **Start −1
   min** (a minute before the session starts, then the five lights; needs MultiViewer's live timing, so a setup
   with a timing window or the Stream Deck) and **Live** on a live stream.
+- **Choose or change the session** (host): **Choose** / **Change** in the Session block opens the calendar,
+  where **Switch** (any weekend, also long ago) takes the whole party to that session; guests can't. The
+  old session closes first, everyone included; with a setup or the Stream Deck also its timing windows, and
+  each guest opens the new one with the layout for its type (Race, Qualifying, Practice).
 - **Calendar**: every race weekend (OpenF1) in your own time. **Watch** a replay now (hosts a party, opens it
   the way you chose under *Open with* and goes to a minute before the start, so nobody sees the end while it
   loads), or **Plan** a party: a live session at its start, or a replay at a time you pick. Planning posts an
