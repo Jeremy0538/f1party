@@ -11,12 +11,13 @@ type newsItem struct {
 }
 
 var whatsNew = []newsItem{
-	{"1.7.0", "New look for the party and the session: who's in the party, the setup and the session each in their own box.", ""},
+	{"1.8.0", "A setup guide on the first start, and this window after every update.", ""},
+	{"1.8.0", "New look for the party and the session: who's in the party, the setup and the session each in their own box.", ""},
 	{"1.7.0", "Start together on a live session now works without the Stream Deck plugin.", ""},
-	{"1.7.0", "Every way a setup opens (calendar, Start together, the Stream Deck plugin or just F1 Live) now uses your desktop, taskbar and window settings.", "general"},
+	{"1.8.0", "Every way a setup opens (calendar, Start together, the Stream Deck plugin or just F1 Live) now uses your desktop, taskbar and window settings.", "general"},
 	{"1.7.0", "Linux with Hyprland: its own F1 workspace, saved window positions and Tidy up.", "windows"},
-	{"1.7.0", "Linux: F1 Party now updates itself, like on Windows.", ""},
-	{"1.7.0", "Updates are found within 20 minutes and install by themselves when you're not in a party.", ""},
+	{"1.8.0", "Linux: F1 Party now updates itself, like on Windows.", ""},
+	{"1.8.0", "Updates are found within 20 minutes and install by themselves when you're not in a party.", ""},
 }
 
 // Welcome: what the app shows once: the setup guide (first start) or what's new since the last version seen.

@@ -15,11 +15,11 @@ func TestWelcomeFor(t *testing.T) {
 	if w := welcomeFor(config{Name: "Jeremy", SeenVersion: "1.7.0"}); w != nil {
 		t.Fatal("seen already")
 	}
-	version = "1.8.0"
-	if w := welcomeFor(config{Name: "Jeremy", SeenVersion: "1.7.0"}); w != nil {
-		t.Fatal("no 1.8.0 news: nothing to show")
+	version = "1.9.0"
+	if w := welcomeFor(config{Name: "Jeremy", SeenVersion: "1.8.0"}); w != nil {
+		t.Fatal("no 1.9.0 news: nothing to show")
 	}
-	if w := welcomeFor(config{SetupDone: true, SeenVersion: "1.6.0"}); w == nil || len(w.News) == 0 {
-		t.Fatal("1.6.0 -> 1.8.0 should show 1.7.0's news")
+	if w := welcomeFor(config{SetupDone: true, SeenVersion: "1.7.0"}); w == nil || len(w.News) == 0 {
+		t.Fatal("1.7.0 -> 1.9.0 should show 1.8.0's news")
 	}
 }
