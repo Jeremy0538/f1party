@@ -458,6 +458,10 @@ type CalendarWeekend struct {
 	Meeting  CalMeeting `json:"meeting"`
 	Prev     int        `json:"prev,omitempty"`
 	Next     int        `json:"next,omitempty"`
+	PrevName string     `json:"prevName,omitempty"` // "Las Vegas GP"
+	NextName string     `json:"nextName,omitempty"`
+	Round    int        `json:"round,omitempty"`  // the weekend's place in its season
+	Rounds   int        `json:"rounds,omitempty"` // weekends in that season
 	Sessions []CalRow   `json:"sessions"`
 }
 
@@ -497,11 +501,22 @@ func calendarWeekend(meeting int) (*CalendarWeekend, error) {
 	for i, k := range keys {
 		if k == meeting {
 			if i > 0 {
-				w.Prev = keys[i-1]
+				w.Prev, w.PrevName = keys[i-1], shortGP(calendar.meetings[keys[i-1]].Name)
 			}
 			if i+1 < len(keys) {
-				w.Next = keys[i+1]
+				w.Next, w.NextName = keys[i+1], shortGP(calendar.meetings[keys[i+1]].Name)
 			}
+		}
+	}
+	// its round: the weekends of the same season in order, as the season list counts them
+	year := w.Meeting.Start.Year()
+	for _, k := range keys {
+		if calendar.meetings[k].Start.Year() != year {
+			continue
+		}
+		w.Rounds++
+		if k == meeting {
+			w.Round = w.Rounds
 		}
 	}
 	for _, s := range calendar.sessions {
