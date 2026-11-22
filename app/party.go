@@ -44,6 +44,9 @@ type FeedState struct {
 	Friends []string `json:"friends,omitempty"`
 	// Ended: the host closed the session on purpose ("End session"); guests close theirs too. The party stays.
 	Ended bool `json:"ended,omitempty"`
+	// NewHost: the host hands the party over to this member (their id); that guest connects as the host, the
+	// relay then replaces the old host's connection and the old host carries on as a guest.
+	NewHost string `json:"newHost,omitempty"`
 }
 
 type Member struct {
@@ -101,6 +104,8 @@ type Party struct {
 
 	setup     string // MultiViewer setup a guest opens on joining ("" = none)
 	ended     bool   // host: "End session" closed the session; told to guests until another one is open
+	handover   string    // host: member id the party is being handed to
+	handoverAt time.Time // when (asked for 15 s, then given up)
 	autoOff   bool   // guest: auto-sync off: only "Sync to host" moves this guest to the host
 	askSeek   bool   // guest: asked the host to seek where we went; don't pull us back meanwhile
 	skip      string // guest: content id this guest stopped watching ("End session"); the party goes on
@@ -310,7 +315,7 @@ func (p *Party) Start(mode, code, name string) {
 	p.cancel = cancel
 	p.st = Status{Mode: mode, Code: code, Name: name, Status: "Connecting…", Version: version, AutoSync: !p.autoOff}
 	p.samples, p.host = nil, nil
-	p.ended, p.skip, p.askSeek = false, "", false
+	p.ended, p.skip, p.askSeek, p.handover = false, "", false, ""
 	p.hostOffAt, p.countdownAt = time.Time{}, 0
 	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
 	p.hostSince = time.Time{}
@@ -548,6 +553,9 @@ func (p *Party) hostLoop(ctx context.Context) {
 			p.ended = false
 		}
 		fs.Ended = p.ended
+		if p.handover != "" && time.Since(p.handoverAt) < 15*time.Second {
+			fs.NewHost = p.handover
+		}
 		p.mu.Unlock()
 		if feed != nil {
 			if id := feed.StreamData.ContentID; id != typeFor {
@@ -633,7 +641,7 @@ func (p *Party) hostLoop(ctx context.Context) {
 		}
 		// send on any discontinuity (pause/play, seek, new stream) right away, otherwise once a second
 		changed := fs.None != lastSent.None || fs.ContentID != lastSent.ContentID || fs.Paused != lastSent.Paused || fs.Title != lastSent.Title ||
-			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync || fs.Ended != lastSent.Ended ||
+			fs.CountdownAt != lastSent.CountdownAt || fs.Resync != lastSent.Resync || fs.Ended != lastSent.Ended || fs.NewHost != lastSent.NewHost ||
 			strings.Join(fs.Friends, ",") != strings.Join(lastSent.Friends, ",")
 		if !changed && !fs.None && !fs.Paused && lastSent.At > 0 {
 			expected := lastSent.Time + (fs.At-lastSent.At)/1000
@@ -789,6 +797,14 @@ func (p *Party) guestLoop(ctx context.Context) {
 			}
 		case host == nil || !clockOK || time.Since(hostWhen) > 10*time.Second:
 			status = "Waiting for the host's stream"
+		case host != nil && host.NewHost != "" && host.NewHost == p.id:
+			// the host handed the party to us: connect as the host (the relay moves the old host to guest)
+			code, name := p.Snapshot().Code, p.Snapshot().Name
+			go func() {
+				p.Start("host", code, name)
+				p.SetNote("You're the host now")
+			}()
+			return
 		case host.None && host.Ended:
 			status = "The host ended the session"
 			if hostContent != "" {
@@ -1261,6 +1277,7 @@ func (p *Party) EndSession() error {
 		closeSession()
 	case "host":
 		closeSession()
+		taskbarRestore()
 		p.mu.Lock()
 		p.ended = true // after closing: the host loop clears it as soon as a stream is open again
 		p.mu.Unlock()
@@ -1269,6 +1286,24 @@ func (p *Party) EndSession() error {
 		closeSession()
 	}
 	return nil
+}
+
+// MakeHost (host): hand the party to another member. They become the host within a few seconds; this app
+// then carries on as a guest (see the 4001 "replaced" close in run).
+func (p *Party) MakeHost(id string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.st.Mode != "host" {
+		return errors.New("only the host can hand over the party")
+	}
+	for _, m := range p.st.Members {
+		if m.Role == "guest" && m.ID != "" && m.ID == id {
+			p.handover, p.handoverAt = id, time.Now()
+			p.st.Note = "Handing the party to " + m.Name + "…"
+			return nil
+		}
+	}
+	return errors.New("that member isn't in the party any more (or runs an older F1 Party)")
 }
 
 // WatchAgain (guest): undo "End session": the host's session opens again.

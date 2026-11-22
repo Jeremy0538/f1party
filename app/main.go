@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -191,7 +192,7 @@ func main() {
 			}
 			return false
 		},
-		OnShutdown: func(context.Context) { stopTray() },
+		OnShutdown: func(context.Context) { stopTray(); taskbarRestore() },
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "nl.jeremyklootwijk.f1party",
 			OnSecondInstanceLaunch: func(d options.SecondInstanceData) { // already running: bring it to the front
@@ -283,6 +284,10 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
 			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed()}
+		if out["uf1"] == true {
+			c := loadConfig()
+			out["uf1Layouts"], out["uf1For"], out["uf1Auto"] = uf1Layouts(), c.Uf1For, uf1LayoutFor(party.Setup())
+		}
 		writeJSON(w, out)
 	})
 	mux.HandleFunc("POST /api/mv/start", func(w http.ResponseWriter, r *http.Request) {
@@ -477,6 +482,11 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"session": party.Session()})
 	})
+	mux.HandleFunc("POST /api/makehost", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, party.MakeHost(in.ID))
+	})
 	mux.HandleFunc("POST /api/session/end", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.EndSession())
 	})
@@ -586,6 +596,60 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, party.SyncNow())
 	})
+	// Settings (the gear at the top right).
+	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		c := loadConfig()
+		name := c.DesktopName
+		if name == "" {
+			name = f1DesktopName
+		}
+		writeJSON(w, map[string]any{"desktop": !c.DesktopOff, "desktopName": name, "taskbar": c.Taskbar,
+			"autoSync": !c.AutoSyncOff, "windows": runtime.GOOS == "windows"})
+	})
+	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Desktop     bool
+			DesktopName string
+			Taskbar     string
+			AutoSync    bool
+		}
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.Taskbar != "main" && in.Taskbar != "autohide" {
+			in.Taskbar = ""
+		}
+		name := strings.TrimSpace(in.DesktopName)
+		if len([]rune(name)) > 40 {
+			name = string([]rune(name)[:40])
+		}
+		updateConfig(func(c *config) {
+			c.DesktopOff, c.DesktopName, c.Taskbar, c.AutoSyncOff = !in.Desktop, name, in.Taskbar, !in.AutoSync
+		})
+		if in.Taskbar == "" {
+			taskbarRestore() // switched off: put back what F1 Party changed
+		}
+		party.SetAutoSync(in.AutoSync)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Ultimate F1 Viewer layout with a MultiViewer setup ("-" = none, "" = the one with the same name).
+	mux.HandleFunc("POST /api/setup/uf1", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Setup, Layout string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.Setup == "" || in.Setup == setupStreamDeck {
+			http.Error(w, "Choose a MultiViewer setup first", 400)
+			return
+		}
+		updateConfig(func(c *config) {
+			if c.Uf1For == nil {
+				c.Uf1For = map[string]string{}
+			}
+			if in.Layout == "" {
+				delete(c.Uf1For, in.Setup)
+			} else {
+				c.Uf1For[in.Setup] = in.Layout
+			}
+		})
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("POST /api/autosync", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ On bool }
 		json.NewDecoder(r.Body).Decode(&in)
@@ -691,7 +755,17 @@ type config struct {
 	Notify         string         `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
 	NotifySessions []int          `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
 	AutoSyncOff    bool           `json:"autoSyncOff,omitempty"`    // a guest only syncs on "Sync to host" (auto-sync is on by default)
+	// Settings (the gear at the top right)
+	DesktopOff         bool              `json:"desktopOff,omitempty"`         // open on the desktop that happens to show
+	DesktopName        string            `json:"desktopName,omitempty"`        // the desktop for watching ("" = "F1")
+	Taskbar            string            `json:"taskbar,omitempty"`            // while watching: "" leave it, "main" main monitor only, "autohide"
+	TaskbarRestore     bool              `json:"taskbarRestore,omitempty"`     // F1 Party turned "on all displays" off: put it back
+	TaskbarRestoreHide bool              `json:"taskbarRestoreHide,omitempty"` // F1 Party turned auto-hide on: put it back
+	Uf1For             map[string]string `json:"uf1For,omitempty"`             // MultiViewer setup -> Ultimate F1 Viewer layout id ("-" = none)
 }
+
+// f1DesktopName: the desktop for watching unless the settings name another (the F1 Race Control plugin's name).
+const f1DesktopName = "F1"
 
 // lastParty: the party this app was in, kept up to date while in it and cleared by Leave.
 type lastParty struct {
@@ -758,6 +832,7 @@ const partyEndAfter = 3 * time.Minute
 // endParty: leave on purpose, so a restart doesn't rejoin.
 func endParty(party *Party) {
 	party.Leave()
+	taskbarRestore()
 	updateConfig(func(c *config) { c.Last = nil })
 }
 

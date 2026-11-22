@@ -65,3 +65,18 @@ func TestAskHost(t *testing.T) {
 		t.Fatal("auto-sync back on should catch up at once")
 	}
 }
+
+// The host hands the party to a guest by id; the id rides on the state until that guest takes over.
+func TestMakeHost(t *testing.T) {
+	p := &Party{st: Status{Mode: "host", Members: []Member{{Role: "host", Name: "Stan"}, {Role: "guest", Name: "Sam", ID: "aaaaaaaaaaaa"}}}}
+	if p.MakeHost("bbbbbbbbbbbb") == nil {
+		t.Fatal("handed to someone who isn't in the party")
+	}
+	if err := p.MakeHost("aaaaaaaaaaaa"); err != nil || p.handover != "aaaaaaaaaaaa" {
+		t.Fatalf("handover %q err %v", p.handover, err)
+	}
+	g := &Party{st: Status{Mode: "guest"}}
+	if g.MakeHost("aaaaaaaaaaaa") == nil {
+		t.Fatal("a guest handed the party over")
+	}
+}

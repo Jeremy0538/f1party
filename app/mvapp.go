@@ -297,6 +297,26 @@ func cdpPages() ([]cdpPage, error) {
 	return pages, nil
 }
 
+// cdpTargets: the pages of a Chromium app listening on a debug port (Ultimate F1 Viewer).
+func cdpTargets(port int) ([]cdpPage, error) {
+	res, err := cdpHTTP.Get(fmt.Sprintf("http://127.0.0.1:%d/json/list", port))
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	var all []cdpPage
+	if err := json.NewDecoder(res.Body).Decode(&all); err != nil {
+		return nil, err
+	}
+	pages := all[:0]
+	for _, p := range all {
+		if p.Type == "page" && p.WS != "" {
+			pages = append(pages, p)
+		}
+	}
+	return pages, nil
+}
+
 // mvDebugReady: MultiViewer runs with its debug port, so setups can be opened.
 func mvDebugReady() bool { _, err := cdpPages(); return err == nil }
 
@@ -456,6 +476,7 @@ func mvOpenSetup(name, contentID string) error {
 	nameJSON, _ := json.Marshal(name)
 	v, err := cdpEval(page, strings.Replace(restoreJS, "__NAME__", string(nameJSON), 1), 60*time.Second)
 	if errors.Is(err, context.DeadlineExceeded) {
+		uf1WithSetup(name, contentID)
 		return nil // still opening windows; that carries on by itself
 	}
 	if err != nil {
@@ -465,6 +486,7 @@ func mvOpenSetup(name, contentID string) error {
 	_ = json.Unmarshal(v, &r)
 	switch {
 	case r == "ok":
+		uf1WithSetup(name, contentID)
 		return nil
 	case r == "no-setup":
 		return fmt.Errorf("MultiViewer has no setup called %q", name)

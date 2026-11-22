@@ -16,8 +16,6 @@ import (
 
 const vdKey = `Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops`
 
-// f1DesktopName: the name the plugin gives its desktop (as Task View shows it).
-const f1DesktopName = "F1"
 
 // desktops: every desktop id in order, and the index of the current one.
 func desktops() ([]string, int) {
@@ -80,6 +78,7 @@ const (
 	vkLWin      = 0x5B
 	vkLeft      = 0x25
 	vkRight     = 0x27
+	vkD         = 0x44
 	keyExtended = 0x1
 	keyUp       = 0x2
 )
@@ -96,18 +95,32 @@ func ctrlWin(arrow uintptr) {
 	keyEvent(vkLControl, keyUp)
 }
 
-// toF1Desktop goes to the "F1" desktop when there is one and it isn't the current one already. It returns
-// once Windows shows that desktop (or after a few seconds).
+// toF1Desktop goes to the desktop for watching (setting, "F1" by default) and sets the taskbar the way the
+// settings say. Without that desktop a new one is made and named (Task View may show the name only after the
+// next sign-in; F1 Party finds it by it right away). Returns once Windows shows that desktop.
 func toF1Desktop() {
+	c := loadConfig()
+	taskbarForWatching()
+	if c.DesktopOff {
+		return
+	}
+	name := strings.TrimSpace(c.DesktopName)
+	if name == "" {
+		name = f1DesktopName
+	}
 	ids, cur := desktops()
 	target := -1
 	for i, id := range ids {
-		if strings.EqualFold(strings.TrimSpace(desktopName(id)), f1DesktopName) {
+		if strings.EqualFold(strings.TrimSpace(desktopName(id)), name) {
 			target = i
 			break
 		}
 	}
-	if target < 0 || target == cur {
+	if target < 0 {
+		newDesktop(name, len(ids))
+		return
+	}
+	if target == cur {
 		return
 	}
 	arrow, steps := uintptr(vkRight), target-cur
@@ -124,5 +137,29 @@ func toF1Desktop() {
 			return
 		}
 		time.Sleep(150 * time.Millisecond)
+	}
+}
+
+// newDesktop makes a desktop at the end (Windows switches to it) and writes its name where Windows keeps it.
+func newDesktop(name string, had int) {
+	if had == 0 {
+		return // no desktop list to read: leave the desktops alone
+	}
+	keyEvent(vkLControl, 0)
+	keyEvent(vkLWin, keyExtended)
+	keyEvent(vkD, 0)
+	keyEvent(vkD, keyUp)
+	keyEvent(vkLWin, keyExtended|keyUp)
+	keyEvent(vkLControl, keyUp)
+	for i := 0; i < 15; i++ {
+		time.Sleep(200 * time.Millisecond)
+		if ids, cur := desktops(); len(ids) > had {
+			if k, _, err := registry.CreateKey(registry.CURRENT_USER, vdKey+`\Desktops\`+ids[cur], registry.SET_VALUE); err == nil {
+				_ = k.SetStringValue("Name", name)
+				k.Close()
+			}
+			time.Sleep(300 * time.Millisecond)
+			return
+		}
 	}
 }
