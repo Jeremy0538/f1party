@@ -34,7 +34,7 @@ func settingsView() map[string]any {
 		"fitTiming": c.FitTiming,
 		// Drivers
 		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(), "teams": allTeams(),
-		"keepDrivers": keepDrivers(), "drivers": allDrivers(),
+		"keepDrivers": keepDrivers(), "drivers": allDrivers(), "keepBy": keepBy(),
 		"battleOn": c.BattleOn, "battleLaps": battleLaps(), "battleRight": c.BattleRight,
 		// Close F1
 		"closeMv": !c.CloseMVOff, "closeUf1": !c.CloseUf1Off, "closeDesktop": c.CloseDesktop,
@@ -70,6 +70,7 @@ type settingsIn struct {
 	RestLive      *bool
 	TopTeams      []string
 	KeepDrivers   []string
+	KeepBy        *string
 	BattleOn      *bool
 	BattleLaps    *int
 	BattleRight   *string
@@ -139,6 +140,12 @@ func applySettings(in settingsIn, party *Party) {
 				if t = clip(t, 40); t != "" && len(c.TopTeams) < 10 {
 					c.TopTeams = append(c.TopTeams, t)
 				}
+			}
+		}
+		if in.KeepBy != nil {
+			c.KeepBy = ""
+			if *in.KeepBy == "drivers" {
+				c.KeepBy = "drivers"
 			}
 		}
 		if in.KeepDrivers != nil {

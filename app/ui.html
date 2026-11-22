@@ -48,15 +48,13 @@
 	.setmaster { margin:4px 0; padding:8px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.03); }
 	.setmaster label { font-weight:700; font-size:13.5px; }
 	.setsub { margin:6px 0 0 14px; padding-left:12px; border-left:2px solid var(--line-2); }
-	/* onboards that stay: a team per row, its drivers next to it */
-	.keepgrid { display:grid; grid-template-columns:max-content minmax(0, 1fr); gap:0 18px; }
-	.keepgrid label { display:flex; align-items:center; gap:8px; min-height:27px; cursor:pointer; font-size:12.5px; }
-	.keepgrid .keepteam { font-weight:600; }
-	.keepdrivers { display:flex; gap:4px 16px; flex-wrap:wrap; }
-	.keepdrivers label { min-width:104px; color:var(--dim); }
-	.keepdrivers input:checked + span { color:var(--text); }
-	.keepgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
-	.keepgrid input:disabled { opacity:.55; }
+	.teamgrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2px 12px; }
+	.teamgrid label { display:flex; align-items:center; gap:8px; min-height:28px; cursor:pointer; font-size:12.5px; }
+	.teamgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
+	/* a two-way switch: Teams | Drivers */
+	.seg { display:inline-flex; padding:3px; gap:2px; background:var(--bg); border:1px solid var(--line-2); border-radius:8px; }
+	.seg button { height:26px; padding:0 14px; border:0; border-radius:6px; background:none; color:var(--dim); font-size:12.5px; }
+	.seg button[aria-checked="true"] { background:#262a31; color:var(--text); box-shadow:inset 0 -2px 0 var(--red); }
 	.setoff label, .setoff select, .setoff input { cursor:not-allowed; }
 	/* Start together countdown */
 	.countdown { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(8,9,11,.88); z-index:5; }
@@ -1468,33 +1466,47 @@ async function openSettings(opts = {}) {
 			return box;
 		})();
 	tabs.drivers[1] = (() => {
-			// onboards that always stay: a whole team, or one driver of it. One row per team, its drivers next
-			// to it; a ticked team ticks (and locks) its drivers. The rest of the setup's onboards follow the order.
+			// onboards that always stay: whole teams or single drivers, one or the other (a switch); only the
+			// chosen list shows. The rest of the setup's onboards follow the order.
 			const keep = new Set((c.topTeams || []).map((t) => t.toLowerCase()));
 			const keepD = new Set((c.keepDrivers || []).map((d) => d.toUpperCase()));
-			const grid = el("div", { className: "keepgrid" });
+			const teamGrid = el("div", { className: "teamgrid" }), driverGrid = el("div", { className: "teamgrid" });
 			const boxes = [], dboxes = [];
 			for (const t of c.teams || []) {
-				const ti = el("input", { type: "checkbox", checked: keep.has(t.toLowerCase()) });
-				boxes.push([t, ti]);
-				const mine = (c.drivers || []).filter((d) => (d.team || "").toLowerCase() === t.toLowerCase());
-				const ds = mine.map((d) => { const i = el("input", { type: "checkbox", checked: keepD.has(d.code) }); i.dataset.own = i.checked ? "1" : "";
-					dboxes.push([d.code, i]); return el("label", { title: d.code }, i, el("span", { textContent: d.name })); });
-				const sync = () => { for (const l of ds) { const i = l.querySelector("input");
-					if (ti.checked) { i.checked = true; i.disabled = true; } else { i.disabled = false; i.checked = i.dataset.own === "1"; } } };
-				for (const l of ds) l.querySelector("input").addEventListener("change", (e) => { e.target.dataset.own = e.target.checked ? "1" : ""; });
-				ti.addEventListener("change", sync); sync();
-				grid.append(el("label", { className: "keepteam" }, ti, el("span", { textContent: t })), el("div", { className: "keepdrivers" }, ...ds));
+				const i = el("input", { type: "checkbox", checked: keep.has(t.toLowerCase()) });
+				boxes.push([t, i]);
+				teamGrid.append(el("label", {}, i, el("span", { textContent: t })));
 			}
+			// drivers in team order, so team mates sit next to each other
+			const order = (c.teams || []).map((t) => t.toLowerCase());
+			const rank = (d) => { const k = order.indexOf((d.team || "").toLowerCase()); return k < 0 ? order.length : k; };
+			for (const d of [...(c.drivers || [])].sort((a, b) => rank(a) - rank(b))) {
+				const i = el("input", { type: "checkbox", checked: keepD.has(d.code) });
+				dboxes.push([d.code, i]);
+				driverGrid.append(el("label", { title: d.team || "" }, i, el("span", { textContent: d.name })));
+			}
+			let by = c.keepBy === "drivers" ? "drivers" : "teams";
+			const seg = el("div", { className: "seg", role: "radiogroup" });
+			const lead = el("div", { className: "setlbl", style: "margin:8px 0 4px" });
+			const showBy = () => {
+				for (const b of seg.children) b.setAttribute("aria-checked", String(b.dataset.v === by));
+				teamGrid.classList.toggle("hidden", by !== "teams"); driverGrid.classList.toggle("hidden", by !== "drivers");
+				lead.textContent = by === "teams" ? "These teams' onboards always stay:" : "These drivers' onboards always stay:";
+			};
+			for (const [v, t] of [["teams", "Teams"], ["drivers", "Drivers"]]) {
+				const b = btn(t, "", () => { by = v; showBy(); }); b.dataset.v = v; b.setAttribute("role", "radio"); seg.append(b);
+			}
+			showBy();
+			ids.keepBy = () => by;
 			ids.topTeams = () => boxes.filter(([, i]) => i.checked).map(([t]) => t);
-			ids.keepDrivers = () => dboxes.filter(([, i]) => !i.disabled && i.checked).map(([d]) => d);
+			ids.keepDrivers = () => dboxes.filter(([, i]) => i.checked).map(([d]) => d);
 			return el("div", {},
 				group("Best of the rest",
 					hint("Your setup has onboards that always stay, and other onboards that F1 Party fills with the best-placed of all other drivers."),
 					check("restOn", c.restOn, "Fill those onboards when a setup opens"),
 					check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits."),
-					el("div", { className: "setlbl", style: "margin:8px 0 4px", textContent: "These onboards always stay (a whole team, or one driver):" }),
-					grid),
+					row("Keep onboards of", seg),
+					lead, teamGrid, driverGrid),
 				uf1(group("Battle mode",
 					hint("For races, in Ultimate F1 Viewer's battle mode windows. Your layout can have one or more; they're filled from left to right."),
 					check("battleOn", c.battleOn, "Pick the drivers automatically"),

@@ -116,6 +116,22 @@ func allDrivers() []driverInfo {
 
 func keepDrivers() []string { return append([]string{}, loadConfig().KeepDrivers...) }
 
+// keepBy: whether whole teams or single drivers keep their onboards ("teams" unless drivers was chosen).
+func keepBy() string {
+	if loadConfig().KeepBy == "drivers" {
+		return "drivers"
+	}
+	return "teams"
+}
+
+// keptNow: the teams and the drivers whose onboards stay, as the switch in Settings says: one of the two.
+func keptNow() (top, keep []string) {
+	if keepBy() == "drivers" {
+		return nil, keepDrivers()
+	}
+	return topTeams(), nil
+}
+
 // kept: an onboard that always stays: its team is one of the top teams, or its driver is chosen.
 func kept(team, code string, top, keep []string) bool {
 	eq := func(v string) func(string) bool { return func(x string) bool { return v != "" && strings.EqualFold(x, v) } }
@@ -226,7 +242,7 @@ func openChosenSetup(choice, contentID, sessionType string) error {
 	c := loadConfig()
 	if c.RestOn && kind != "practice" {
 		if t, ok := timingNow(); ok {
-			rest = t.bestOfRest(topTeams(), keepDrivers())
+			rest = t.bestOfRest(keptNow())
 		}
 	}
 	if err := mvOpenSetupRest(name, contentID, rest); err != nil {
@@ -476,7 +492,7 @@ func updateRestSlots(force bool) {
 	if gql(`{ players { id type state { muted volume } driverData { driverNumber teamName tla } streamData { contentId } bounds { x y width height } } }`, nil, &out) != nil {
 		return
 	}
-	top, keep := topTeams(), keepDrivers()
+	top, keep := keptNow()
 	var slots []slotPlayer
 	for _, p := range out.Players {
 		if p.Type == "OBC" && p.DriverData != nil && p.DriverData.DriverNumber != nil &&

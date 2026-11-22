@@ -504,8 +504,15 @@ func mvOpenSetupRest(name, contentID string, rest []int) error {
 		rest = []int{}
 	}
 	restJSON, _ := json.Marshal(rest)
-	topJSON, _ := json.Marshal(topTeams())
-	keepJSON, _ := json.Marshal(keepDrivers())
+	top, keep := keptNow()
+	if top == nil {
+		top = []string{}
+	}
+	if keep == nil {
+		keep = []string{}
+	}
+	topJSON, _ := json.Marshal(top)
+	keepJSON, _ := json.Marshal(keep)
 	js := strings.NewReplacer("__NAME__", string(nameJSON), "__REST__", string(restJSON), "__TOP__", string(topJSON),
 		"__KEEP__", string(keepJSON)).Replace(restoreJS)
 	v, err := cdpEval(page, js, 60*time.Second)

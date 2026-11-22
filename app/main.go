@@ -830,7 +830,8 @@ type config struct {
 	RestLive      bool     `json:"restLive,omitempty"`      // keep them up to date during the session
 	TopTeams      []string `json:"topTeams,omitempty"`      // the teams whose onboards always stay
 	TopTeamsSet   bool     `json:"topTeamsSet,omitempty"`   // TopTeams was chosen (also none); else McLaren, Ferrari, Mercedes, Red Bull Racing
-	KeepDrivers   []string `json:"keepDrivers,omitempty"`   // drivers (three-letter code) whose onboards always stay too
+	KeepDrivers   []string `json:"keepDrivers,omitempty"`   // drivers (three-letter code) whose onboards always stay
+	KeepBy        string   `json:"keepBy,omitempty"`        // "drivers": KeepDrivers stay; else (teams) the TopTeams stay
 	BattleOn      bool     `json:"battleOn,omitempty"`      // pick battle mode's drivers in Ultimate F1 Viewer
 	BattleLive    bool     `json:"battleLive,omitempty"`    // (1.5) keep them up to date: now BattleEvery
 	BattleLaps    int      `json:"battleLaps,omitempty"`    // laps between battle mode updates during the race (-1 = only when it opens, 0 = 5)
