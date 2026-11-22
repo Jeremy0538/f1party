@@ -2,6 +2,10 @@ package main
 
 // Party invites to a Discord channel through a webhook (Server settings → Integrations → Webhooks → New
 // webhook → pick the channel → Copy webhook URL). The URL is kept in this computer's F1 Party settings only.
+//
+// Instead of a webhook URL the setting can hold a group key (f1p_…): then the app sends only the facts
+// (name, code, session, time) to the relay's /post, which checks the key and writes the message to the
+// group's channel itself. The group's webhook URL stays a secret on the relay.
 
 import (
 	"bytes"
@@ -28,10 +32,67 @@ func validWebhook(u string) bool {
 	return false
 }
 
+const groupKeyPrefix = "f1p_"
+
+func isGroupKey(s string) bool {
+	if !strings.HasPrefix(s, groupKeyPrefix) || len(s) < len(groupKeyPrefix)+16 || len(s) > 200 {
+		return false
+	}
+	for _, r := range s[len(groupKeyPrefix):] {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// validDiscordDest: a webhook URL or a group key.
+func validDiscordDest(s string) bool { return validWebhook(s) || isGroupKey(s) }
+
+// relayBase: the relay's https base ("https://host/f1party"), from relayURL.
+func relayBase() string {
+	u, err := url.Parse(relayURL)
+	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") {
+		return ""
+	}
+	scheme := "https"
+	if u.Scheme == "ws" {
+		scheme = "http"
+	}
+	return scheme + "://" + u.Host + strings.TrimSuffix(u.Path, "/ws")
+}
+
+// postGroup sends one group post (kind invite, plan or remind with its facts) through the relay.
+func postGroup(key string, facts map[string]any) error {
+	base := relayBase()
+	if base == "" {
+		return errors.New("no relay for group invites")
+	}
+	facts["key"] = key
+	body, _ := json.Marshal(facts)
+	res, err := discordHTTP.Post(base+"/post", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return errors.New("can't reach the F1 Party relay")
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 300))
+		msg := strings.TrimSpace(string(b))
+		if msg == "" {
+			msg = res.Status
+		}
+		return errors.New("Discord: " + msg)
+	}
+	return nil
+}
+
 // sendInvite posts the party code (and what the host is watching) to the Discord channel.
 func sendInvite(webhook, name, code, watching string) error {
 	if webhook == "" {
 		return errors.New("set a Discord webhook first")
+	}
+	if isGroupKey(webhook) {
+		return postGroup(webhook, map[string]any{"kind": "invite", "name": name, "code": code, "title": watching})
 	}
 	if !validWebhook(webhook) {
 		return errors.New("that isn't a Discord webhook URL")

@@ -5,6 +5,7 @@
 //   GET /f1party/ws?room=CODE&role=host|guest&name=NAME   (WebSocket)
 //   GET /f1party/health
 //   GET /f1party/join/CODE   (a page that opens f1party://join/CODE: the clickable link in Discord invites)
+//   POST /f1party/post       (group Discord invites: {key, kind, ...}; see postToDiscord)
 //
 // Messages (JSON):
 //   any   -> relay  {t:"ping", c}                        relay -> same  {t:"pong", c, s}
@@ -16,6 +17,9 @@ import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
 	ROOMS: DurableObjectNamespace<Room>;
+	// Secrets (wrangler secret put): the friend group's Discord webhook and the key the apps send instead.
+	DISCORD_WEBHOOK?: string;
+	GROUP_KEY?: string;
 }
 
 const CODE_RE = /^[A-Z0-9]{4,8}$/;
@@ -27,6 +31,7 @@ export default {
 		if (path === "/health") return new Response("ok");
 		const join = path.match(/^\/join\/([A-Za-z0-9]{4,8})$/);
 		if (join) return joinPage(join[1].toUpperCase());
+		if (path === "/post" && req.method === "POST") return postToDiscord(req, env, url.origin);
 		if (path !== "/ws") return new Response("Not found", { status: 404 });
 		if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
 		const room = (url.searchParams.get("room") || "").toUpperCase();
@@ -40,6 +45,7 @@ type Attachment = { role: "host" | "guest"; name: string; drift?: number; status
 export class Room extends DurableObject<Env> {
 	async fetch(req: Request): Promise<Response> {
 		const url = new URL(req.url);
+		if (url.pathname === "/internal/allow") return this.allowPost(url.searchParams.get("kind") || "", url.searchParams.get("needHost") === "1");
 		const role = url.searchParams.get("role") === "host" ? "host" : "guest";
 		const name = (url.searchParams.get("name") || "Guest").slice(0, 32);
 		const pair = new WebSocketPair();
@@ -108,6 +114,24 @@ export class Room extends DurableObject<Env> {
 		await this.webSocketClose(ws, 1011);
 	}
 
+	// Group Discord posts: at most one of each kind per party every few minutes; an invite only while the
+	// party's host is connected. The "__global" room caps all group posts together.
+	private async allowPost(kind: string, needHost: boolean): Promise<Response> {
+		if (needHost && this.ctx.getWebSockets("host").length === 0) return new Response("This party isn't running", { status: 409 });
+		const now = Date.now();
+		if (kind === "global") {
+			const recent = ((await this.ctx.storage.get<number[]>("posts")) || []).filter((t) => now - t < 3600_000);
+			if (recent.length >= 30) return new Response("Too many Discord posts this hour, try again later", { status: 429 });
+			recent.push(now);
+			await this.ctx.storage.put("posts", recent);
+			return new Response("ok");
+		}
+		const last = (await this.ctx.storage.get<number>("posted:" + kind)) || 0;
+		if (now - last < 120_000) return new Response("Already posted to Discord a moment ago", { status: 429 });
+		await this.ctx.storage.put("posted:" + kind, now);
+		return new Response("ok");
+	}
+
 	private broadcast(msg: object, tag?: string, skip?: WebSocket) {
 		const data = JSON.stringify(msg);
 		for (const ws of this.ctx.getWebSockets(tag)) {
@@ -143,4 +167,59 @@ p{color:#8a909c}a{color:#ff7a72}</style></head><body><main>
 <p>Nothing happens? Get F1 Party from <a href="https://github.com/Jeremy0538/f1party/releases/latest">GitHub</a>, then click the button again, or enter the code in the app.</p>
 </main><script>location.href=${JSON.stringify(app)};</script></body></html>`;
 	return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
+// Group Discord invites: the apps send the group key and the plain facts (name, code, session, time), never
+// text; the relay checks the key and the limits and writes the message itself, so a leaked key can only post
+// ordinary invites for real parties, and the webhook URL itself never leaves the relay.
+const KINDS = new Set(["invite", "plan", "remind"]);
+// Names and titles go into Discord markdown: keep letters, digits, spaces and plain punctuation only.
+const clean = (v: unknown, max: number) =>
+	String(v ?? "").replace(/[^\p{L}\p{N} .,:;'!?&+\-·()]/gu, " ").replace(/[()]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
+
+function sameKey(a: string, b: string): boolean {
+	const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
+	let diff = x.length ^ y.length;
+	for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
+	return diff === 0;
+}
+
+async function postToDiscord(req: Request, env: Env, origin: string): Promise<Response> {
+	if (!env.GROUP_KEY || !env.DISCORD_WEBHOOK) return new Response("Group invites aren't set up on this relay", { status: 503 });
+	let body: any;
+	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
+	if (typeof body?.key !== "string" || !sameKey(body.key, env.GROUP_KEY)) return new Response("Wrong group key", { status: 403 });
+	const kind = String(body.kind);
+	const code = String(body.code || "").toUpperCase();
+	if (!KINDS.has(kind) || !CODE_RE.test(code)) return new Response("Bad request", { status: 400 });
+	const name = clean(body.name, 32) || "Someone";
+	const title = clean(body.title, 80);
+	const at = Math.floor(Number(body.at) || 0);
+	const now = Date.now() / 1000;
+	if (kind !== "invite" && (!title || at < now - 600 || at > now + 60 * 86400)) return new Response("Bad request", { status: 400 });
+
+	const check = async (room: string, k: string, needHost = false) => {
+		const res = await env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(`https://room/internal/allow?kind=${k}&needHost=${needHost ? 1 : 0}`);
+		return res.ok ? null : new Response(await res.text(), { status: res.status });
+	};
+	const refused = (await check(code, kind, kind === "invite")) || (await check("__global", "global"));
+	if (refused) return refused;
+
+	const join = `[Join the party](<${origin}/f1party/join/${code}>)`;
+	const download = "\nNo F1 Party yet? [Download it](<https://github.com/Jeremy0538/f1party/releases/latest>)";
+	let text: string;
+	if (kind === "invite") {
+		text = `🏁 **${name}** is hosting an F1 Party` + (title ? `\n📺 **${title}**` : "") + `\nCode: **${code}** · ${join}` + download;
+	} else if (kind === "plan") {
+		text = `🗓️ **${name}** plans an F1 Party\n📺 **${title}**\n⏰ <t:${at}:F> (<t:${at}:R>)\nCode: **${code}** · ${join} (from the start time)` + download;
+	} else {
+		text = `⏰ **${title}** starts <t:${at}:R>: ${name}'s F1 Party\nCode: **${code}** · ${join}`;
+	}
+	const res = await fetch(env.DISCORD_WEBHOOK + "?wait=true", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ username: "F1 Party", content: text, allowed_mentions: { parse: [] } }),
+	});
+	if (!res.ok) return new Response("Discord: " + res.status, { status: 502 });
+	return new Response("ok");
 }
