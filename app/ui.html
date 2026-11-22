@@ -244,7 +244,7 @@
 	.calhead button.notifbtn { display:inline-grid; place-items:center; color:var(--dim); }
 	.calhead button.notifbtn.on { color:var(--warn); }
 	.calhead button.notifbtn svg { width:16px; height:16px; display:block; }
-	.notifpanel { position:absolute; right:0; top:52px; width:390px; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:12px 14px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:4; }
+	.notifpanel { position:absolute; right:0; top:52px; width:390px; max-width:100%; box-sizing:border-box; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:12px 14px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:4; }
 	.notifpanel > b { display:block; font-weight:600; margin-bottom:10px; }
 	.notifyrow { display:flex; align-items:center; gap:10px; }
 	.notifyrow .label { margin:0; }
