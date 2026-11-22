@@ -318,6 +318,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		if s := party.Snapshot(); s.Mode == "guest" {
 			contentID, sessionType = party.HostSession()
 		}
+		in.Name = effectiveSetup(in.Name) // no plugin answering: F1 Party opens it itself
 		if in.Name == setupStreamDeck {
 			if contentID == "" {
 				sessionType = mvSessionType()

@@ -279,6 +279,10 @@ func (p *Party) SetSetup(name string) { p.mu.Lock(); p.setup = name; p.mu.Unlock
 
 func (p *Party) Setup() string { p.mu.Lock(); defer p.mu.Unlock(); return p.setup }
 
+// OpenSetup: how a session opens right now. The Stream Deck plugin only when it answers; without it
+// (not installed, or Stream Deck isn't running) F1 Party opens everything itself, per session type.
+func (p *Party) OpenSetup() string { return effectiveSetup(p.Setup()) }
+
 // SyncNow: a guest jumps to the host right away and takes the onboards along; otherwise (host, or not in
 // a party) MultiViewer's own sync pulls the onboards to the world feed.
 func (p *Party) SyncNow() error {
@@ -773,6 +777,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 			host, setup := p.host, p.setup
 			hostGone := p.st.Connected && !p.st.HostOnline
 			p.mu.Unlock()
+			setup = effectiveSetup(setup)
 			// no host (also back after a restart as the old host): take over, with or without MultiViewer
 			if hostGone && p.takeOverHost() {
 				return
@@ -810,6 +815,7 @@ func (p *Party) guestLoop(ctx context.Context) {
 		force := p.forceSync
 		p.forceSync = false
 		p.mu.Unlock()
+		setup = effectiveSetup(setup)
 		now, clockOK := p.relayNow()
 		switch {
 		case !connected:

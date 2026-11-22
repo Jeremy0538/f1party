@@ -601,7 +601,7 @@ func jsonText(v any) string {
 // one of your setups, or just F1 Live. contentID "" = the live session (the plugin finds it itself, otherwise
 // F1 TV's home page says which content it is).
 func (p *Party) openCalSession(s CalSession, contentID string) error {
-	setup := p.Setup()
+	setup := p.OpenSetup()
 	if setup == setupStreamDeck {
 		return pluginOpen(sessionKind(s.Type+" "+s.Name), contentID)
 	}

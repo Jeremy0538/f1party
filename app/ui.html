@@ -1253,7 +1253,7 @@ async function openSettings(opts = {}) {
 				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])]);
 			const box = el("div", {},
 				group("Open sessions with",
-					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout."),
+					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout." + (pl.installed ? " The Stream Deck plugin is optional: when it isn't running, F1 Party opens everything itself." : "")),
 					row("Open with", openWith),
 					hint("Automatic per session type: each kind of session opens the setup below. Automatic there picks the setup with that word in its name.")));
 			for (const [k, label, auto] of [["setupRace", "Race", c.autoRace], ["setupQuali", "Qualifying", c.autoQuali], ["setupPractice", "Practice", c.autoPractice]]) {
