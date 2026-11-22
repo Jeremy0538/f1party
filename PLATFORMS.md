@@ -23,6 +23,9 @@ the computer you run on.
 - Say in the commit message or to the user which platform a change was actually tested on. "Compiles for Windows"
   is not "tested on Windows".
 - PARITY.md is updated in the same commit when a feature starts or stops working on a platform.
+- Every release that adds something people notice gets entries in app/whatsnew.go (shown once after updating,
+  with a Settings shortcut when it has options). New settings also belong in the setup guide automatically,
+  because the guide walks through the Settings tabs.
 
 ## On Linux (the repo owner's desktop, Hyprland)
 

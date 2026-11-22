@@ -362,10 +362,79 @@
 	.autosync { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--dim); cursor:pointer; }
 	.autosync input { width:15px; height:15px; accent-color:var(--red); margin:0; }
 	.calhint { color:var(--warn); }
-	.sessend { margin-top:10px; justify-content:space-between; }
-	#sessend { color:var(--bad); font-size:12px; }
-	#sessend:hover { color:#ff6b6b; }
-	#sessagain { height:28px; font-size:12px; }
+
+	/* in a party: heading with the status next to it, End party on the right */
+	.phead { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+	.phead h2 { font:700 17px/1.2 var(--num); letter-spacing:.02em; margin:0; white-space:nowrap; }
+	.pstatus { display:inline-flex; align-items:center; min-width:0; flex:1; font-size:12px; color:var(--dim); }
+	.pstatus #status { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.pstatus .dot { flex:none; }
+	button.danger { height:30px; padding:0 12px; font-size:12px; color:#ff8a84; border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.08); }
+	button.danger:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.6); color:#ffb1ac; }
+	.codeline { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+	.codeline .codeacts { margin:0; }
+	.feedline { display:flex; align-items:center; gap:10px; min-height:18px; margin:8px 0 12px; font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; }
+	.feedline .gap { margin-left:auto; }
+	.pacts { flex-wrap:wrap; }
+	.pacts .autosync { margin:0 0 0 4px; }
+	.note { font-size:12px; color:var(--dim); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.note:empty { display:none; }
+	/* who's in the party: one row per person, status under the name */
+	.mcard { margin-top:14px; display:flex; flex-direction:column; min-height:0; flex:1; }
+	.mhead { display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid var(--line); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
+	.mhead .count { margin-left:auto; font:600 11px/1 var(--ui); letter-spacing:0; padding:3px 7px; border-radius:999px; background:#20242b; color:var(--text); text-transform:none; }
+	.mlist { list-style:none; margin:0; padding:2px 0; overflow-y:auto; min-height:0; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; }
+	.mlist li { display:flex; align-items:center; gap:10px; min-height:46px; padding:5px 12px; }
+	.mlist li + li { border-top:1px solid var(--line); }
+	.mlist .nm { flex:1; min-width:0; }
+	.mlist .nm .top { display:flex; align-items:center; gap:7px; min-width:0; }
+	.mlist .nm b { font-weight:500; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.mlist .nm .st { display:flex; align-items:center; font-size:11.5px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.mlist .nm .st .dot { width:6px; height:6px; margin-right:6px; flex:none; }
+	.mlist .you { font-size:10.5px; color:var(--faint); }
+	.mlist .drift { font-size:12px; font-variant-numeric:tabular-nums; color:var(--dim); min-width:44px; text-align:right; }
+	.mlist .drift.ok { color:var(--ok); } .mlist .drift.warn { color:var(--warn); } .mlist .drift.bad { color:var(--bad); }
+	.mlist .acts { display:flex; align-items:center; gap:4px; flex:none; }
+	.mlist .acts .ib { width:26px; height:26px; border-color:transparent; background:none; }
+	.mlist .acts .ib:hover { background:#20242b; }
+	.mlist .acts .ib svg { width:15px; height:15px; }
+	.hostbadge { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 7px 0 6px; border-radius:999px; flex:none;
+		font:700 10px/1 var(--num); letter-spacing:.08em; color:#ffd166; background:rgba(255,209,102,.1); border:1px solid rgba(255,209,102,.35); }
+	.hostbadge svg { width:11px; height:11px; }
+	/* sidebar boxes */
+	aside { gap:12px; }
+	.box { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:12px 14px; }
+	.boxhead { display:flex; align-items:center; gap:10px; }
+	.boxtitle { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
+	.boxsub { font-size:12px; color:var(--dim); margin-top:4px; }
+	.boxsub:empty { display:none; }
+	.setupbox .mvstate { display:flex; align-items:center; font-size:12px; }
+	.setupbox .mvacts { margin-left:auto; display:flex; align-items:center; gap:6px; }
+	.setupbox .mvacts button:not(.closex) { height:26px; padding:0 10px; font-size:12px; }
+	button.closex { display:inline-grid; place-items:center; width:26px; height:26px; padding:0; border-radius:7px; background:var(--red); border-color:var(--red); color:#5a0200; }
+	button.closex:hover { background:var(--red-hi); border-color:var(--red-hi); color:#3d0100; }
+	button.closex svg { width:14px; height:14px; }
+	.sess .sesstop { display:flex; align-items:flex-start; gap:8px; }
+	.sess .sesstop .name { flex:1; min-width:0; margin:0; font:700 15px/1.25 var(--num); letter-spacing:.01em; white-space:normal; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+	.sess .sesstop .tag { margin-top:2px; flex:none; }
+	.sess .tag:empty { display:none; }
+	.sess .when { margin:3px 0 0; }
+	.sesspart { margin-top:12px; }
+	.sublbl { display:block; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
+	.sesspart select { height:30px; font-size:12px; }
+	.sesspart .row button { height:30px; font-size:12px; }
+	.sessfoot { display:flex; align-items:center; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+	.sessfoot button { height:30px; font-size:12px; }
+	.sessfoot #sessend { margin-left:auto; }
+	.sessfoot button.primary { flex:1; }
+	/* first start and what's new */
+	.steps { display:flex; gap:4px; margin:0 0 12px; }
+	.steps i { flex:1; height:3px; border-radius:2px; background:#2a2e36; }
+	.steps i.on { background:var(--red); }
+	.news { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+	.news li { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.02); font-size:12.5px; }
+	.news li span { flex:1; }
+	.news li button { height:26px; font-size:11.5px; padding:0 9px; flex:none; }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -405,9 +474,14 @@
 			</div>
 
 			<div id="party" class="hidden">
-				<span class="label" id="roleline"></span>
-				<div class="code" id="bigcode"></div>
-				<div class="codeacts">
+				<div class="phead">
+					<h2 id="roleline">You're hosting</h2>
+					<span class="pstatus" id="pstatus"><span class="dot" id="dot"></span><span id="status">…</span></span>
+					<button class="danger" id="leave">End party</button>
+				</div>
+				<div class="codeline">
+					<div class="code" id="bigcode"></div>
+					<div class="codeacts">
 					<button class="chip" id="copycode" title="Copy the party code">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
 						<span>Copy code</span>
@@ -416,17 +490,17 @@
 						<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
 						<span>Invite</span>
 					</button>
+					</div>
 				</div>
-				<div class="state">
-					<span class="dot" id="dot"></span>
-					<div class="text"><b id="status">…</b><span id="feed"></span></div>
-					<span class="gap" id="gap"></span>
-				</div>
-				<div class="row" style="margin-top:12px"><button class="primary hidden" id="together">Start together</button><button id="sync">Sync</button><button id="leave">Leave</button></div>
-				<label class="autosync hidden" id="autosyncrow" title="Follow the host by itself: their pause, play and skips, and your onboards stay with the main stream. Off: only when you click Sync to host."><input type="checkbox" id="autosync" checked> Auto-sync with the host</label>
-				<div class="hint" id="note"></div>
+				<div class="feedline"><span id="feed"></span><span class="gap" id="gap"></span></div>
+				<div class="row pacts"><button class="primary hidden" id="together">Start together</button><button id="sync">Sync</button>
+					<label class="autosync hidden" id="autosyncrow" title="Follow the host by itself: their pause, play and skips, and your onboards stay with the main stream. Off: only when you click Sync to host."><input type="checkbox" id="autosync" checked> Auto-sync</label></div>
+				<div class="note" id="note"></div>
 				<div class="error" id="syncerr"></div>
-				<ul class="members" id="members"></ul>
+				<section class="card mcard">
+					<div class="mhead"><span>In this party</span><span class="count" id="mcount"></span></div>
+					<ul class="mlist" id="members"></ul>
+				</section>
 			</div>
 			<div id="friends" class="hidden" role="tabpanel">
 				<div id="inbox"></div>
@@ -497,35 +571,38 @@
 		</main>
 
 		<aside>
-			<section class="mvbar">
-				<div class="row">
-					<span class="label" style="margin:0">MultiViewer</span>
+			<section class="box setupbox">
+				<div class="boxhead">
+					<span class="boxtitle">Setup</span>
 					<span class="mvstate"><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
 					<span class="mvacts">
-						<button class="link hidden" id="mvstart">Start</button><button class="link hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
-						<button class="link hidden" id="closef1" title="Close MultiViewer and Ultimate F1 Viewer, the desktop, lights and taskbar back (Settings → Close)">Close F1</button>
+						<button class="hidden" id="mvstart">Start</button><button class="hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
+						<button class="closex hidden" id="closef1" title="Close F1: MultiViewer and Ultimate F1 Viewer close, the desktop, lights and taskbar go back (Settings → Close)" aria-label="Close F1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
 					</span>
 				</div>
+				<div class="boxsub" id="setupapps"></div>
 				<div class="hint" id="setuphint"></div>
 				<div class="error" id="mverr"></div>
 			</section>
-			<section class="sess hidden" id="sess">
-				<div class="row" style="justify-content:space-between; margin-bottom:6px">
-					<span class="label" style="margin:0">Session</span><span class="tag" id="sesstag"></span>
-				</div>
-				<div class="sesshead"><div class="name" id="sessname"></div><button class="link hidden" id="sesschange" title="Pick a session in the calendar: the whole party switches to it">Change</button></div>
+			<section class="box sess hidden" id="sess">
+				<div class="sesstop"><h3 class="name" id="sessname"></h3><span class="tag" id="sesstag"></span></div>
 				<div class="when" id="sesswhen"></div>
-				<div class="row sesslayout hidden" id="sesslayout" title="Open this session with another layout, just this time (the default is in Settings → Sessions)">
-					<span class="label" style="margin:0">Layout</span><select id="setup" class="grow" aria-label="Layout for this session"></select><button id="setupopen">Open</button>
+				<div class="sesspart hidden" id="sesslayout" title="Open this session with another layout, just this time (the default is in Settings → Sessions)">
+					<span class="sublbl">Layout</span>
+					<div class="row"><select id="setup" class="grow" aria-label="Layout for this session"></select><button id="setupopen">Open</button></div>
 				</div>
-				<div class="jumps">
-					<button id="jbegin" title="Back to the beginning of the broadcast">Beginning</button>
-					<button id="jstart" title="To 1 minute before the session starts, then the five lights and everyone plays together">Start −1 min</button>
-					<button id="jlive" class="hidden" title="To the live edge">Live</button>
+				<div class="sesspart jumpspart">
+					<span class="sublbl">Go to</span>
+					<div class="jumps">
+						<button id="jbegin" title="Back to the beginning of the broadcast">Beginning</button>
+						<button id="jstart" title="To 1 minute before the session starts, then the five lights and everyone plays together">Start −1 min</button>
+						<button id="jlive" class="hidden" title="To the live edge">Live</button>
+					</div>
 				</div>
-				<div class="row sessend">
-					<button class="link" id="sessend" title="Stop watching this session; the party stays">End session</button>
+				<div class="sessfoot">
+					<button class="hidden" id="sesschange" title="Pick a session in the calendar: the whole party switches to it">Change</button>
 					<button class="hidden" id="sessagain" title="Open the host's session again">Watch again</button>
+					<button class="danger" id="sessend" title="Stop watching this session; the party stays">End session</button>
 				</div>
 				<div class="error" id="sesserr"></div>
 			</section>
@@ -799,6 +876,8 @@ function liveStartDialog(session, name) {
 // A small dialog: title, body, OK button text and what OK does (throw to show an error and stay open).
 function dialog(title, body, okText, onOk) {
 	$("modaltitle").textContent = title;
+	$("modalcancel").textContent = "Cancel"; $("modalcancel").classList.remove("hidden");
+	$("modalcancel").onclick = () => $("modal").classList.add("hidden");
 	$("modalbody").innerHTML = ""; $("modalbody").append(body);
 	$("modalerr").textContent = "";
 	$("modalok").textContent = okText;
@@ -813,7 +892,13 @@ function dialog(title, body, okText, onOk) {
 }
 $("modalcancel").onclick = () => $("modal").classList.add("hidden");
 // a closed dialog drops "wide" (only when it has it: changing the class again would call this again, endlessly)
-new MutationObserver(() => { const m = $("modal"); if (m.classList.contains("hidden") && m.classList.contains("wide")) m.classList.remove("wide"); }).observe($("modal"), { attributes: true, attributeFilter: ["class"] });
+new MutationObserver(() => {
+	const m = $("modal");
+	if (!m.classList.contains("hidden")) return;
+	if (m.classList.contains("wide")) m.classList.remove("wide");
+	for (const b of m.querySelectorAll("[data-wiz]")) b.remove(); // the setup guide's Back and Next
+	$("modalcancel").style.marginRight = "";
+}).observe($("modal"), { attributes: true, attributeFilter: ["class"] });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.add("hidden"); });
 
 // checkbox list: groups of [value, label, sublabel, checked]
@@ -924,6 +1009,7 @@ async function refreshMV() {
 	installed("dlmv", m.installed); installed("dluf1", m.uf1); installed("dlsd", pl.installed);
 	$("mvdot").className = "dot " + (m.running ? "ok" : "bad");
 	$("mvstate").textContent = m.running ? "Running" : (m.installed ? "Not running" : "Not installed");
+	$("setupapps").textContent = !m.running ? "" : m.setupsReady || !(m.setups || []).length ? "MultiViewer" + (m.uf1 ? " · Ultimate F1 Viewer" : "") : "MultiViewer runs without setup support";
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
 	$("closef1").classList.toggle("hidden", !m.running);
@@ -951,6 +1037,7 @@ async function refresh() {
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
 	if (!nameFilled) { $("name").value = s.name || ""; nameFilled = true; }
 	$("ver").textContent = s.version;
+	welcome(s.welcome);
 	const up = s.update;
 	$("update").classList.toggle("hidden", !up);
 	if (up) {
@@ -972,17 +1059,19 @@ async function refresh() {
 	$("party").classList.toggle("hidden", !inParty || tab !== "party");
 	if (!inParty) return;
 
-	$("roleline").textContent = s.mode === "host" ? "You're hosting" : "Party";
+	$("roleline").textContent = s.mode === "host" ? "You're hosting" : "You're a guest";
 	$("bigcode").textContent = s.code;
 	if (($("note").textContent || "") !== (s.note || "")) refreshDiscord(); // e.g. a group invite link just set up Discord
 	$("note").textContent = s.note || "";
 	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
+	$("pstatus").title = s.status || "";
 	$("leave").textContent = s.mode === "host" ? "End party" : "Leave";
 	$("leave").title = s.mode === "host" ? "Stop hosting and leave the party" : "Leave this party";
 	$("together").classList.toggle("hidden", s.mode !== "host");
 	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
 	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
-	$("status").textContent = s.status || "";
+	// the host's usual status says what the heading already does: keep it short next to it
+	$("status").textContent = /^Hosting: guests follow/.test(s.status || "") ? "Guests follow you" : (s.status || "");
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
 	const ok = s.mvOnline && s.connected;
@@ -994,31 +1083,38 @@ async function refresh() {
 		gap.className = "gap " + (d <= 0.3 ? "ok" : d <= 2 ? "warn" : "bad");
 	} else { gap.textContent = ""; gap.className = "gap"; }
 
+	renderMembers(s);
+}
+// Who's in the party: a round initial, the name with a Host badge, what they're doing under it, the gap to
+// the host on the right; the host can hand the party over, anyone can send a friend request.
+const CROWN = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 18h18v2H3zM3 7l5 4 4-6 4 6 5-4-2 9H5z"/></svg>';
+function renderMembers(s) {
 	const ul = $("members"); ul.innerHTML = "";
-	for (const m of (s.members || []).slice().sort((a, b) => (b.role === "host") - (a.role === "host"))) {
-		const li = document.createElement("li");
-		const who = document.createElement("span"); who.className = "who";
-		const name = document.createElement("span"); name.textContent = m.name;
-		who.append(name);
-		if (m.role === "host") { const t = document.createElement("span"); t.className = "host"; t.textContent = "HOST"; name.append(t); }
-		if (m.me) { const y = document.createElement("span"); y.className = "you"; y.textContent = "you"; who.append(y); }
-		const val = document.createElement("span"); val.className = "val";
-		if (m.role !== "host") {
-			const synced = m.status === "In sync" || m.status === "In sync (live)";
-			val.textContent = synced ? fmtDrift(m.drift) : (m.status || "…");
-			if (synced) val.classList.add("ok");
+	const ms = (s.members || []).slice().sort((a, b) => (b.role === "host") - (a.role === "host") || (b.me === true) - (a.me === true));
+	$("mcount").textContent = ms.length;
+	for (const m of ms) {
+		const host = m.role === "host";
+		const synced = m.status === "In sync" || m.status === "In sync (live)";
+		const top = el("span", { className: "top" }, el("b", { textContent: m.name }));
+		if (host) { const h = el("span", { className: "hostbadge", title: "Host: everyone follows their stream" }); h.innerHTML = CROWN + "HOST"; top.append(h); }
+		if (m.me) top.append(el("span", { className: "you", textContent: "you" }));
+		const what = host ? (s.feed || m.me ? "Hosting" : m.status || "Hosting") : synced ? "Watching along" : (m.status || "Joining…");
+		const dotCls = host || synced ? "ok" : /can't|error|offline/i.test(what) ? "bad" : "warn";
+		const st = el("span", { className: "st" }, el("span", { className: "dot " + dotCls }), el("span", { textContent: what }));
+		const li = el("li", {}, avatar(m.name, null, true), el("span", { className: "nm" }, top, st));
+		if (!host && synced && m.drift != null) {
+			const d = Math.abs(m.drift);
+			li.append(el("span", { className: "drift " + (d <= 0.3 ? "ok" : d <= 2 ? "warn" : "bad"), textContent: fmtDrift(m.drift), title: "How far behind (−) or ahead (+) of the host" }));
 		}
-		const right = document.createElement("span"); right.className = "right";
-		right.append(val);
-		const slot = document.createElement("span"); slot.className = "frslot";
-		if (!m.me && m.id) slot.append(friendControl(m));
-		if (s.mode === "host" && m.role === "guest" && !m.me && m.id) right.append(iconBtn("crown", "Make " + m.name + " the host", async () => {
+		const acts = el("span", { className: "acts" });
+		if (s.mode === "host" && !host && !m.me && m.id) acts.append(iconBtn("crown", "Make " + m.name + " the host", async () => {
 			if (!confirm("Make " + m.name + " the host? Everyone then follows their stream, and you carry on as a guest.")) return;
 			try { await post("/api/makehost", { id: m.id }); } catch (e) { $("syncerr").textContent = e.message; }
 			refresh();
 		}));
-		right.append(slot);
-		li.append(who, right); ul.append(li);
+		if (!m.me && m.id) acts.append(friendControl(m));
+		li.append(acts);
+		ul.append(li);
 	}
 }
 // Session block: name, where the stream is, and jumps (the host takes the whole party along).
@@ -1029,8 +1125,10 @@ async function refreshSession() {
 	const hosting = mode === "host";
 	$("sess").classList.toggle("hidden", !v && !hosting);
 	$("sesschange").classList.toggle("hidden", !hosting);
-	$("sesschange").textContent = v ? "Change" : "Choose";
-	document.querySelector(".sess .jumps").classList.toggle("hidden", !v || !!v.stopped);
+	$("sesschange").textContent = v && !v.stopped ? "Change" : "Select";
+	$("sesschange").title = v ? "Pick another session in the calendar: the whole party switches to it" : "Pick a session in the calendar to watch together";
+	$("sesschange").classList.toggle("primary", !v);
+	document.querySelector(".sess .jumpspart").classList.toggle("hidden", !v || !!v.stopped);
 	// End session: with a session open (host: for everyone, guest: just you); Watch again after a guest's end
 	$("sessend").classList.toggle("hidden", !v || !!v.stopped);
 	$("sesslayout").classList.toggle("hidden", !v || !!v.stopped);
@@ -1047,13 +1145,13 @@ async function refreshSession() {
 		$("sessname").textContent = "No session open";
 		$("sesstag").textContent = "";
 		$("sesstag").className = "";
-		$("sesswhen").textContent = "Pick one in the calendar to watch together";
+		$("sesswhen").textContent = hosting ? "Select one to watch together" : "The host hasn't picked one yet";
 		return;
 	}
 	$("sessname").textContent = v.name || (v.title === "F1 LIVE" ? "F1 Live" : v.title);
 	$("sesstag").textContent = v.live ? "LIVE" : "REPLAY";
 	$("sesstag").className = "tag" + (v.live ? " live" : "");
-	let when = v.live ? "Live stream" : fmtTime(v.time);
+	let when = v.live ? "Live" : fmtTime(v.time);
 	if (v.canStart) {
 		const t = Math.round(v.toStart);
 		when += t > 0 ? " · start in " + fmtTime(t) : " · " + fmtTime(-t) + " into the session";
@@ -1076,7 +1174,10 @@ $("sesschange").onclick = () => showTab("cal");
 // Everything is optional. Ultimate F1 Viewer has its own switch; its options are greyed out while it's off
 // or not installed. The taskbar is Windows only; desktops and window positions Windows and Hyprland.
 let setTab = "general";
-$("settingsbtn").onclick = async () => {
+$("settingsbtn").onclick = () => openSettings();
+addEventListener("focus", () => post("/api/update/check").catch(() => {}));
+// opts.wizard: the first-start guide, one tab per step with Back and Next; opts.tab: open on that tab.
+async function openSettings(opts = {}) {
 	let c = {}; try { c = await (await fetch("/api/settings")).json(); } catch {}
 	const ids = {}, uf1Parts = [];
 	const win = c.windows !== false;
@@ -1185,18 +1286,74 @@ $("settingsbtn").onclick = async () => {
 		const b = btn(label, "", () => show(k)); b.dataset.k = k; b.setAttribute("role", "tab"); bar.append(b);
 		pane.append(node);
 	}
+	if (opts.tab && tabs[opts.tab]) setTab = opts.tab;
 	show(tabs[setTab] ? setTab : "general");
 	syncUf1();
 	$("modal").classList.add("wide");
-	dialog("Settings", el("div", {}, bar, pane), "Save", async () => {
+	const save = async () => {
 		const out = {};
 		for (const [k, f] of Object.entries(ids)) out[k] = f();
 		if (!c.uf1) delete out.uf1On; // not installed: keep what was set
 		if (out.battleLaps !== undefined) out.battleLaps = parseInt(out.battleLaps, 10) || 0;
 		await post("/api/settings", out);
 		refresh(); refreshMV();
+	};
+	if (!opts.wizard) { dialog("Settings", el("div", {}, bar, pane), "Save", save); return; }
+	// The guide: every tab that applies here, in order; Finish saves everything at once.
+	const steps = Object.keys(tabs).filter((k) => k !== "windows" || c.places || c.windows !== false);
+	const intro = {
+		general: "Welcome to F1 Party! Let's go through the settings once, so everything works the way you like. You can change all of it later under the gear at the top right.",
+		sessions: "How a session opens: with one of your MultiViewer setups, the Stream Deck plugin, or just F1 Live.",
+		drivers: "Which onboards F1 Party fills in by itself.",
+		lights: "Philips Hue lights in the colour of the flag on track. Skip this if you don't have them.",
+		windows: "Where MultiViewer and Ultimate F1 Viewer open on your screen.",
+		close: "What the red Close button in the Setup box closes when you're done watching.",
+	};
+	const bars = el("div", { className: "steps" }), introP = el("p", { className: "hint sethint" });
+	const back = btn("Back", "", () => go(i - 1)), next = btn("Next", "", () => go(i + 1), "primary");
+	let i = 0;
+	const go = (n) => {
+		i = Math.max(0, Math.min(steps.length - 1, n)); show(steps[i]);
+		bars.innerHTML = ""; steps.forEach((_, k) => bars.append(el("i", { className: k <= i ? "on" : "" })));
+		introP.textContent = intro[steps[i]] || "";
+		back.disabled = i === 0;
+		const last = i === steps.length - 1;
+		next.classList.toggle("hidden", last);
+		$("modalok").classList.toggle("hidden", !last);
+		$("modalbody").scrollTop = 0;
+	};
+	bar.classList.add("hidden");
+	dialog("Set up F1 Party", el("div", {}, bars, introP, pane), "Finish", async () => {
+		await save();
+		await post("/api/welcome/done");
 	});
-};
+	// Back and Next sit in the dialog's bottom row, Skip on the left (taken out again when it closes)
+	back.dataset.wiz = next.dataset.wiz = "1";
+	$("modalok").before(back, next);
+	$("modalcancel").style.marginRight = "auto";
+	$("modalcancel").textContent = "Skip";
+	$("modalcancel").onclick = async () => { $("modal").classList.add("hidden"); try { await post("/api/welcome/done"); } catch {} };
+	go(0);
+}
+// Once after an update: what's new, with a shortcut to the settings that came with it.
+function showNews(news) {
+	const list = el("ul", { className: "news" });
+	for (const n of news) {
+		const li = el("li", {}, el("span", { textContent: n.text }));
+		if (n.tab) li.append(btn("Settings", "Open these settings", () => openSettings({ tab: n.tab })));
+		list.append(li);
+	}
+	dialog("What's new in F1 Party " + ($("ver").textContent || ""), list, "Got it", async () => {});
+	$("modalcancel").classList.add("hidden");
+	post("/api/welcome/done").catch(() => {});
+}
+let welcomed = false;
+function welcome(w) {
+	if (welcomed || !w || !$("modal").classList.contains("hidden")) return;
+	welcomed = true;
+	if (w.setup) openSettings({ wizard: true });
+	else if (w.news && w.news.length) showNews(w.news);
+}
 // Lights (Philips Hue) and Windows tabs: filled from what this computer has (see hue.go, winplace_*.go).
 function lightsTab(c, h) {
 	const hue = c.hue;
@@ -1290,9 +1447,16 @@ function friendControl(m) {
 		s.innerHTML = personSVG('<path d="M16 11l2 2 4-4"/>');
 		return s;
 	}
-	if (m.asked) return btn("Accept", m.name + " sent you a friend request", async () => { await post("/api/friend/ask", { id: m.id }); refresh(); }, "accept");
+	if (m.asked) return btn("Accept", m.name + " sent you a friend request", async () => {
+		try { await post("/api/friend/ask", { id: m.id }); } catch (e) { $("syncerr").textContent = e.message; }
+		refresh(); refreshDiscord();
+	}, "accept");
 	if (m.sent) { const s = document.createElement("span"); s.className = "sent"; s.textContent = "Request sent"; return s; }
-	const b = btn("", "Send " + m.name + " a friend request", async () => { await post("/api/friend/ask", { id: m.id }); refresh(); }, "fr");
+	const b = btn("", "Send " + m.name + " a friend request", async () => {
+		b.disabled = true;
+		try { await post("/api/friend/ask", { id: m.id }); } catch (e) { $("syncerr").textContent = e.message; }
+		refresh(); refreshDiscord();
+	}, "fr");
 	b.setAttribute("aria-label", b.title);
 	b.innerHTML = personSVG('<path d="M19 8v6M22 11h-6"/>');
 	return b;

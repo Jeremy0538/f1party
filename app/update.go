@@ -46,7 +46,6 @@ type Update struct {
 var updating atomic.Bool
 
 func (p *Party) watchUpdates() {
-	first := true
 	check := func() {
 		c := &http.Client{Timeout: 10 * time.Second}
 		req, _ := http.NewRequest("GET", releasesAPI, nil)
@@ -86,20 +85,41 @@ func (p *Party) watchUpdates() {
 		}
 		u.Auto = updateExe != "" && u.exe != "" && u.sums != "" && selfWritable()
 		p.mu.Lock()
-		if p.update == nil || p.update.Version != u.Version {
+		// a new version, or the same one whose files are there now (the release is published before its
+		// files are all uploaded)
+		if p.update == nil || p.update.Version != u.Version || (u.Auto && !p.update.Auto && p.update.Busy == "") {
 			p.update = u
 		}
 		idle := p.st.Mode == "idle"
 		p.mu.Unlock()
-		// Right after starting and not in a party: update straight away.
-		if first && idle && u.Auto {
+		// Not in a party: update straight away (in a party the button waits for a click).
+		if idle && u.Auto {
 			go p.InstallUpdate()
 		}
 	}
 	check()
-	first = false
-	for range time.Tick(6 * time.Hour) {
+	t := time.NewTicker(20 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+		case <-updateCheckNow:
+		}
 		check()
+	}
+}
+
+// updateCheckNow: check for an update right away (the window came to the front); at most once a minute.
+var updateCheckNow = make(chan struct{}, 1)
+var updateCheckedAt atomic.Int64
+
+func checkUpdateSoon() {
+	if now := time.Now().Unix(); now-updateCheckedAt.Load() >= 60 {
+		updateCheckedAt.Store(now)
+		select {
+		case updateCheckNow <- struct{}{}:
+		default:
+		}
 	}
 }
 

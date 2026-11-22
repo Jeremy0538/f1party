@@ -631,6 +631,7 @@ func (p *Party) openCalSession(s CalSession, contentID string) error {
 			return err
 		}
 	}
+	placeSoon()
 	return nil
 }
 
@@ -713,7 +714,7 @@ func (p *Party) jumpWhenLoaded(contentID, to string) {
 		}
 		return
 	}
-	p.SetNote("Session open. Start −1 min needs MultiViewer's live timing: a setup with a timing window, or the Stream Deck")
+	p.SetNote("Session open. Start −1 min needs a setup with live timing")
 }
 
 // Plan a watch party for a session: live at its start, or a replay at a time you pick (at = unix seconds).

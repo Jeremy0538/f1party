@@ -68,7 +68,7 @@ type Member struct {
 
 type Status struct {
 	AutoSync   bool      `json:"autoSync"` // guest: follow the host by itself (on by default)
-	Mode       string    `json:"mode"` // idle | host | guest
+	Mode       string    `json:"mode"`     // idle | host | guest
 	Code       string    `json:"code,omitempty"`
 	Name       string    `json:"name"`
 	Connected  bool      `json:"connected"`
@@ -79,6 +79,7 @@ type Status struct {
 	MVOnline   bool      `json:"mvOnline"`
 	Feed       *FeedInfo `json:"feed,omitempty"`
 	Note       string    `json:"note,omitempty"`
+	Welcome    *Welcome  `json:"welcome,omitempty"`   // set by /api/status
 	Countdown  float64   `json:"countdown,omitempty"` // seconds until "Start together" plays
 	Update     *Update   `json:"update,omitempty"`
 	Version    string    `json:"version"`
@@ -105,16 +106,18 @@ type Party struct {
 	host     *FeedState // guest: latest state from the host
 	hostWhen time.Time
 
-	setup     string // MultiViewer setup a guest opens on joining ("" = none)
-	ended     bool   // host: "End session" closed the session; told to guests until another one is open
+	setup      string // MultiViewer setup a guest opens on joining ("" = none)
+	ended      bool   // host: "End session" closed the session; told to guests until another one is open
+	noteText   string // the note as last shown, and since when (notes go away after a while)
+	noteAt     time.Time
 	handover   string    // host: member id the party is being handed to
 	handoverAt time.Time // when (asked for 15 s, then given up)
-	autoOff   bool   // guest: auto-sync off: only "Sync to host" moves this guest to the host
-	askSeek   bool   // guest: asked the host to seek where we went; don't pull us back meanwhile
-	skip      string // guest: content id this guest stopped watching ("End session"); the party goes on
-	setupBusy bool   // the Open button is starting MultiViewer and opening a setup: the guest loop waits
-	setupDone string // content id the Open button opened a setup for: the guest loop doesn't open it again
-	forceSync bool   // guest: correct the drift now, whatever its size
+	autoOff    bool      // guest: auto-sync off: only "Sync to host" moves this guest to the host
+	askSeek    bool      // guest: asked the host to seek where we went; don't pull us back meanwhile
+	skip       string    // guest: content id this guest stopped watching ("End session"); the party goes on
+	setupBusy  bool      // the Open button is starting MultiViewer and opening a setup: the guest loop waits
+	setupDone  string    // content id the Open button opened a setup for: the guest loop doesn't open it again
+	forceSync  bool      // guest: correct the drift now, whatever its size
 
 	id          string  // this app's member id
 	countdownAt float64 // host: relay ms at which "Start together" plays
@@ -302,6 +305,12 @@ func (p *Party) SyncNow() error {
 func (p *Party) Snapshot() Status {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// A note shows for 12 seconds; one that says something is under way ("…") stays until it is replaced.
+	if p.st.Note != p.noteText {
+		p.noteText, p.noteAt = p.st.Note, time.Now()
+	} else if p.st.Note != "" && !strings.HasSuffix(p.st.Note, "…") && time.Since(p.noteAt) > 12*time.Second {
+		p.st.Note, p.noteText = "", ""
+	}
 	s := p.st
 	s.Members = append([]Member(nil), p.st.Members...)
 	p.markFriends(&s)
@@ -928,7 +937,11 @@ func (p *Party) guestLoop(ctx context.Context) {
 				if _, err := playerCreate(host.ContentID, mainTitle); err != nil {
 					if _, err2 := playerCreate(host.ContentID, "INTERNATIONAL"); err2 != nil {
 						status = "Can't open the host's session: " + err.Error()
+					} else {
+						placeSoon()
 					}
+				} else {
+					placeSoon()
 				}
 			}
 			report()
