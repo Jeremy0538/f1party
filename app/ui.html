@@ -298,19 +298,25 @@
 						<b>Join a team</b>
 						<ol>
 							<li>Ask someone in the team for a team link and click it. That's all.</li>
-							<li>Or paste the team key you got (it starts with <i>f1p_</i>) below.</li>
+							<li>Or paste the team link (or a team key, <i>f1p_…</i>) below and click <i>Join</i>.</li>
 						</ol>
-						<b>No team? Use your own Discord channel</b>
+						<b>Start a team</b>
 						<ol>
 							<li>In Discord, open <i>Server settings</i> → <i>Integrations</i> → <i>Webhooks</i>.</li>
-							<li>Click <i>New webhook</i>, pick the channel and click <i>Copy webhook URL</i>.</li>
-							<li>Paste it below and click <i>Save</i>. It stays on this computer.</li>
+							<li>Click <i>New webhook</i>, pick the channel for party invites and click <i>Copy webhook URL</i>.</li>
+							<li>Click <i>Start a team</i>, give it a name, paste the URL and click <i>Create</i>. Then invite your friends with a team link.</li>
 						</ol>
+						<p>Can't change server settings? Ask the server owner or an admin for a webhook URL.</p>
 					</div>
 					<div id="dcset" class="hidden row" style="justify-content:space-between"><span><span class="dot ok"></span><span id="dcsettext">Discord set</span></span><button class="link" id="dcremove">Remove</button></div>
 					<div id="dcgroup" class="hidden row" style="margin-top:8px"><button id="dcgroupinv" title="Copies a link for a friend: one click puts them in your team (the link works 7 days, 5 times)">Invite a friend to the team</button><span class="hint" id="dcgroupmsg" style="margin:0 0 0 10px"></span></div>
 					<div id="dcnew" class="hidden">
-						<div class="row"><input id="dchook" class="grow" placeholder="Team key or Discord webhook URL" autocomplete="off" spellcheck="false"><button id="dcsave">Save</button></div>
+						<div class="row"><input id="dchook" class="grow" placeholder="Paste a team link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
+						<div class="row" style="margin-top:8px"><button class="link" id="teamstart">Start a team</button></div>
+						<div id="teamform" class="hidden" style="margin-top:10px">
+							<div class="row"><input id="teamname" class="grow" placeholder="Team name" maxlength="32" autocomplete="off"></div>
+							<div class="row" style="margin-top:8px"><input id="teamhook" class="grow" placeholder="Discord webhook URL of the team's channel" autocomplete="off" spellcheck="false"><button id="teamcreate">Create</button></div>
+						</div>
 					</div>
 					<div class="error" id="dcerr"></div>
 				</div>
@@ -446,7 +452,7 @@ async function refreshDiscord() {
 	try { dc = await (await fetch("/api/discord")).json(); } catch { return; }
 	webhookSet = dc.webhookSet;
 	$("dcset").classList.toggle("hidden", !webhookSet);
-	$("dcsettext").textContent = dc.group ? "You're in a team" : "Your own Discord channel is set";
+	$("dcsettext").textContent = dc.group ? (dc.team ? "You're in team " + dc.team : "You're in a team") : "Your own Discord channel is set";
 	$("dcremove").textContent = dc.group ? "Leave team" : "Remove";
 	$("teamwhat").classList.toggle("hidden", webhookSet && !dc.group);
 	$("teamwhat").textContent = dc.group ? "Every party invite you send goes to the team's Discord channel. Invite friends with a team link: one click and they're in."
@@ -465,6 +471,17 @@ $("dcsave").onclick = async () => {
 let infoOpen = false;
 function showInfo(on) { infoOpen = on; $("dcinfo").classList.toggle("hidden", !on); $("dcinfobtn").setAttribute("aria-expanded", String(on)); document.querySelector("aside .foot").classList.toggle("hidden", on); if (on) showDownloads(false); refreshSession(); }
 $("dcinfobtn").onclick = () => showInfo($("dcinfo").classList.contains("hidden"));
+$("teamstart").onclick = () => { $("teamform").classList.toggle("hidden"); $("teamname").focus(); };
+$("teamcreate").onclick = async () => {
+	$("dcerr").textContent = ""; $("teamcreate").disabled = true;
+	try {
+		await post("/api/team/create", { name: $("teamname").value, webhook: $("teamhook").value });
+		$("teamname").value = ""; $("teamhook").value = ""; $("teamform").classList.add("hidden");
+		$("dcgroupmsg").textContent = "Team created: now invite your friends";
+	} catch (e) { $("dcerr").textContent = e.message; }
+	$("teamcreate").disabled = false;
+	refreshDiscord();
+};
 $("dcgroupinv").onclick = async () => {
 	$("dcerr").textContent = ""; $("dcgroupmsg").textContent = "";
 	try { await post("/api/groupinvite", {}); $("dcgroupmsg").textContent = "Team link copied: send it to your friend"; }

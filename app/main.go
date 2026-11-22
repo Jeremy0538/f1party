@@ -319,8 +319,17 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	// Discord invites: whether a webhook is set (never the URL itself), set or clear it, send one now.
 	mux.HandleFunc("GET /api/discord", func(w http.ResponseWriter, r *http.Request) {
-		wh := loadConfig().Webhook
-		writeJSON(w, map[string]bool{"webhookSet": wh != "", "group": isGroupKey(wh)})
+		c := loadConfig()
+		if isGroupKey(c.Webhook) && c.TeamName == "" {
+			go fetchTeamName(c.Webhook) // keys pasted by hand or from before team names
+		}
+		writeJSON(w, map[string]any{"webhookSet": c.Webhook != "", "group": isGroupKey(c.Webhook), "team": c.TeamName})
+	})
+	// A new team: its name and Discord webhook go to the relay, which answers the team key.
+	mux.HandleFunc("POST /api/team/create", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Name, Webhook string }
+		json.NewDecoder(r.Body).Decode(&in)
+		replyErr(w, createTeam(strings.TrimSpace(in.Name), strings.TrimSpace(in.Webhook)))
 	})
 	// Group invite link: made by the relay, copied for pasting in Discord.
 	mux.HandleFunc("POST /api/groupinvite", func(w http.ResponseWriter, r *http.Request) {
@@ -339,11 +348,15 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		var in struct{ Webhook string }
 		json.NewDecoder(r.Body).Decode(&in)
 		in.Webhook = strings.TrimSpace(in.Webhook)
-		if in.Webhook != "" && !validDiscordDest(in.Webhook) {
-			http.Error(w, "That isn't a team key (f1p_…) or a Discord webhook URL (https://discord.com/api/webhooks/…)", 400)
+		if t := teamLinkToken(in.Webhook); t != "" { // a pasted team link works like clicking it
+			replyErr(w, redeemGroupInvite(t))
 			return
 		}
-		updateConfig(func(c *config) { c.Webhook = in.Webhook })
+		if in.Webhook != "" && !validDiscordDest(in.Webhook) {
+			http.Error(w, "Paste a team link, a team key (f1p_…) or a Discord webhook URL", 400)
+			return
+		}
+		updateConfig(func(c *config) { c.Webhook, c.TeamName = in.Webhook, "" })
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/invite", func(w http.ResponseWriter, r *http.Request) {
@@ -554,7 +567,8 @@ func newCode() string {
 type config struct {
 	Name           string     `json:"name"`
 	Setup          string     `json:"setup,omitempty"`        // MultiViewer setup opened on joining
-	Webhook        string     `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
+	Webhook        string     `json:"webhook,omitempty"`      // Discord webhook for party invites, or a team key (f1p_…)
+	TeamName       string     `json:"teamName,omitempty"`     // name of the team the key belongs to
 	DiscordAppID   string     `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
 	Last           *lastParty `json:"last,omitempty"`
 	Plans          []plan     `json:"plans,omitempty"`    // planned watch parties

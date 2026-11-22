@@ -6,6 +6,7 @@
 //   GET /f1party/health
 //   GET /f1party/join/CODE   (a page that opens f1party://join/CODE: the clickable link in Discord invites)
 //   POST /f1party/post       (group Discord invites: {key, kind, ...}; see postToDiscord)
+//   POST /f1party/team/create {name, webhook} -> {key, name}   POST /f1party/team/info {key} -> {name}
 //   POST /f1party/group/invite {key} -> {url}   GET /f1party/group/TOKEN (page)   POST /f1party/group/redeem {token} -> {key}
 //
 // Messages (JSON):
@@ -18,9 +19,6 @@ import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
 	ROOMS: DurableObjectNamespace<Room>;
-	// Secrets (wrangler secret put): the friend group's Discord webhook and the key the apps send instead.
-	DISCORD_WEBHOOK?: string;
-	GROUP_KEY?: string;
 }
 
 const CODE_RE = /^[A-Z0-9]{4,8}$/;
@@ -33,6 +31,8 @@ export default {
 		const join = path.match(/^\/join\/([A-Za-z0-9]{4,8})$/);
 		if (join) return joinPage(join[1].toUpperCase());
 		if (path === "/post" && req.method === "POST") return postToDiscord(req, env, url.origin);
+		if (path === "/team/create" && req.method === "POST") return teamCreate(req, env);
+		if (path === "/team/info" && req.method === "POST") return teamInfo(req, env);
 		if (path === "/group/invite" && req.method === "POST") return groupInvite(req, env, url.origin);
 		if (path === "/group/redeem" && req.method === "POST") return groupRedeem(req, env);
 		const groupLink = path.match(/^\/group\/([A-Za-z0-9]{12,32})$/);
@@ -138,9 +138,10 @@ export class Room extends DurableObject<Env> {
 		return new Response("ok");
 	}
 
-	// Group invite links (only in the "__group" object): token -> {exp, uses}. Creating is capped at 20 a
-	// day, redeeming at 60 tries an hour, so tokens can't be guessed or farmed.
-	private async groupTokens(cmd: { op: string; token?: string }): Promise<Response> {
+	// Teams and team links (only in the "__group" object). team:<id> -> {name, webhook, key}; t:<token> ->
+	// {team, exp, uses}. Caps: 10 new teams a day (3 per address), 20 links a day per team, 60 link tries an
+	// hour, so keys and links can't be guessed or farmed.
+	private async groupTokens(cmd: { op: string; token?: string; team?: string; name?: string; webhook?: string; ip?: string }): Promise<Response> {
 		const now = Date.now();
 		const cap = async (name: string, max: number, windowMs: number) => {
 			const recent = ((await this.ctx.storage.get<number[]>(name)) || []).filter((t) => now - t < windowMs);
@@ -149,25 +150,41 @@ export class Room extends DurableObject<Env> {
 			await this.ctx.storage.put(name, recent);
 			return true;
 		};
-		if (cmd.op === "create") {
-			if (!(await cap("created", 20, 86400_000))) return new Response("Too many invite links today", { status: 429 });
-			const bytes = crypto.getRandomValues(new Uint8Array(12));
-			const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-			const token = Array.from(bytes, (b) => abc[b % abc.length]).join("") + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => abc[b % abc.length]).join("");
-			await this.ctx.storage.put("t:" + token, { exp: now + 7 * 86400_000, uses: 5 });
-			return Response.json({ token });
-		}
-		if (cmd.op === "redeem" && cmd.token) {
-			if (!(await cap("tries", 60, 3600_000))) return new Response("Too many tries, try again later", { status: 429 });
-			const t = await this.ctx.storage.get<{ exp: number; uses: number }>("t:" + cmd.token);
-			if (!t || t.exp < now || t.uses <= 0) {
-				if (t) await this.ctx.storage.delete("t:" + cmd.token);
-				return new Response("This invite link has expired. Ask for a new one.", { status: 410 });
+		const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+		const random = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => abc[b % abc.length]).join("");
+		switch (cmd.op) {
+			case "teamCreate": {
+				if (!(await cap("teams:" + (cmd.ip || "?"), 3, 86400_000)) || !(await cap("teams", 10, 86400_000)))
+					return new Response("Too many new teams today, try again tomorrow", { status: 429 });
+				const id = random(8);
+				const key = `f1p_${id}${random(24)}`;
+				await this.ctx.storage.put("team:" + id, { name: cmd.name, webhook: cmd.webhook, key, created: now });
+				return Response.json({ id, key });
 			}
-			t.uses--;
-			if (t.uses > 0) await this.ctx.storage.put("t:" + cmd.token, t);
-			else await this.ctx.storage.delete("t:" + cmd.token);
-			return new Response("ok");
+			case "teamGet": {
+				const t = await this.ctx.storage.get("team:" + cmd.team);
+				return t ? Response.json(t) : new Response("No such team", { status: 404 });
+			}
+			case "create": {
+				if (!(await cap("created:" + cmd.team, 20, 86400_000))) return new Response("Too many team links today", { status: 429 });
+				const token = random(16);
+				await this.ctx.storage.put("t:" + token, { team: cmd.team, exp: now + 7 * 86400_000, uses: 5 });
+				return Response.json({ token });
+			}
+			case "redeem": {
+				if (!cmd.token) break;
+				if (!(await cap("tries", 60, 3600_000))) return new Response("Too many tries, try again later", { status: 429 });
+				const t = await this.ctx.storage.get<{ team?: string; exp: number; uses: number }>("t:" + cmd.token);
+				if (!t || t.exp < now || t.uses <= 0) {
+					if (t) await this.ctx.storage.delete("t:" + cmd.token);
+					return new Response("This team link has expired. Ask for a new one.", { status: 410 });
+				}
+				t.uses--;
+				if (t.uses > 0) await this.ctx.storage.put("t:" + cmd.token, t);
+				else await this.ctx.storage.delete("t:" + cmd.token);
+				if (!t.team) return new Response("This team link has expired. Ask for a new one.", { status: 410 });
+				return Response.json({ team: t.team });
+			}
 		}
 		return new Response("Bad request", { status: 400 });
 	}
@@ -224,11 +241,51 @@ function sameKey(a: string, b: string): boolean {
 	return diff === 0;
 }
 
+type Team = { id: string; name: string; webhook: string; key: string };
+const groupRoom = (env: Env) => env.ROOMS.get(env.ROOMS.idFromName("__group"));
+const groupCmd = (env: Env, cmd: object) => groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify(cmd) });
+
+async function teamById(env: Env, id: string): Promise<Team | null> {
+	if (!/^[A-Za-z0-9]{8}$/.test(id)) return null;
+	const res = await groupCmd(env, { op: "teamGet", team: id });
+	return res.ok ? { id, ...((await res.json()) as Omit<Team, "id">) } : null;
+}
+
+async function teamByKey(env: Env, key: unknown): Promise<Team | null> {
+	if (typeof key !== "string" || key.length > 200) return null;
+	const m = /^f1p_([A-Za-z0-9]{8})[A-Za-z0-9]{24}$/.exec(key);
+	if (!m) return null;
+	const t = await teamById(env, m[1]);
+	return t && sameKey(key, t.key) ? t : null;
+}
+
+const readJSON = async (req: Request): Promise<any> => { try { return await req.json(); } catch { return null; } };
+
+// A new team: name + the team's Discord webhook (checked with Discord first). Answers the team key.
+async function teamCreate(req: Request, env: Env): Promise<Response> {
+	const body = await readJSON(req);
+	const name = clean(body?.name, 32);
+	const webhook = String(body?.webhook || "").trim();
+	if (!name) return new Response("Give your team a name", { status: 400 });
+	if (!/^https:\/\/(discord|discordapp|canary\.discord|ptb\.discord)\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(webhook))
+		return new Response("That isn't a Discord webhook URL", { status: 400 });
+	const check = await fetch(webhook);
+	if (!check.ok) return new Response("Discord doesn't know that webhook (deleted?)", { status: 400 });
+	const res = await groupCmd(env, { op: "teamCreate", name, webhook: webhook.replace(/^https:\/\/(discordapp|canary\.discord|ptb\.discord)\.com/, "https://discord.com"), ip: req.headers.get("cf-connecting-ip") || "" });
+	if (!res.ok) return new Response(await res.text(), { status: res.status });
+	const { key } = (await res.json()) as { key: string };
+	return Response.json({ key, name });
+}
+
+async function teamInfo(req: Request, env: Env): Promise<Response> {
+	const team = await teamByKey(env, (await readJSON(req))?.key);
+	return team ? Response.json({ name: team.name }) : new Response("Unknown team key", { status: 403 });
+}
+
 async function postToDiscord(req: Request, env: Env, origin: string): Promise<Response> {
-	if (!env.GROUP_KEY || !env.DISCORD_WEBHOOK) return new Response("Teams aren't set up on this relay", { status: 503 });
-	let body: any;
-	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
-	if (typeof body?.key !== "string" || !sameKey(body.key, env.GROUP_KEY)) return new Response("Wrong group key", { status: 403 });
+	const body = await readJSON(req);
+	const team = await teamByKey(env, body?.key);
+	if (!team) return new Response("Unknown team key", { status: 403 });
 	const kind = String(body.kind);
 	const code = String(body.code || "").toUpperCase();
 	if (!KINDS.has(kind) || !CODE_RE.test(code)) return new Response("Bad request", { status: 400 });
@@ -242,7 +299,7 @@ async function postToDiscord(req: Request, env: Env, origin: string): Promise<Re
 		const res = await env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(`https://room/internal/allow?kind=${k}&needHost=${needHost ? 1 : 0}`);
 		return res.ok ? null : new Response(await res.text(), { status: res.status });
 	};
-	const refused = (await check(code, kind, kind === "invite")) || (await check("__global", "global"));
+	const refused = (await check(code, kind, kind === "invite")) || (await check("__global:" + team.id, "global"));
 	if (refused) return refused;
 
 	const join = `[Join the party](<${origin}/f1party/join/${code}>)`;
@@ -255,7 +312,7 @@ async function postToDiscord(req: Request, env: Env, origin: string): Promise<Re
 	} else {
 		text = `⏰ **${title}** starts <t:${at}:R>: ${name}'s F1 Party\nCode: **${code}** · ${join}`;
 	}
-	const res = await fetch(env.DISCORD_WEBHOOK + "?wait=true", {
+	const res = await fetch(team.webhook + "?wait=true", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ username: "F1 Party", content: text, allowed_mentions: { parse: [] } }),
@@ -264,30 +321,25 @@ async function postToDiscord(req: Request, env: Env, origin: string): Promise<Re
 	return new Response("ok");
 }
 
-// Group invite links: someone who has the group key makes a link (valid 7 days, 5 uses); opening it starts
-// F1 Party (f1party://group/TOKEN), which trades the token here for the key. The link never holds the key.
-const groupRoom = (env: Env) => env.ROOMS.get(env.ROOMS.idFromName("__group"));
-
+// Team links: anyone in a team makes a link (valid 7 days, 5 uses); opening it starts F1 Party
+// (f1party://group/TOKEN), which trades the token here for the team key. The link never holds the key.
 async function groupInvite(req: Request, env: Env, origin: string): Promise<Response> {
-	if (!env.GROUP_KEY) return new Response("Teams aren't set up on this relay", { status: 503 });
-	let body: any;
-	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
-	if (typeof body?.key !== "string" || !sameKey(body.key, env.GROUP_KEY)) return new Response("Wrong group key", { status: 403 });
-	const res = await groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify({ op: "create" }) });
+	const team = await teamByKey(env, (await readJSON(req))?.key);
+	if (!team) return new Response("Unknown team key", { status: 403 });
+	const res = await groupCmd(env, { op: "create", team: team.id });
 	if (!res.ok) return new Response(await res.text(), { status: res.status });
 	const { token } = (await res.json()) as { token: string };
 	return Response.json({ url: `${origin}/f1party/group/${token}` });
 }
 
 async function groupRedeem(req: Request, env: Env): Promise<Response> {
-	if (!env.GROUP_KEY) return new Response("Teams aren't set up on this relay", { status: 503 });
-	let body: any;
-	try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
-	const token = String(body?.token || "");
+	const token = String((await readJSON(req))?.token || "");
 	if (!/^[A-Za-z0-9]{12,32}$/.test(token)) return new Response("Bad request", { status: 400 });
-	const res = await groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify({ op: "redeem", token }) });
+	const res = await groupCmd(env, { op: "redeem", token });
 	if (!res.ok) return new Response(await res.text(), { status: res.status });
-	return Response.json({ key: env.GROUP_KEY }, { headers: { "cache-control": "no-store" } });
+	const team = await teamById(env, ((await res.json()) as { team: string }).team);
+	if (!team) return new Response("That team doesn't exist any more", { status: 410 });
+	return Response.json({ key: team.key, name: team.name }, { headers: { "cache-control": "no-store" } });
 }
 
 function groupPage(token: string): Response {
