@@ -42,7 +42,13 @@ type Update struct {
 	Error   string `json:"error,omitempty"` // the last install failed
 	exe     string // download URL of the new exe
 	sums    string // download URL of checksums.txt
+	setup   string // download URL of the Windows installer (for an install the app can't write to itself)
 }
+
+// updateSetup: the Windows installer in a release. It's used when F1 Party sits where it can't replace
+// itself (Program Files, where that installer puts it): Windows asks once for permission, then it installs
+// silently and F1 Party starts again. Nobody has to download anything by hand.
+const updateSetup = "F1Party-windows-setup.exe"
 
 var updating atomic.Bool
 
@@ -166,9 +172,12 @@ func (p *Party) checkUpdate() (latest string, err error) {
 				u.exe = a.URL
 			case updateChecksums:
 				u.sums = a.URL
+			case updateSetup:
+				u.setup = a.URL
 			}
 		}
-		u.Auto = updateExe != "" && u.exe != "" && u.sums != "" && selfWritable()
+		u.Auto = updateExe != "" && u.exe != "" && u.sums != "" &&
+			(selfWritable() || (runtime.GOOS == "windows" && u.setup != ""))
 		p.mu.Lock()
 		// a new version, or the same one whose files are there now (the release is published before its
 		// files are all uploaded)
@@ -224,6 +233,18 @@ func (p *Party) InstallUpdate() error {
 	go func() {
 		defer updating.Store(false)
 		set("Downloading…", "")
+		if !selfWritable() && runtime.GOOS == "windows" && u.setup != "" {
+			// Program Files: the installer does it (Windows asks for permission once)
+			if err := runSetupUpdate(u); err != nil {
+				set("", "Update failed: "+err.Error())
+				return
+			}
+			set("Installing…", "")
+			if restartAfterUpdate != nil {
+				restartAfterUpdate()
+			}
+			return
+		}
 		self, err := swapExe(u)
 		if err != nil {
 			set("", "Update failed: "+err.Error())
@@ -269,6 +290,60 @@ func selfWritable() bool {
 	f.Close()
 	os.Remove(f.Name())
 	return true
+}
+
+// runSetupUpdate downloads the release's installer, checks its SHA-256 against the release's checksums, and
+// hands over to a small hidden PowerShell script: it waits for F1 Party to quit, runs the installer silently
+// (Windows shows its permission prompt) and starts F1 Party again, also when the prompt is declined.
+func runSetupUpdate(u *Update) error {
+	want, err := expectedSum(u.sums, updateSetup)
+	if err != nil {
+		return err
+	}
+	self, err := selfPath()
+	if err != nil {
+		return err
+	}
+	dir, err := os.MkdirTemp("", "f1party-update")
+	if err != nil {
+		return err
+	}
+	setup := filepath.Join(dir, updateSetup)
+	f, err := os.Create(setup)
+	if err != nil {
+		return err
+	}
+	c := &http.Client{Timeout: 5 * time.Minute}
+	res, err := c.Get(u.setup)
+	if err != nil {
+		f.Close()
+		return err
+	}
+	defer res.Body.Close()
+	h := sha256.New()
+	_, err = io.Copy(io.MultiWriter(f, h), io.LimitReader(res.Body, 300<<20))
+	f.Close()
+	if err != nil || res.StatusCode != 200 {
+		return fmt.Errorf("download failed (%d)", res.StatusCode)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != want {
+		os.Remove(setup)
+		return errors.New("the download doesn't match the release's checksum")
+	}
+	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+	script := fmt.Sprintf(`$ErrorActionPreference = 'SilentlyContinue'
+Wait-Process -Id %d -Timeout 30
+try { Start-Process -FilePath %s -ArgumentList '/S' -Verb RunAs -Wait } catch {}
+Start-Process -FilePath %s -ArgumentList '--after-update'
+Remove-Item -LiteralPath %s -Recurse -Force
+`, os.Getpid(), q(setup), q(self), q(dir))
+	ps1 := filepath.Join(dir, "update.ps1")
+	if err := os.WriteFile(ps1, []byte(script), 0o644); err != nil {
+		return err
+	}
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", ps1)
+	detach(cmd)
+	return cmd.Start()
 }
 
 // swapExe downloads the new program next to the running one, checks its SHA-256, and swaps them: the running

@@ -710,7 +710,7 @@ function updatesTab(group, hint) {
 	const install = btn("", "", async () => {
 		if (!install.dataset.auto) return openURL(install.dataset.url);
 		install.disabled = true; install.textContent = "Installing…";
-		try { await post("/api/update"); res.textContent = "Downloading the new version: F1 Party restarts by itself (you stay in your party)."; }
+		try { await post("/api/update"); res.textContent = "Downloading the new version: F1 Party restarts by itself (you stay in your party). If Windows asks whether F1 Party may make changes, click Yes."; }
 		catch (e) { res.textContent = e.message; install.disabled = false; }
 	}, "primary hidden");
 	const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m === 1 ? "a minute ago" : m < 60 ? m + " minutes ago" : "over an hour ago"; };
