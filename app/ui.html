@@ -702,6 +702,48 @@ $("update").onclick = async () => {
 	try { await post("/api/update"); } catch (e) { $("update").textContent = e.message; }
 };
 let updateURL = "", updateAuto = false;
+
+// Settings → Updates: which version you have, and a button that looks for a newer one right away.
+function updatesTab(group, hint) {
+	const cur = el("b", { textContent: $("ver").textContent || "" });
+	const res = el("p", { className: "hint sethint", style: "margin:10px 0 0" });
+	const install = btn("", "", async () => {
+		if (!install.dataset.auto) return openURL(install.dataset.url);
+		install.disabled = true; install.textContent = "Installing…";
+		try { await post("/api/update"); res.textContent = "Downloading the new version: F1 Party restarts by itself (you stay in your party)."; }
+		catch (e) { res.textContent = e.message; install.disabled = false; }
+	}, "primary hidden");
+	const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m === 1 ? "a minute ago" : m < 60 ? m + " minutes ago" : "over an hour ago"; };
+	const show = (r, fresh) => {
+		cur.textContent = r.version || cur.textContent;
+		const u = r.update;
+		install.classList.toggle("hidden", !u);
+		if (u) {
+			install.dataset.url = u.url || ""; install.dataset.auto = u.auto && !u.error ? "1" : "";
+			install.disabled = !!u.busy;
+			install.textContent = u.busy || (u.auto && !u.error ? "Install " + u.version + " now" : "Download " + u.version);
+			res.textContent = u.error ? u.error : "F1 Party " + u.version + " is out.";
+		} else if (r.error) res.textContent = r.error;
+		else if (r.latest) res.textContent = "You have the newest version" + (fresh ? "." : " (checked " + ago(r.checked) + ").");
+		else res.textContent = r.checked ? "" : "Not checked yet.";
+	};
+	const checkBtn = btn("Check for updates", "Looks on GitHub for a newer version now", async () => {
+		checkBtn.disabled = true; checkBtn.textContent = "Checking…"; res.textContent = "";
+		try {
+			const r = await fetch("/api/update/check?now=1", { method: "POST" });
+			if (!r.ok) throw new Error((await r.text()).trim() || "Couldn't check");
+			show(await r.json(), true);
+		} catch (e) { res.textContent = e.message; }
+		checkBtn.disabled = false; checkBtn.textContent = "Check for updates";
+	});
+	fetch("/api/update/check").then((r) => r.json()).then((r) => show(r, false)).catch(() => {});
+	return el("div", {},
+		group("F1 Party",
+			el("div", { className: "setrow" }, el("span", { className: "setlbl", textContent: "Your version" }), cur),
+			hint("F1 Party also looks for updates by itself: when it starts, every 20 minutes and when you bring the window to the front. Outside a party it installs them straight away; in a party the red button at the top waits for your click."),
+			el("div", { className: "row", style: "gap:8px; margin-top:4px" }, checkBtn, install),
+			res));
+}
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 // Downloads menu: opens above the link, closes on a pick, a click elsewhere or Escape
 function showDownloads(on) { $("dlmenu").classList.toggle("hidden", !on); $("dlbtn").setAttribute("aria-expanded", String(on)); }
@@ -1303,6 +1345,7 @@ async function openSettings(opts = {}) {
 		})()],
 		lights: ["Lights", lightsTab(c, { check, pick, row, hint, group, ids })],
 		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
+		updates: ["Updates", updatesTab(group, hint)],
 		close: ["Close", el("div", {},
 			group("Close F1 closes",
 				hint("The Close F1 button under MultiViewer closes what's ticked here, and puts the lights and the taskbar back."),
@@ -1331,7 +1374,7 @@ async function openSettings(opts = {}) {
 	};
 	if (!opts.wizard) { dialog("Settings", el("div", {}, el("div", { className: "settabswrap" }, bar), pane), "Save", save); return; }
 	// The guide: every tab that applies here, in order; Finish saves everything at once.
-	const steps = Object.keys(tabs).filter((k) => k !== "windows" || c.places || c.windows !== false);
+	const steps = Object.keys(tabs).filter((k) => k !== "updates" && (k !== "windows" || c.places || c.windows !== false));
 	const intro = {
 		general: "Welcome to F1 Party! Let's go through the settings once, so everything works the way you like. You can change all of it later under the gear at the top right.",
 		sessions: "How a session opens: with one of your MultiViewer setups, the Stream Deck plugin, or just F1 Live.",

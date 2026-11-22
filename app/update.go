@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -45,15 +46,93 @@ type Update struct {
 
 var updating atomic.Bool
 
+// UpdateCheck: the answer to Settings → Updates → Check for updates.
+type UpdateCheck struct {
+	Version string  `json:"version"`          // this app
+	Latest  string  `json:"latest,omitempty"` // the newest release
+	Update  *Update `json:"update,omitempty"` // a newer one is there
+	Checked int64   `json:"checked,omitempty"`
+	Error   string  `json:"error,omitempty"`
+}
+
+// lastCheck: when updates were last looked up, and what came out (for Settings → Updates).
+var lastCheck struct {
+	sync.Mutex
+	at     time.Time
+	latest string
+	err    string
+}
+
 func (p *Party) watchUpdates() {
-	check := func() {
+	check := func() { _, _ = p.checkUpdate() }
+	check()
+	t := time.NewTicker(20 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+		case <-updateCheckNow:
+		}
+		check()
+	}
+}
+
+// CheckUpdateNow: look up the newest release right away and say what came out.
+func (p *Party) CheckUpdateNow() UpdateCheck {
+	latest, err := p.checkUpdate()
+	out := UpdateCheck{Version: version, Latest: latest, Checked: time.Now().Unix()}
+	if err != nil {
+		out.Error = err.Error()
+	}
+	p.mu.Lock()
+	if p.update != nil {
+		u := *p.update
+		out.Update = &u
+	}
+	p.mu.Unlock()
+	return out
+}
+
+// LastUpdateCheck: what the last check found, without checking again.
+func (p *Party) LastUpdateCheck() UpdateCheck {
+	lastCheck.Lock()
+	out := UpdateCheck{Version: version, Latest: lastCheck.latest, Error: lastCheck.err}
+	if !lastCheck.at.IsZero() {
+		out.Checked = lastCheck.at.Unix()
+	}
+	lastCheck.Unlock()
+	p.mu.Lock()
+	if p.update != nil {
+		u := *p.update
+		out.Update = &u
+	}
+	p.mu.Unlock()
+	return out
+}
+
+// checkUpdate looks up the newest release on GitHub. A newer one becomes p.update (and installs straight away
+// when you're not in a party). Returns the newest version.
+func (p *Party) checkUpdate() (latest string, err error) {
+	defer func() {
+		lastCheck.Lock()
+		lastCheck.at = time.Now()
+		if latest != "" || err != nil {
+			lastCheck.latest = latest
+		}
+		lastCheck.err = ""
+		if err != nil {
+			lastCheck.err = err.Error()
+		}
+		lastCheck.Unlock()
+	}()
+	{
 		c := &http.Client{Timeout: 10 * time.Second}
 		req, _ := http.NewRequest("GET", releasesAPI, nil)
 		req.Header.Set("Accept", "application/vnd.github+json")
 		req.Header.Set("User-Agent", "F1Party/"+version)
 		res, err := c.Do(req)
 		if err != nil {
-			return
+			return "", errors.New("couldn't reach GitHub: check your internet connection")
 		}
 		defer res.Body.Close()
 		var r struct {
@@ -64,12 +143,18 @@ func (p *Party) watchUpdates() {
 				URL  string `json:"browser_download_url"`
 			} `json:"assets"`
 		}
-		if res.StatusCode != 200 || json.NewDecoder(res.Body).Decode(&r) != nil || r.Prerelease {
-			return
+		if res.StatusCode == 403 || res.StatusCode == 429 {
+			return "", errors.New("GitHub asks to wait a bit before checking again: try again in a few minutes")
+		}
+		if res.StatusCode != 200 || json.NewDecoder(res.Body).Decode(&r) != nil {
+			return "", fmt.Errorf("GitHub didn't answer as expected (%d): try again later", res.StatusCode)
+		}
+		if r.Prerelease {
+			return "", nil
 		}
 		latest := strings.TrimPrefix(r.Tag, "v")
 		if compareVersions(latest, version) <= 0 {
-			return
+			return latest, nil
 		}
 		u := &Update{Version: latest, URL: ReleasesPage}
 		for _, a := range r.Assets {
@@ -96,16 +181,7 @@ func (p *Party) watchUpdates() {
 		if idle && u.Auto {
 			go p.InstallUpdate()
 		}
-	}
-	check()
-	t := time.NewTicker(20 * time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-		case <-updateCheckNow:
-		}
-		check()
+		return latest, nil
 	}
 }
 

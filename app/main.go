@@ -246,8 +246,16 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		w.Write(logoPNG)
 	})
 	mux.HandleFunc("POST /api/update/check", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("now") == "1" { // Settings → Updates: check now and say what came out
+			updateCheckedAt.Store(time.Now().Unix())
+			writeJSON(w, party.CheckUpdateNow())
+			return
+		}
 		checkUpdateSoon()
 		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("GET /api/update/check", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, party.LastUpdateCheck())
 	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		s := party.Snapshot()
