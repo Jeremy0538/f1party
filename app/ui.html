@@ -133,6 +133,15 @@
 	.pickrow input { height:28px; width:auto; flex:1; color-scheme:dark; }
 	.pickrow button { height:28px; font-size:12px; }
 	.calfoot { margin-top:auto; padding-top:10px; font-size:12px; color:var(--faint); }
+	.notifyrow { display:flex; align-items:center; gap:10px; margin-top:auto; padding-top:12px; }
+	.notifyrow .label { margin:0; }
+	.notifyrow select { width:auto; height:30px; font-size:12px; padding:0 8px; }
+	.notifyrow + .calfoot { margin-top:6px; padding-top:0; }
+	.sessions .acts button.bell { display:inline-grid; place-items:center; width:28px; height:28px; padding:0; color:var(--faint); }
+	.sessions .acts button.bell:hover { color:var(--text); }
+	button.bell svg { width:16px; height:16px; display:block; }
+	.sessions .acts button.bell.on { color:var(--warn); border-color:rgba(245,165,36,.45); }
+	button.bell:disabled { opacity:1; cursor:default; }
 	aside .foot { margin-top:auto; font-size:11px; color:var(--faint); text-align:right; }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
@@ -199,6 +208,15 @@
 				</div>
 				<ul class="sessions" id="calsessions"></ul>
 				<div class="error" id="calerr"></div>
+				<div class="notifyrow" id="notifyrow">
+					<label class="label" for="notifymode">Notify me</label>
+					<select id="notifymode">
+						<option value="">Only sessions with a bell</option>
+						<option value="race">Races only</option>
+						<option value="main">Races &amp; qualifyings</option>
+						<option value="all">Every session</option>
+					</select>
+				</div>
 				<div class="calfoot" id="calfoot"></div>
 			</div>
 		</main>
@@ -498,7 +516,7 @@ async function refreshCal() {
 		if (!r.ok) throw new Error((await r.text()).trim());
 		d = await r.json();
 	} catch (e) { $("calerr").textContent = e.message; return; }
-	const w = d.weekend; calData = w; calMeeting = w.meeting.key;
+	const w = d.weekend; calData = w; calMeeting = w.meeting.key; notifyOK = d.notifications !== false;
 	$("calname").textContent = (w.meeting.name || "").replace("Grand Prix", "GP");
 	const ms = new Date(w.meeting.start), me = new Date(w.meeting.end);
 	$("caldates").textContent = `${w.meeting.location} · ${dayFmt.format(ms)} – ${dayFmt.format(me)} ${me.getFullYear()}`;
@@ -527,6 +545,7 @@ async function refreshCal() {
 			wb.disabled = guest; acts.append(wb);
 		} else if (x.status === "soon") {
 			st.textContent = inTime(start - now);
+			if (notifyOK) acts.append(bell(x));
 			acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
 		} else {
 			st.textContent = "Replay";
@@ -547,10 +566,24 @@ async function refreshCal() {
 		}
 		ul.append(li);
 	}
-	$("calfoot").textContent = d.webhookSet
-		? "Planning posts it to your Discord channel, with a reminder 15 minutes before. F1 Party has to be running (the tray is enough)."
-		: "Set a Discord webhook to announce planned parties. F1 Party has to be running at the time (the tray is enough).";
+	$("notifyrow").classList.toggle("hidden", !notifyOK);
+	if (document.activeElement !== $("notifymode")) $("notifymode").value = d.notify || "";
+	$("calfoot").textContent = (notifyOK ? "A notification comes 15 minutes before. " : "")
+		+ (d.webhookSet ? "Planning posts it to your Discord channel too. " : "Set a Discord webhook to announce planned parties. ")
+		+ "F1 Party has to be running (the tray is enough).";
 }
+let notifyOK = true;
+const bellSVG = (fill) => `<svg viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 5.5 2.5 7.5 2.5 7.5h-17S6 15 6 9.5Z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>`;
+const BELL = bellSVG("currentColor"), BELL_OFF = bellSVG("none");
+function bell(x) {
+	const b = btn("", "", async () => { await post("/api/calendar/bell", { session: x.key }); refreshCal(); }, "bell" + (x.bell ? " on" : ""));
+	b.innerHTML = x.bell ? BELL : BELL_OFF;
+	b.setAttribute("aria-pressed", String(!!x.bell));
+	if (x.auto) { b.disabled = true; b.title = "On by “Notify me” below"; b.setAttribute("aria-label", "Notification on (by the setting below)"); }
+	else { b.title = x.bell ? "Notification 15 minutes before: on (click to turn off)" : "Get a notification 15 minutes before"; b.setAttribute("aria-label", b.title); }
+	return b;
+}
+$("notifymode").onchange = async () => { await post("/api/calendar/notify", { mode: $("notifymode").value }); refreshCal(); };
 
 refresh(); refreshMV(); refreshDiscord(); refreshSession();
 setInterval(refreshCal, 30000);

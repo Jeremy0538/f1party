@@ -8,13 +8,16 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -134,6 +137,7 @@ func main() {
 		OnStartup: func(ctx context.Context) {
 			appCtx = ctx
 			restartAfterUpdate = func() { markQuitting(); wruntime.Quit(appCtx) }
+			setupNotifications(ctx, show)
 			startTray(show, func() { wruntime.Quit(appCtx) })
 			switch {
 			case hostArg(os.Args[1:]):
@@ -168,6 +172,28 @@ func main() {
 	})
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+// setupNotifications turns on system notifications (Windows toasts, macOS and Linux notifications) for the
+// calendar; clicking one brings the window up.
+func setupNotifications(ctx context.Context, show func()) {
+	if err := wruntime.InitializeNotifications(ctx); err != nil || !wruntime.IsNotificationAvailable(ctx) {
+		log.Printf("notifications: not available (%v)", err)
+		return
+	}
+	brandNotifications()
+	wruntime.OnNotificationResponse(ctx, func(wruntime.NotificationResult) { show() })
+	n := 0
+	sendNotification = func(title, body string) error {
+		if goruntime.GOOS == "darwin" {
+			if ok, _ := wruntime.RequestNotificationAuthorization(ctx); !ok {
+				return errors.New("notifications aren't allowed for F1 Party")
+			}
+		}
+		n++
+		return wruntime.SendNotification(ctx, wruntime.NotificationOptions{
+			ID: fmt.Sprintf("f1party-%d-%d", time.Now().Unix(), n), Title: title, Body: body})
 	}
 }
 
@@ -318,7 +344,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			http.Error(w, err.Error(), 503)
 			return
 		}
-		writeJSON(w, map[string]any{"weekend": wk, "webhookSet": loadConfig().Webhook != ""})
+		c := loadConfig()
+		writeJSON(w, map[string]any{"weekend": wk, "webhookSet": c.Webhook != "", "notify": c.Notify,
+			"notifications": sendNotification != nil})
 	})
 	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Session int }
@@ -337,6 +365,25 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			return
 		}
 		writeJSON(w, pl)
+	})
+	mux.HandleFunc("POST /api/calendar/notify", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Mode string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if err := SetNotify(in.Mode); err != nil {
+			replyErr(w, err)
+			return
+		}
+		// one right away, so you see what they look like (and macOS asks for permission now)
+		if sendNotification != nil && in.Mode != notifyOff {
+			what := map[string]string{notifyRace: "every race", notifyMain: "every race and qualifying", notifyAll: "every session"}[in.Mode]
+			go sendNotification("Notifications are on", "F1 Party lets you know 15 minutes before "+what+" starts.")
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/calendar/bell", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Session int }
+		json.NewDecoder(r.Body).Decode(&in)
+		writeJSON(w, map[string]bool{"on": ToggleNotify(in.Session)})
 	})
 	mux.HandleFunc("POST /api/calendar/unplan", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ ID string }
@@ -420,12 +467,14 @@ func newCode() string {
 }
 
 type config struct {
-	Name         string     `json:"name"`
-	Setup        string     `json:"setup,omitempty"`        // MultiViewer setup opened on joining
-	Webhook      string     `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
-	DiscordAppID string     `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
-	Last         *lastParty `json:"last,omitempty"`
-	Plans        []plan     `json:"plans,omitempty"` // planned watch parties         // the party you were in, to rejoin after a restart
+	Name           string     `json:"name"`
+	Setup          string     `json:"setup,omitempty"`        // MultiViewer setup opened on joining
+	Webhook        string     `json:"webhook,omitempty"`      // Discord webhook for party invites (this computer only)
+	DiscordAppID   string     `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
+	Last           *lastParty `json:"last,omitempty"`
+	Plans          []plan     `json:"plans,omitempty"`          // planned watch parties
+	Notify         string     `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
+	NotifySessions []int      `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
 }
 
 // lastParty: the party this app was in, kept up to date while in it and cleared by Leave.
@@ -462,11 +511,17 @@ func rejoinLast(party *Party) {
 }
 
 // updateConfig changes some settings and keeps the others.
+// One change at a time: several parts of the app update the settings (the party every 15 s, the calendar,
+// the window), and two at once would each write back what they read and lose the other's change.
 func updateConfig(f func(c *config)) {
+	configMu.Lock()
+	defer configMu.Unlock()
 	c := loadConfig()
 	f(&c)
 	saveConfig(c)
 }
+
+var configMu sync.Mutex
 
 func configPath() (string, error) {
 	dir, err := os.UserConfigDir()
@@ -494,6 +549,13 @@ func saveConfig(c config) {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil && !errors.Is(err, os.ErrExist) {
 		return
 	}
+	// written next to it and then swapped in, so nobody ever reads a half-written file
 	b, _ := json.Marshal(c)
-	os.WriteFile(p, b, 0o644)
+	tmp := p + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) != nil {
+		return
+	}
+	if os.Rename(tmp, p) != nil {
+		os.Remove(tmp)
+	}
 }

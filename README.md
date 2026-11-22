@@ -61,6 +61,9 @@ Also in the app:
   announcement to Discord (with the time in everyone's own time zone and the party code), a reminder 15 minutes
   before, and at the time the app hosts the party with that code and opens the session. F1 Party has to be
   running then (the tray is enough).
+- **Notifications**: a system notification 15 minutes before a session. Under *Notify me* choose races only,
+  races and qualifyings, or every session; or turn on single sessions with their bell. Planned parties notify
+  too. Clicking one opens F1 Party.
 
 First launch warnings (the app isn't signed):
 - **Windows:** "Windows protected your PC", then **More info**, then **Run anyway**.

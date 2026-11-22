@@ -188,6 +188,8 @@ type CalRow struct {
 	CalSession
 	Status string `json:"status"` // "done", "live", "soon"
 	Plan   *plan  `json:"plan,omitempty"`
+	Bell   bool   `json:"bell,omitempty"` // a notification 15 minutes before (by the setting, or its own bell)
+	Auto   bool   `json:"auto,omitempty"` // on by the calendar's setting (the bell itself can't turn it off)
 }
 
 func calendarWeekend(meeting int) (*CalendarWeekend, error) {
@@ -239,8 +241,12 @@ func calendarWeekend(meeting int) (*CalendarWeekend, error) {
 		w.Sessions = append(w.Sessions, r)
 	}
 	calendar.Unlock()
-	plans := loadConfig().Plans
+	cfg := loadConfig()
+	plans := cfg.Plans
 	for i := range w.Sessions {
+		r := &w.Sessions[i]
+		r.Bell = notifies(cfg, r.CalSession)
+		r.Auto = notifiesBySetting(cfg.Notify, r.CalSession)
 		for j := range plans {
 			if plans[j].Session == w.Sessions[i].Key {
 				p := plans[j]
@@ -464,6 +470,7 @@ const remindBefore = 15 * time.Minute
 func (p *Party) runPlans() {
 	for range time.Tick(20 * time.Second) {
 		c := loadConfig()
+		checkNotifications(c)
 		if len(c.Plans) == 0 {
 			continue
 		}
@@ -490,6 +497,7 @@ func (p *Party) runPlans() {
 						log.Printf("plan reminder: %v", err)
 					}
 				}
+				notifyPlan(&pl)
 				pl.Reminded, changed = true, true
 			}
 			keep = append(keep, pl)
