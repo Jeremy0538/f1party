@@ -21,6 +21,7 @@ func settingsView() map[string]any {
 	for _, s := range mvSetups() {
 		setups = append(setups, s.Name)
 	}
+	bm1, bm2 := battleMax()
 	v := map[string]any{
 		"windows": runtime.GOOS == "windows",
 		"desktops": desktopsSupported(),
@@ -36,6 +37,7 @@ func settingsView() map[string]any {
 		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(), "teams": allTeams(),
 		"keepDrivers": keepDrivers(), "drivers": allDrivers(), "keepBy": keepBy(),
 		"battleOn": c.BattleOn, "battleLaps": battleLaps(), "battleRight": c.BattleRight,
+		"battleMax1": bm1, "battleMax2": bm2,
 		// Close F1
 		"closeMv": !c.CloseMVOff, "closeUf1": !c.CloseUf1Off, "closeDesktop": c.CloseDesktop,
 	}
@@ -74,6 +76,8 @@ type settingsIn struct {
 	BattleOn      *bool
 	BattleLaps    *int
 	BattleRight   *string
+	BattleMax1    *int
+	BattleMax2    *int
 	CloseMv       *bool
 	CloseUf1      *bool
 	CloseDesktop  *bool
@@ -168,6 +172,12 @@ func applySettings(in settingsIn, party *Party) {
 			if *in.BattleRight == "p5to8" {
 				c.BattleRight = "p5to8"
 			}
+		}
+		if in.BattleMax1 != nil {
+			c.BattleMax1 = max(1, min(4, *in.BattleMax1))
+		}
+		if in.BattleMax2 != nil {
+			c.BattleMax2 = max(1, min(4, *in.BattleMax2))
 		}
 		set(&c.CloseMVOff, in.CloseMv, true)
 		set(&c.CloseUf1Off, in.CloseUf1, true)

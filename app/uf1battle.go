@@ -125,8 +125,9 @@ const battleFitJS = `(async want => {
     if (document.documentElement.scrollWidth > W || document.documentElement.scrollHeight > H) return false;
     return [...document.querySelectorAll('.driver')].every(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right <= W && r.bottom <= H; });
   };
-  const size = innerWidth + 'x' + innerHeight;
-  let cap = window.__f1pCap && window.__f1pCap.size === size ? window.__f1pCap.n : 0;
+  const size = innerWidth + 'x' + innerHeight, was = window.__f1pCap;
+  // try again when the window changed size, or when more are wanted than were tried and all of those fitted
+  let cap = was && was.size === size && !(was.n >= was.tried && want.length > was.tried) ? was.n : 0;
   if (!cap) {
     // try: start empty, add one at a time, stop at the first that doesn't fit (at least one always shows)
     shownNow().forEach(n => toggleDriver(n));
@@ -137,7 +138,7 @@ const battleFitJS = `(async want => {
       if (cap > 0 && !fits()) { toggleDriver(n); await frame(); break; }
       cap++;
     }
-    window.__f1pCap = { size, n: cap };
+    window.__f1pCap = { size, n: cap, tried: want.length };
     return 'ok:' + cap;
   }
   const keep = want.slice(0, cap), shown = shownNow();

@@ -655,8 +655,18 @@ func fitLiveTiming(fit bool) {
 	}
 }
 
-// battleMax: the most drivers a battle mode window gets; it shows fewer when they don't fit in it.
-const battleMax = 4
+// battleMax: the most drivers a battle mode window gets (first window, next ones): 4 unless set lower. A
+// window shows fewer when they don't fit in it.
+func battleMax() (first, next int) {
+	c := loadConfig()
+	m := func(n int) int {
+		if n <= 0 {
+			return 4
+		}
+		return min(4, n)
+	}
+	return m(c.BattleMax1), m(c.BattleMax2)
+}
 
 // updateBattle: the first battle mode window (from the left) shows the top of the race, as many as fit (up
 // to 4). A next window carries on where that one stopped (the next places), or shows the top of the
@@ -672,15 +682,19 @@ func updateBattle() bool {
 	}
 	champ := t.byChampionship()
 	useChamp := loadConfig().BattleRight != "p5to8" && len(champ) >= 2
-	upTo := func(l []int, from int) []int {
+	max1, max2 := battleMax()
+	upTo := func(l []int, from, n int) []int {
 		from = min(from, len(l))
-		return l[from:min(len(l), from+battleMax)]
+		return l[from:min(len(l), from+n)]
 	}
 	return uf1SetBattle(func(i, shown int) []int {
-		if i > 0 && useChamp {
-			return upTo(champ, 0)
+		if i == 0 {
+			return upTo(pos, 0, max1)
 		}
-		return upTo(pos, shown)
+		if useChamp {
+			return upTo(champ, 0, max2)
+		}
+		return upTo(pos, shown, max2)
 	})
 }
 
