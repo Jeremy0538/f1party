@@ -57,6 +57,7 @@ var calendar struct {
 	meetings map[int]CalMeeting
 	loaded   time.Time
 	tried    time.Time
+	wait     time.Duration // after a failed update: how long until the next try (doubles, at most an hour)
 	lastErr  error
 }
 
@@ -100,7 +101,9 @@ func loadCalendar() error {
 	if len(calendar.sessions) == 0 {
 		readCalendarCache()
 	}
-	if time.Since(calendar.loaded) < 30*time.Minute || time.Since(calendar.tried) < time.Minute {
+	// The calendar hardly changes: an update every 6 hours is plenty. After a failure the next try waits 5
+	// minutes, then 10, 20, 40, 60, so a closed OpenF1 costs next to nothing.
+	if time.Since(calendar.loaded) < 6*time.Hour || time.Since(calendar.tried) < calendar.wait {
 		if len(calendar.sessions) == 0 {
 			return calendar.lastErr
 		}
@@ -113,13 +116,14 @@ func loadCalendar() error {
 	}
 	if err != nil {
 		calendar.lastErr = err
+		calendar.wait = min(max(calendar.wait*2, 5*time.Minute), time.Hour)
 		if len(calendar.sessions) > 0 {
 			return nil // keep showing the calendar we have
 		}
 		return err
 	}
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Start.Before(sessions[j].Start) })
-	calendar.sessions, calendar.meetings, calendar.loaded, calendar.lastErr = sessions, meetings, time.Now(), nil
+	calendar.sessions, calendar.meetings, calendar.loaded, calendar.lastErr, calendar.wait = sessions, meetings, time.Now(), nil, 0
 	writeCalendarCache()
 	return nil
 }
@@ -209,6 +213,7 @@ func readCalendarCache() {
 		return
 	}
 	calendar.sessions, calendar.meetings = c.Sessions, map[int]CalMeeting{}
+	calendar.loaded = c.Saved // a copy from less than 6 hours ago needs no update at start-up
 	for _, m := range c.Meetings {
 		calendar.meetings[m.Key] = m
 	}
