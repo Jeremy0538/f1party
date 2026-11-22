@@ -617,6 +617,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		go closeF1()
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	extraRoutes(mux)
 	// Ultimate F1 Viewer layout with a MultiViewer setup ("-" = none, "" = the one with the same name).
 	mux.HandleFunc("POST /api/setup/uf1", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Setup, Layout string }
@@ -765,6 +766,7 @@ type config struct {
 	CloseMVOff   bool `json:"closeMvOff,omitempty"`   // leave MultiViewer open
 	CloseUf1Off  bool `json:"closeUf1Off,omitempty"`  // leave Ultimate F1 Viewer open
 	CloseDesktop bool `json:"closeDesktop,omitempty"` // remove the watching desktop
+	PlaceOff     bool `json:"placeOff,omitempty"`     // don't put MultiViewer and Ultimate F1 Viewer at their saved places
 }
 
 // f1DesktopName: the desktop for watching unless the settings name another (the F1 Race Control plugin's name).
