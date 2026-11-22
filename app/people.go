@@ -58,7 +58,8 @@ type Person struct {
 type TeamInfo struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
-	Owner   bool   `json:"owner"`
+	Owner   bool   `json:"owner"`             // this app is the team's moderator (started it)
+	OwnerID string `json:"ownerId,omitempty"` // who the moderator is
 	Members int    `json:"members"`
 }
 

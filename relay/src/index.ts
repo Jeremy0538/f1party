@@ -294,7 +294,7 @@ export class Room extends DurableObject<Env> {
 						const u = await user(id);
 						if (u) person(id, u).teams.push(tid);
 					}
-					teamsOut.push({ id: tid, name: t.name, owner: t.owner === cmd.uid, members: members.length + 1 });
+					teamsOut.push({ id: tid, name: t.name, owner: t.owner === cmd.uid, ownerId: t.owner, members: members.length + 1 });
 				}
 				const events = (await st.get<object[]>("inbox:" + cmd.uid)) || [];
 				if (events.length) await st.delete("inbox:" + cmd.uid);

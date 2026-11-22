@@ -223,6 +223,38 @@
 	.members .sent { font-size:11px; color:var(--faint); }
 	/* friends tab */
 	#friends, #teams { display:flex; flex-direction:column; }
+	/* boxes: all friends in one, every team its own; people rows with a round initial */
+	.card { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; overflow:hidden; }
+	.cards { display:flex; flex-direction:column; gap:10px; }
+	.card > .empty { margin:0; padding:14px; }
+	.plist { list-style:none; margin:0; padding:4px 0; }
+	.plist li { display:flex; align-items:center; gap:10px; min-height:48px; padding:6px 12px; }
+	.plist li + li { border-top:1px solid var(--line); }
+	.plist .nm { flex:1; min-width:0; }
+	.plist .nm b { display:block; font-weight:500; font-size:13px; }
+	.plist .nm span { display:block; font-size:11.5px; color:var(--dim); font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	.plist .acts { display:flex; gap:6px; align-items:center; }
+	.plist button { height:28px; font-size:12px; }
+	.plist button.ib { width:28px; height:28px; }
+	.av { position:relative; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; flex:none; font:600 12px/1 var(--ui); color:#fff; }
+	.av.sm { width:24px; height:24px; font-size:10.5px; }
+	.av i { position:absolute; right:-1px; bottom:-1px; width:9px; height:9px; border-radius:50%; border:2px solid var(--panel); }
+	.av i.on { background:var(--ok); } .av i.live { background:var(--red); }
+	.thead { display:flex; align-items:center; gap:10px; padding:11px 12px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02); }
+	.thead .nm { flex:1; min-width:0; }
+	.thead .nm b { display:block; font-weight:600; font-size:14px; }
+	.thead .nm span { font-size:11.5px; color:var(--dim); }
+	.thead .acts { display:flex; gap:6px; }
+	.thead button.ib { width:28px; height:28px; }
+	.mgrid { display:grid; grid-template-columns:24px minmax(0,1fr) 86px 72px; align-items:center; column-gap:10px; padding:6px 12px 8px; }
+	.mgrid > * { min-height:34px; display:flex; align-items:center; }
+	.mgrid .who { flex-direction:column; align-items:flex-start; justify-content:center; min-width:0; }
+	.mgrid .who b { font-weight:500; font-size:12.5px; }
+	.mgrid .who span { font-size:11px; color:var(--dim); font-style:italic; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	.mgrid .end { justify-content:flex-end; gap:6px; }
+	.mgrid button { height:24px; font-size:11px; padding:0 9px; }
+	.mgrid button.ib { width:24px; height:24px; padding:0; }
+	.mgrid button.ib svg { width:14px; height:14px; }
 	/* icon buttons (friends and teams) */
 	button.ib { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; flex:none; color:var(--dim); }
 	button.ib:hover { color:var(--text); }
@@ -232,15 +264,13 @@
 	button.ib.red { color:var(--bad); border-color:rgba(239,68,68,.3); }
 	button.ib.red:hover { background:rgba(239,68,68,.12); }
 	.flist button.ib { width:28px; height:28px; }
-	.mlist { list-style:none; margin:6px 0 0; padding:0; border-top:1px solid var(--line); }
-	.mlist li { display:flex; align-items:center; gap:10px; min-height:38px; border-bottom:1px solid var(--line); }
-	.mlist li span { flex:1; }
-	.mlist li .you { flex:none; color:var(--faint); font-size:11px; }
 	.flist { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
 	.flist li { display:flex; align-items:center; gap:12px; min-height:46px; border-bottom:1px solid var(--line); padding:6px 2px; }
 	.flist .nm { flex:1; min-width:0; }
-	.flist .nm b { display:block; font-weight:600; }
-	.flist .nm span { font-size:12px; color:var(--dim); }
+	.flist .nm b { display:block; font-weight:500; font-size:13.5px; }
+	.flist .nm span { font-size:11.5px; color:var(--dim); font-style:italic; }
+	.flist li.team-row .nm b { font-weight:600; font-size:14px; }
+	.flist li.team-row .nm span { font-style:normal; }
 	.flist button { height:28px; font-size:12px; }
 	.empty { color:var(--dim); font-size:13px; margin-top:6px; }
 	.team { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:0 0 12px; }
@@ -253,10 +283,15 @@
 	.flist .st.live::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--red); margin-right:6px; vertical-align:1px; }
 	.flist .on::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok); margin-right:6px; vertical-align:1px; }
 	.flist li.team-row { flex-wrap:wrap; height:auto; padding:9px 2px; }
-	.flist .mates { flex-basis:100%; margin:6px 0 0 12px; display:flex; flex-direction:column; gap:4px; }
-	.flist .mate { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--dim); min-height:24px; }
-	.flist .mate b { color:var(--text); font-weight:500; }
+	.flist .mates { flex-basis:100%; margin:8px 0 0 12px; padding-left:12px; padding-right:2px; box-sizing:border-box; max-width:calc(100% - 12px); border-left:2px solid var(--line-2); display:flex; flex-direction:column; gap:2px; }
+	.flist .mate { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--dim); min-height:28px; }
+	.flist .mate b { color:var(--text); font-weight:400; }
+	.flist .mate .what { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-style:italic; }
 	.flist .mate button { height:24px; font-size:11px; padding:0 9px; }
+	.flist .mate button.ib { width:24px; height:24px; padding:0; }
+	.flist .mate button.ib svg { width:14px; height:14px; }
+	.role { font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:1px 6px; border-radius:999px; border:1px solid var(--line-2); color:var(--faint); flex:none; }
+	.role.mod { color:var(--warn); border-color:rgba(245,165,36,.45); }
 	#inbox:empty, #tinbox:empty { display:none; }
 	#inbox, #tinbox { display:flex; flex-direction:column; gap:8px; margin:0 0 18px; }
 	.invite-card { display:flex; align-items:center; gap:10px; border:1px solid rgba(225,6,0,.45); background:rgba(225,6,0,.07); border-radius:10px; padding:10px 12px; }
@@ -341,8 +376,10 @@
 				</div>
 				<p class="hint" style="margin:0 0 10px">Friends see what you watch and can invite you to their party, right in F1 Party.</p>
 				<p class="hint" id="friendmsg"></p>
-				<ul class="flist" id="flist"></ul>
-				<p class="empty hidden" id="fempty">No friends yet. Click the green button and send the link, or add someone in a party with the add-friend icon next to their name.</p>
+				<div class="card">
+					<ul class="plist" id="flist"></ul>
+					<p class="empty hidden" id="fempty">No friends yet. Click the green button and send the link, or add someone in a party with the add-friend icon next to their name.</p>
+				</div>
 			</div>
 			<div id="teams" class="hidden" role="tabpanel">
 				<div id="tinbox" class="inbox"></div>
@@ -356,7 +393,7 @@
 					<div class="row" style="margin-top:8px"><input id="teamhook" class="grow" placeholder="Discord webhook URL of the team's channel" autocomplete="off" spellcheck="false"><button id="teamcreate">Create</button></div>
 					<p class="hint">In Discord: <i>Server settings</i> → <i>Integrations</i> → <i>Webhooks</i> → <i>New webhook</i>, pick the channel, <i>Copy webhook URL</i>. It's kept safe on the F1 Party server, never on anyone's computer.</p>
 				</div>
-				<ul class="flist" id="tlist"></ul>
+				<div class="cards" id="tlist"></div>
 				<p class="empty hidden" id="tempty">No teams yet. Start one with the + button, or paste a team link a friend sent you.</p>
 				<div class="row" style="margin-top:12px"><input id="dchook" class="grow" placeholder="Paste a team link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
 				<div class="row hidden" id="ownhook" style="justify-content:space-between; margin-top:10px"><span class="hint" style="margin:0"><span class="dot ok"></span>Your own Discord channel (webhook) is set</span><button class="link" id="ownremove">Remove</button></div>
@@ -530,6 +567,13 @@ const peopleErr = (msg) => { $(tab === "teams" ? "dcerr" : "friendmsg").textCont
 // teams a friend isn't in yet (only mutual friends can be invited)
 const teamsWithout = (f) => f.mutual ? people.teams.filter((t) => !(t.people || []).some((m) => m.id === f.id)) : [];
 
+// A round initial in a colour of its own per name, with a dot: online (green) or watching live (red).
+function avatar(name, dot, small) {
+	let h = 0; for (const c of name || "?") h = (h * 31 + c.charCodeAt(0)) % 360;
+	return el("span", { className: "av" + (small ? " sm" : ""), style: `background:hsl(${h} 42% 34%)`, textContent: (name || "?").trim().charAt(0).toUpperCase() },
+		dot ? el("i", { className: dot }) : null);
+}
+
 function renderPeople() {
 	const d = people;
 	// a red dot on the tab when something is waiting there
@@ -554,12 +598,12 @@ function renderPeople() {
 	$("fempty").classList.toggle("hidden", d.friends.length > 0);
 	const rank = (f) => (f.status ? 2 : f.online ? 1 : 0);
 	for (const f of d.friends.slice().sort((a, b) => rank(b) - rank(a) || (b.seen || 0) - (a.seen || 0))) {
-		const line = f.status ? el("span", { className: "st" + (f.status.live ? " live" : ""), textContent: "Watching " + watching(f.status) })
-			: f.online ? el("span", { className: "on", textContent: "Online" })
-			: el("span", { textContent: "Last watched together " + dateFmt.format(new Date((f.seen || f.since) * 1000)) });
+		const line = f.status ? "Watching " + watching(f.status) : f.online ? "Online"
+			: "Last watched together " + dateFmt.format(new Date((f.seen || f.since) * 1000));
 		const open = teamsWithout(f);
 		fl.append(el("li", {},
-			el("div", { className: "nm" }, el("b", { textContent: f.name }), line),
+			avatar(f.name, f.status ? (f.status.live ? "live" : "on") : f.online ? "on" : ""),
+			el("div", { className: "nm" }, el("b", { textContent: f.name }), el("span", { textContent: line })),
 			el("div", { className: "acts" },
 				f.status && f.status.code ? btn("Join", "Join " + f.name + "'s party", () => joinParty(f.status.code), "primary") : null,
 				open.length ? iconBtn("toTeam", open.length === 1 ? "Invite " + f.name + " to team " + open[0].name : "Invite " + f.name + " to one of your teams", () => friendTeamDialog(f)) : null,
@@ -569,24 +613,39 @@ function renderPeople() {
 				}, "red"))));
 	}
 
-	// teams
+	// teams: one box each; members in fixed columns (initial, name, role, actions), the moderator first
 	const tl = $("tlist"); tl.innerHTML = "";
 	$("tempty").classList.toggle("hidden", d.teams.length > 0);
 	for (const t of d.teams) {
-		const mates = el("div", { className: "mates" });
-		for (const m of (t.people || []).slice().sort((a, b) => (b.status ? 1 : 0) - (a.status ? 1 : 0))) {
-			mates.append(el("div", { className: "mate" }, el("b", { textContent: m.name }),
-				el("span", { textContent: m.status ? "Watching " + watching(m.status) : "" }),
-				m.status && m.status.code ? btn("Join", "Join " + m.name + "'s party", () => joinParty(m.status.code)) : null));
+		const isMod = (id) => id === "me" ? t.owner : !!t.ownerId && id === t.ownerId;
+		const grid = el("div", { className: "mgrid" });
+		const myName = $("name").value || "You";
+		const all = [{ id: "me", name: myName, status: null }, ...(t.people || [])]
+			.sort((a, b) => (isMod(b.id) ? 1 : 0) - (isMod(a.id) ? 1 : 0) || (b.status ? 1 : 0) - (a.status ? 1 : 0));
+		for (const m of all) {
+			const mod = isMod(m.id);
+			grid.append(
+				el("div", {}, avatar(m.name, m.status ? (m.status.live ? "live" : "on") : "", true)),
+				el("div", { className: "who" }, el("b", { textContent: m.id === "me" ? m.name + " (you)" : m.name }),
+					m.status ? el("span", { textContent: "watching " + watching(m.status) }) : null),
+				el("div", {}, el("span", { className: "role" + (mod ? " mod" : ""), textContent: mod ? "Moderator" : "Member" })),
+				el("div", { className: "end" },
+					m.status && m.status.code ? btn("Join", "Join " + m.name + "'s party", () => joinParty(m.status.code)) : null,
+					t.owner && m.id !== "me" ? iconBtn("userMinus", "Remove " + m.name + " from " + t.name, async () => {
+						if (!confirm("Remove " + m.name + " from team " + t.name + "? They can only come back with a new team link.")) return;
+						try { await post("/api/team/kick", { id: t.id, to: m.id }); } catch (e) { $("dcerr").textContent = e.message; }
+						refreshDiscord();
+					}, "red") : null));
 		}
-		tl.append(el("li", { className: "team-row" },
-			el("div", { className: "nm" }, el("b", { textContent: t.name || "Team" }),
-				el("span", { textContent: t.members + (t.members === 1 ? " member" : " members") + (t.owner ? " · you started it" : "") })),
-			el("div", { className: "acts" },
-				iconBtn("userPlus", "Invite someone to " + t.name, () => teamInviteDialog(t), "green"),
-				t.owner ? iconBtn("pencil", "Edit team " + t.name + ": name and members", () => teamEditDialog(t))
-					: iconBtn("leave", "Leave team " + t.name, () => leaveTeamAsk(t))),
-			t.people && t.people.length ? mates : null));
+		tl.append(el("div", { className: "card" },
+			el("div", { className: "thead" },
+				el("div", { className: "nm" }, el("b", { textContent: t.name || "Team" }),
+					el("span", { textContent: t.members + (t.members === 1 ? " member" : " members") })),
+				el("div", { className: "acts" },
+					iconBtn("userPlus", "Invite someone to " + t.name, () => teamInviteDialog(t), "green"),
+					t.owner ? iconBtn("pencil", "Rename team " + t.name, () => teamEditDialog(t))
+						: iconBtn("leave", "Leave team " + t.name, () => leaveTeamAsk(t)))),
+			grid));
 	}
 	$("ownhook").classList.toggle("hidden", !d.ownWebhook);
 }
@@ -612,22 +671,11 @@ function friendTeamDialog(f) {
 	});
 }
 
-// Team > edit (only the one who started it): the name, and remove members.
+// Team > edit (only the moderator): the name. Members are removed in the team's list itself.
 function teamEditDialog(t) {
 	const name = el("input", { className: "grow", value: t.name, maxLength: 32, autocomplete: "off" });
-	const list = el("ul", { className: "mlist" }, el("li", {}, el("span", { textContent: $("name").value || "You" }), el("span", { className: "you", textContent: "you" })));
-	for (const m of t.people || []) {
-		const li = el("li", {}, el("span", { textContent: m.name }));
-		li.append(iconBtn("userMinus", "Remove " + m.name + " from " + t.name, async () => {
-			if (!confirm("Remove " + m.name + " from team " + t.name + "? They can only come back with a new team link.")) return;
-			try { await post("/api/team/kick", { id: t.id, to: m.id }); li.remove(); refreshDiscord(); } catch (e) { $("modalerr").textContent = e.message; }
-		}, "red"));
-		list.append(li);
-	}
 	const body = el("div", {},
 		el("label", { className: "label", textContent: "Name" }), el("div", { className: "row" }, name),
-		el("div", { className: "label", style: "margin-top:14px", textContent: "Members" }), list,
-		(t.people || []).length ? null : el("p", { className: "hint", textContent: "Nobody else has joined yet." }),
 		el("div", { className: "row", style: "margin-top:14px" }, btn("Leave team", "", async () => { if (await leaveTeamAsk(t)) $("modal").classList.add("hidden"); }, "link")));
 	dialog("Edit team " + t.name, body, "Save", async () => {
 		const n = name.value.trim();
