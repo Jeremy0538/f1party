@@ -342,7 +342,9 @@
 	.modal .box { display:flex; flex-direction:column; }
 	#modalbody { flex:1 1 auto; min-height:0; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; margin:0 -18px; padding:0 18px; }
 	.modal .box > .row { flex:none; padding-top:12px; border-top:1px solid var(--line); }
-	.settabs { position:sticky; top:0; z-index:1; }
+	/* sticky tab bar: a band in the window's colour around and below it, so nothing scrolls into view behind its corners or the gap under it */
+	.settabswrap { position:sticky; top:0; z-index:1; background:var(--panel); margin:0 -18px 4px; padding:0 18px 8px; }
+	.settabswrap .settabs { margin:0; }
 	.modal .box { width:380px; max-height:86%; overflow:hidden; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
 	.modal .box > b { display:block; font-size:15px; margin-bottom:10px; }
 	.pick { display:flex; flex-direction:column; gap:2px; }
@@ -1251,7 +1253,7 @@ async function openSettings(opts = {}) {
 				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])]);
 			const box = el("div", {},
 				group("Open sessions with",
-					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout."),
+					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout." + (pl.installed ? " The Stream Deck plugin is optional: when it isn't running, F1 Party opens everything itself." : "")),
 					row("Open with", openWith),
 					hint("Automatic per session type: each kind of session opens the setup below. Automatic there picks the setup with that word in its name.")));
 			for (const [k, label, auto] of [["setupRace", "Race", c.autoRace], ["setupQuali", "Qualifying", c.autoQuali], ["setupPractice", "Practice", c.autoPractice]]) {
@@ -1327,7 +1329,7 @@ async function openSettings(opts = {}) {
 		await post("/api/settings", out);
 		refresh(); refreshMV();
 	};
-	if (!opts.wizard) { dialog("Settings", el("div", {}, bar, pane), "Save", save); return; }
+	if (!opts.wizard) { dialog("Settings", el("div", {}, el("div", { className: "settabswrap" }, bar), pane), "Save", save); return; }
 	// The guide: every tab that applies here, in order; Finish saves everything at once.
 	const steps = Object.keys(tabs).filter((k) => k !== "windows" || c.places || c.windows !== false);
 	const intro = {

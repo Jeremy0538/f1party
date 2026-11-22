@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,6 +40,37 @@ type PluginInfo struct {
 	Version   string `json:"version,omitempty"`
 	Download  string `json:"download"`
 	Page      string `json:"page"`
+}
+
+// effectiveSetup: the "setup" choice, with the Stream Deck plugin replaced by F1 Party's own automatic
+// opening when the plugin doesn't answer. Nothing needs the plugin: it's only another way to open.
+func effectiveSetup(choice string) string {
+	if choice == setupStreamDeck && !pluginAnswers() {
+		return setupAuto
+	}
+	return choice
+}
+
+// pluginAnswers: whether the plugin answers now (remembered for 15 seconds, so the party loop isn't slowed).
+var pluginSeen struct {
+	sync.Mutex
+	at time.Time
+	ok bool
+}
+
+func pluginAnswers() bool {
+	pluginSeen.Lock()
+	defer pluginSeen.Unlock()
+	if time.Since(pluginSeen.at) < 15*time.Second {
+		return pluginSeen.ok
+	}
+	pluginSeen.ok = false
+	if res, err := pluginHTTP.Get(pluginURL + "/f1/status"); err == nil {
+		pluginSeen.ok = res.StatusCode == 200
+		res.Body.Close()
+	}
+	pluginSeen.at = time.Now()
+	return pluginSeen.ok
 }
 
 func pluginInfo() PluginInfo {
