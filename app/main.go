@@ -52,6 +52,8 @@ func main() {
 	party := NewParty(cfg.Name, cfg.Setup)
 	go party.watchUpdates()
 	go party.watchPresence()
+	migrateTeams()
+	go party.watchPeople()
 	go rememberParty(party)
 	go party.runPlans()
 	go func() { // friend requests in the party
@@ -89,7 +91,8 @@ func main() {
 				party.SetNote("Everyone synced to you")
 			}
 		}
-		if wh := loadConfig().Webhook; wh != "" {
+		t := defaultTargets()
+		if len(t.Teams) > 0 || len(t.Friends) > 0 || t.Own {
 			watching := mvSessionName()
 			if f := party.Snapshot().Feed; watching != "" && f != nil {
 				if f.Live {
@@ -98,14 +101,14 @@ func main() {
 					watching += " · replay"
 				}
 			}
-			if err := sendInvite(wh, s.Name, s.Code, watching); err != nil {
+			if _, err := sendPartyInvites(t, s.Name, s.Code, watching); err != nil {
 				party.SetNote(err.Error())
 				return s.Code, err
 			}
 			if resynced {
-				party.SetNote("Everyone synced to you · invite sent again")
+				party.SetNote("Everyone synced to you · invites sent again")
 			} else {
-				party.SetNote("Invite sent to Discord")
+				party.SetNote("Invites sent")
 			}
 		}
 		return s.Code, nil
@@ -140,6 +143,14 @@ func main() {
 					party.SetNote("Team link: " + err.Error())
 				} else {
 					party.SetNote("You joined the team: party invites now go to the team's Discord channel")
+				}
+				return true
+			}
+			if t := friendLinkToken(a); t != "" {
+				if name, err := redeemFriendLink(t); err != nil {
+					party.SetNote("Friend link: " + err.Error())
+				} else {
+					party.SetNote("You and " + name + " are friends now")
 				}
 				return true
 			}
@@ -317,23 +328,11 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		openURL(in.URL)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
-	// Discord invites: whether a webhook is set (never the URL itself), set or clear it, send one now.
-	mux.HandleFunc("GET /api/discord", func(w http.ResponseWriter, r *http.Request) {
-		c := loadConfig()
-		if isGroupKey(c.Webhook) && c.TeamName == "" {
-			go fetchTeamName(c.Webhook) // keys pasted by hand or from before team names
-		}
-		writeJSON(w, map[string]any{"webhookSet": c.Webhook != "", "group": isGroupKey(c.Webhook), "team": c.TeamName})
-	})
-	// A new team: its name and Discord webhook go to the relay, which answers the team key.
-	mux.HandleFunc("POST /api/team/create", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ Name, Webhook string }
-		json.NewDecoder(r.Body).Decode(&in)
-		replyErr(w, createTeam(strings.TrimSpace(in.Name), strings.TrimSpace(in.Webhook)))
-	})
-	// Group invite link: made by the relay, copied for pasting in Discord.
-	mux.HandleFunc("POST /api/groupinvite", func(w http.ResponseWriter, r *http.Request) {
-		link, err := newGroupInvite()
+	// Friends and teams (people.go): what the Friends tab shows, and its actions.
+	mux.HandleFunc("GET /api/people", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, peopleView()) })
+	mux.HandleFunc("GET /api/invitechoice", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, loadConfig().InviteTo) })
+	// copyLink copies a made link and answers it (or says what went wrong).
+	copyLink := func(w http.ResponseWriter, link string, err error) {
 		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
@@ -343,28 +342,102 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			return
 		}
 		writeJSON(w, map[string]string{"url": link})
+	}
+	mux.HandleFunc("POST /api/friendlink", func(w http.ResponseWriter, r *http.Request) {
+		link, err := newFriendLink()
+		copyLink(w, link, err)
 	})
-	mux.HandleFunc("POST /api/discord", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ Webhook string }
-		json.NewDecoder(r.Body).Decode(&in)
-		in.Webhook = strings.TrimSpace(in.Webhook)
-		if t := teamLinkToken(in.Webhook); t != "" { // a pasted team link works like clicking it
-			replyErr(w, redeemGroupInvite(t))
-			return
+	handle := func(path string, f func(w http.ResponseWriter, in *peopleReq)) {
+		mux.HandleFunc("POST "+path, func(w http.ResponseWriter, r *http.Request) {
+			var in peopleReq
+			json.NewDecoder(r.Body).Decode(&in)
+			f(w, &in)
+		})
+	}
+	handle("/api/team/create", func(w http.ResponseWriter, in *peopleReq) {
+		replyErr(w, createTeam(strings.TrimSpace(in.Name), strings.TrimSpace(in.Webhook)))
+	})
+	handle("/api/team/link", func(w http.ResponseWriter, in *peopleReq) { link, err := teamLink(in.ID); copyLink(w, link, err) })
+	handle("/api/team/leave", func(w http.ResponseWriter, in *peopleReq) { replyErr(w, leaveTeam(in.ID)) })
+	handle("/api/team/rename", func(w http.ResponseWriter, in *peopleReq) {
+		replyErr(w, teamCall("/team/rename", in.ID, "teamName", strings.TrimSpace(in.Name)))
+	})
+	handle("/api/team/invitefriend", func(w http.ResponseWriter, in *peopleReq) {
+		replyErr(w, teamCall("/team/invitefriend", in.ID, "to", in.To))
+	})
+	// The join field: a team link, a friend link, a team key or an own Discord webhook ("" removes the webhook).
+	handle("/api/addlink", func(w http.ResponseWriter, in *peopleReq) {
+		v := strings.TrimSpace(in.Link)
+		switch {
+		case teamLinkToken(v) != "":
+			replyErr(w, redeemGroupInvite(teamLinkToken(v)))
+		case friendLinkToken(v) != "":
+			name, err := redeemFriendLink(friendLinkToken(v))
+			if err == nil {
+				party.SetNote("You and " + name + " are friends now")
+			}
+			replyErr(w, err)
+		case isGroupKey(v):
+			replyErr(w, joinTeamByKey(v))
+		case v == "" || validWebhook(v):
+			updateConfig(func(c *config) { c.Webhook = v })
+			writeJSON(w, map[string]bool{"ok": true})
+		default:
+			http.Error(w, "Paste a team link, a friend link or a Discord webhook URL", 400)
 		}
-		if in.Webhook != "" && !validDiscordDest(in.Webhook) {
-			http.Error(w, "Paste a team link, a team key (f1p_…) or a Discord webhook URL", 400)
-			return
-		}
-		updateConfig(func(c *config) { c.Webhook, c.TeamName = in.Webhook, "" })
+	})
+	handle("/api/teaminvite/accept", func(w http.ResponseWriter, in *peopleReq) {
+		err := redeemGroupInvite(in.Token)
+		dropTeamInvite(in.Token)
+		replyErr(w, err)
+	})
+	handle("/api/teaminvite/dismiss", func(w http.ResponseWriter, in *peopleReq) {
+		dropTeamInvite(in.Token)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
-	mux.HandleFunc("POST /api/invite", func(w http.ResponseWriter, r *http.Request) {
-		if party.Snapshot().Mode != "host" {
-			http.Error(w, "Host a party first", 400)
+	handle("/api/partyinvite/dismiss", func(w http.ResponseWriter, in *peopleReq) {
+		dismissInvite(in.From)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Join a friend's or teammate's party (from their status or an invite).
+	handle("/api/joinparty", func(w http.ResponseWriter, in *peopleReq) {
+		code := strings.ToUpper(strings.TrimSpace(in.To))
+		if joinCode("f1party://join/"+code) == "" {
+			http.Error(w, "Bad party code", 400)
 			return
 		}
-		_, err := hostAndInvite(false)
+		dismissInvite(in.From)
+		if party.Snapshot().Code != code {
+			party.Start("guest", code, cleanName(loadConfig().Name))
+		}
+		pokePeople()
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Invite: post the party to teams' Discord channels / the own webhook and invite friends in their app.
+	handle("/api/invite", func(w http.ResponseWriter, in *peopleReq) {
+		if party.Snapshot().Mode == "idle" {
+			http.Error(w, "Host or join a party first", 400)
+			return
+		}
+		t := inviteTargets{Teams: in.Teams, Friends: in.Friends, Own: in.Own}
+		if len(t.Teams)+len(t.Friends) == 0 && !t.Own {
+			http.Error(w, "Pick a team or a friend", 400)
+			return
+		}
+		updateConfig(func(c *config) { c.InviteTo = &t })
+		s := party.Snapshot()
+		watching := mvSessionName()
+		if s.Feed != nil && watching != "" {
+			if s.Feed.Live {
+				watching += " · LIVE"
+			} else {
+				watching += " · replay"
+			}
+		}
+		n, err := sendPartyInvites(t, s.Name, s.Code, watching)
+		if err == nil {
+			party.SetNote(fmt.Sprintf("Invites sent (%d)", n))
+		}
 		replyErr(w, err)
 	})
 	mux.HandleFunc("POST /api/copycode", func(w http.ResponseWriter, r *http.Request) {
@@ -472,6 +545,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		var in struct{ ID string }
 		json.NewDecoder(r.Body).Decode(&in)
 		RemoveFriend(in.ID)
+		pokePeople()
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/calendar/unplan", func(w http.ResponseWriter, r *http.Request) {
@@ -508,7 +582,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 
 func hasGroupArg(args []string) bool {
 	for _, a := range args {
-		if groupToken(a) != "" {
+		if groupToken(a) != "" || friendLinkToken(a) != "" {
 			return true
 		}
 	}
@@ -565,18 +639,21 @@ func newCode() string {
 }
 
 type config struct {
-	Name           string     `json:"name"`
-	Setup          string     `json:"setup,omitempty"`        // MultiViewer setup opened on joining
-	Webhook        string     `json:"webhook,omitempty"`      // Discord webhook for party invites, or a team key (f1p_…)
-	TeamName       string     `json:"teamName,omitempty"`     // name of the team the key belongs to
-	DiscordAppID   string     `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
-	Last           *lastParty `json:"last,omitempty"`
-	Plans          []plan     `json:"plans,omitempty"`    // planned watch parties
-	MemberID       string     `json:"memberId,omitempty"` // this app's fixed id (friends know it by this)
-	Friends        []Friend   `json:"friends,omitempty"`
-	NotifyLeads    []int      `json:"notifyLeads"`              // minutes before a session to notify (nil = 15)
-	Notify         string     `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
-	NotifySessions []int      `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
+	Name           string         `json:"name"`
+	Setup          string         `json:"setup,omitempty"`        // MultiViewer setup opened on joining
+	Webhook        string         `json:"webhook,omitempty"`      // own Discord webhook for party invites (a team key here is moved to Teams)
+	TeamName       string         `json:"teamName,omitempty"`     // (1.3.0) name of the team key kept in Webhook
+	Teams          []TeamRef      `json:"teams,omitempty"`        // teams this app is in
+	Secret         string         `json:"secret,omitempty"`       // proves to the relay that MemberID is ours
+	InviteTo       *inviteTargets `json:"inviteTo,omitempty"`     // last Invite choice
+	DiscordAppID   string         `json:"discordAppId,omitempty"` // Discord application for Rich Presence (overrides the built-in one)
+	Last           *lastParty     `json:"last,omitempty"`
+	Plans          []plan         `json:"plans,omitempty"`    // planned watch parties
+	MemberID       string         `json:"memberId,omitempty"` // this app's fixed id (friends know it by this)
+	Friends        []Friend       `json:"friends,omitempty"`
+	NotifyLeads    []int          `json:"notifyLeads"`              // minutes before a session to notify (nil = 15)
+	Notify         string         `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"
+	NotifySessions []int          `json:"notifySessions,omitempty"` // single sessions with their bell on         // the party you were in, to rejoin after a restart
 }
 
 // lastParty: the party this app was in, kept up to date while in it and cleared by Leave.

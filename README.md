@@ -32,12 +32,15 @@ Also in the app:
 - **Copy code**: puts the party code on the clipboard, ready to paste in a chat.
 - **Own Discord channel**: no team? Paste a Discord webhook URL once (Server settings → Integrations → Webhooks); **Invite on
   Discord** then posts the party code to that channel. The URL stays in this computer's settings.
-- **Team** (Friends tab): a party is one session you watch together with a 5-letter code; your team is
-  your group of friends with one shared Discord channel. Anyone in the team clicks **Invite a friend to the
-  team** to copy a team link (works 7 days, 5 times); opening it puts F1 Party in the team, nothing to paste.
-  Pasting a team link (or the team key, `f1p_…`) in the team field works too. **Start a team** with a name and
-  the Discord webhook of the team's channel. Invites go through the relay, which keeps that webhook secret and only posts ordinary
-  invites, plans and reminders for real parties (one of each per party every 2 minutes, 30 an hour in total).
+- **Friends tab**: two parts.
+  - **Friends**: everyone you added. You see who is online and what they're watching, with a **Join** button.
+    **Invite people** copies a friend link (works 7 days): opening it gets someone F1 Party and makes you friends.
+  - **Teams**: a party is one session with a 5-letter code; a team is a group of friends with one Discord channel.
+    **Start a team** with a name and the Discord webhook of the team's channel (the relay keeps it secret). Each
+    team has **Invite** (tick friends, who get it in F1 Party, or copy a team link), **Leave**, and **Rename** for
+    whoever started it. You see what teammates are watching too. Paste a team or friend link in the field below to join.
+- **Invite** (Party tab): tick teams (their Discord channel) and friends (an invite in their F1 Party). The choice
+  is remembered for the Stream Deck key and planned parties. Only mutual friends and teammates see what you watch.
 - **Stream Deck Sync key** (F1 Race Control 1.15+): press = sync (a guest goes to the host first); hold 1 s =
   host a party and post the Discord invite. F1 Party listens on `127.0.0.1:47821` for this (`/control/status`,
   `/control/sync`, `/control/host`) and refuses web pages. `F1Party --host` does the same from a shortcut.

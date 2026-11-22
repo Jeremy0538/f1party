@@ -14,10 +14,11 @@
 		--ui:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
 	}
 	* { box-sizing:border-box; }
-	html { height:100%; background:var(--bg); display:flex; align-items:center; justify-content:center; overflow:hidden; }
-	/* The whole layout is drawn at one size and scaled to the window (see fit() below), so it looks the
-	   same at any window size and display scale. */
-	body { margin:0; width:760px; height:480px; flex:none; color:var(--text); font:13px/1.45 var(--ui); -webkit-font-smoothing:antialiased; overflow:hidden; }
+	html { height:100%; background:var(--bg); overflow:hidden; }
+	/* Everything is drawn at one scale for a 760×480 window (see fit() below), so text and buttons keep their
+	   size relative to the window; the layout itself fills the whole window: the header stays at the top,
+	   the sidebar's foot at the bottom, and lists get the extra room. */
+	body { margin:0; width:760px; height:480px; color:var(--text); font:13px/1.45 var(--ui); -webkit-font-smoothing:antialiased; overflow:hidden; }
 	button, input, select { font:inherit; color:inherit; }
 	.app { height:100%; display:grid; grid-template-rows:auto 1fr; }
 
@@ -37,6 +38,11 @@
 
 	.body { display:grid; grid-template-columns:1fr 310px; min-height:0; border-top:1px solid var(--line); }
 	main { padding:22px 26px; min-height:0; display:flex; flex-direction:column; }
+	/* too much to fit: the page scrolls inside its own column (a thin bar shows only when needed) */
+	main, aside { overflow-y:auto; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; }
+	main::-webkit-scrollbar, aside::-webkit-scrollbar { width:8px; }
+	main::-webkit-scrollbar-thumb, aside::-webkit-scrollbar-thumb { background:#2a2e36; border-radius:4px; }
+	main::-webkit-scrollbar-track, aside::-webkit-scrollbar-track { background:transparent; }
 	aside { padding:20px; border-left:1px solid var(--line); display:flex; flex-direction:column; gap:20px; min-height:0; }
 
 	h1 { font:700 22px/1.15 var(--num); margin:0 0 4px; }
@@ -216,15 +222,45 @@
 	button.accept:hover { background:var(--red-hi); }
 	.members .sent { font-size:11px; color:var(--faint); }
 	/* friends tab */
-	#friends { display:flex; flex-direction:column; min-height:0; height:100%; }
-	.flist { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); overflow:auto; min-height:0; }
-	.flist li { display:flex; align-items:center; gap:12px; height:46px; border-bottom:1px solid var(--line); padding:0 2px; }
+	#friends { display:flex; flex-direction:column; }
+	.flist { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
+	.flist li { display:flex; align-items:center; gap:12px; min-height:46px; border-bottom:1px solid var(--line); padding:6px 2px; }
 	.flist .nm { flex:1; min-width:0; }
 	.flist .nm b { display:block; font-weight:600; }
 	.flist .nm span { font-size:12px; color:var(--dim); }
 	.flist button { height:28px; font-size:12px; }
 	.empty { color:var(--dim); font-size:13px; margin-top:6px; }
-	.team { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:0 0 16px; }
+	.team { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:0 0 12px; }
+	.fsec { margin:0 0 26px; }
+	.fhead { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+	.fhead h1 { margin:0; }
+	.fhead button { height:30px; font-size:12px; }
+	.flist .acts { display:flex; gap:6px; align-items:center; }
+	.flist .st { color:var(--text); }
+	.flist .st.live::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--red); margin-right:6px; vertical-align:1px; }
+	.flist .on::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok); margin-right:6px; vertical-align:1px; }
+	.flist li.team-row { flex-wrap:wrap; height:auto; padding:9px 2px; }
+	.flist .mates { flex-basis:100%; margin:6px 0 0 12px; display:flex; flex-direction:column; gap:4px; }
+	.flist .mate { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--dim); min-height:24px; }
+	.flist .mate b { color:var(--text); font-weight:500; }
+	.flist .mate button { height:24px; font-size:11px; padding:0 9px; }
+	#inbox:empty { display:none; }
+	#inbox { display:flex; flex-direction:column; gap:8px; margin:0 0 18px; }
+	.invite-card { display:flex; align-items:center; gap:10px; border:1px solid rgba(225,6,0,.45); background:rgba(225,6,0,.07); border-radius:10px; padding:10px 12px; }
+	.invite-card .t { flex:1; min-width:0; }
+	.invite-card .t span { display:block; font-size:12px; color:var(--dim); }
+	.invite-card button { height:28px; font-size:12px; }
+	button.primary { background:var(--red); border-color:var(--red); color:#fff; }
+	button.primary:hover { background:var(--red-hi); }
+	.modal { position:fixed; inset:0; background:rgba(8,9,11,.72); display:flex; align-items:center; justify-content:center; z-index:6; }
+	.modal .box { width:380px; max-height:80%; overflow:auto; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
+	.modal .box > b { display:block; font-size:15px; margin-bottom:10px; }
+	.pick { display:flex; flex-direction:column; gap:2px; }
+	.pick .lbl { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:10px 0 4px; }
+	.pick label { display:flex; align-items:center; gap:10px; min-height:30px; padding:0 6px; border-radius:6px; cursor:pointer; }
+	.pick label:hover { background:#1a1d23; }
+	.pick input { width:16px; height:16px; accent-color:var(--red); }
+	.pick .sub { margin-left:auto; font-size:11px; color:var(--dim); }
 	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -268,9 +304,9 @@
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
 						<span>Copy code</span>
 					</button>
-					<button class="chip discord hidden" id="invite" title="Post the party code to your team's Discord channel">
+					<button class="chip discord hidden" id="invite" title="Invite friends, or post the party to a team's Discord channel">
 						<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
-						<span>Share on Discord</span>
+						<span>Invite</span>
 					</button>
 				</div>
 				<div class="state">
@@ -284,45 +320,32 @@
 				<ul class="members" id="members"></ul>
 			</div>
 			<div id="friends" class="hidden" role="tabpanel">
-				<h1>Friends</h1>
-				<p class="lead">People you watch with. Add someone from a party with the add-friend icon (a person with a +) next to their name.</p>
-				<div class="team" id="team">
-					<div class="row" style="justify-content:space-between; margin-bottom:6px; height:22px">
-						<span class="label" style="margin:0">Your team</span>
-						<button class="info hidden" id="dcinfobtn" aria-label="What is a team?" aria-expanded="false" aria-controls="dcinfo" title="What is a team?">
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.6" r="1.3" fill="currentColor" stroke="none"/></svg>
-						</button>
+				<div id="inbox"></div>
+				<section class="fsec">
+					<div class="fhead">
+						<h1>Friends</h1>
+						<button id="friendinv" title="Copies a link to send anyone (in Discord, for example): it gets them F1 Party and makes you friends">Invite people</button>
 					</div>
-					<p class="hint" id="teamwhat" style="margin:0 0 8px">A party is one session you watch together, with a 5-letter code. Your team is your group of friends with one shared Discord channel: every party invite from the team goes there.</p>
-					<div class="infobox hidden" id="dcinfo">
-						<b>Join a team</b>
-						<ol>
-							<li>Ask someone in the team for a team link and click it. That's all.</li>
-							<li>Or paste the team link (or a team key, <i>f1p_…</i>) below and click <i>Join</i>.</li>
-						</ol>
-						<b>Start a team</b>
-						<ol>
-							<li>In Discord, open <i>Server settings</i> → <i>Integrations</i> → <i>Webhooks</i>.</li>
-							<li>Click <i>New webhook</i>, pick the channel for party invites and click <i>Copy webhook URL</i>.</li>
-							<li>Click <i>Start a team</i>, give it a name, paste the URL and click <i>Create</i>. Then invite your friends with a team link.</li>
-						</ol>
-						<p>Can't change server settings? Ask the server owner or an admin for a webhook URL.</p>
+					<p class="hint" id="friendmsg"></p>
+					<ul class="flist" id="flist"></ul>
+					<p class="empty hidden" id="fempty">No friends yet. Click Invite people and send the link, or add someone in a party with the add-friend icon next to their name.</p>
+				</section>
+				<section class="fsec">
+					<div class="fhead">
+						<h1>Teams</h1>
+						<button id="teamstart">Start a team</button>
 					</div>
-					<div id="dcset" class="hidden row" style="justify-content:space-between"><span><span class="dot ok"></span><span id="dcsettext">Discord set</span></span><button class="link" id="dcremove">Remove</button></div>
-					<div id="dcgroup" class="hidden row" style="margin-top:8px"><button id="dcgroupinv" title="Copies a link for a friend: one click puts them in your team (the link works 7 days, 5 times)">Invite a friend to the team</button><span class="hint" id="dcgroupmsg" style="margin:0 0 0 10px"></span></div>
-					<div id="dcnew" class="hidden">
-						<div class="row"><input id="dchook" class="grow" placeholder="Paste a team link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
-						<div class="row" style="margin-top:8px"><button class="link" id="teamstart">Start a team</button></div>
-						<div id="teamform" class="hidden" style="margin-top:10px">
-							<div class="row"><input id="teamname" class="grow" placeholder="Team name" maxlength="32" autocomplete="off"></div>
-							<div class="row" style="margin-top:8px"><input id="teamhook" class="grow" placeholder="Discord webhook URL of the team's channel" autocomplete="off" spellcheck="false"><button id="teamcreate">Create</button></div>
-						</div>
+					<p class="hint" style="margin:0 0 10px">A party is one session you watch together, with a 5-letter code. A team is a group of friends with one Discord channel: anyone in it can post party invites there.</p>
+					<div id="teamform" class="team hidden">
+						<div class="row"><input id="teamname" class="grow" placeholder="Team name" maxlength="32" autocomplete="off"></div>
+						<div class="row" style="margin-top:8px"><input id="teamhook" class="grow" placeholder="Discord webhook URL of the team's channel" autocomplete="off" spellcheck="false"><button id="teamcreate">Create</button></div>
+						<p class="hint">In Discord: <i>Server settings</i> → <i>Integrations</i> → <i>Webhooks</i> → <i>New webhook</i>, pick the channel, <i>Copy webhook URL</i>. It's kept safe on the F1 Party server, never on anyone's computer.</p>
 					</div>
+					<ul class="flist" id="tlist"></ul>
+					<div class="row" style="margin-top:12px"><input id="dchook" class="grow" placeholder="Paste a team link or friend link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
+					<div class="row hidden" id="ownhook" style="justify-content:space-between; margin-top:10px"><span class="hint" style="margin:0"><span class="dot ok"></span>Your own Discord channel (webhook) is set</span><button class="link" id="ownremove">Remove</button></div>
 					<div class="error" id="dcerr"></div>
-				</div>
-				<span class="label" style="margin-top:4px">Friends</span>
-				<ul class="flist" id="flist"></ul>
-				<p class="empty hidden" id="fempty">No friends yet. Join or host a party and click the add-friend icon next to someone's name.</p>
+				</section>
 			</div>
 			<div id="cal" class="hidden" role="tabpanel">
 				<div class="calhead">
@@ -396,11 +419,21 @@
 		</aside>
 	</div>
 </div>
+<div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modaltitle">
+	<div class="box">
+		<b id="modaltitle"></b>
+		<div id="modalbody"></div>
+		<div class="error" id="modalerr"></div>
+		<div class="row" style="justify-content:flex-end; gap:8px; margin-top:14px"><button id="modalcancel">Cancel</button><button class="primary" id="modalok"></button></div>
+	</div>
+</div>
 <script>
-// Draw at 760×480 and scale to the window, keeping the proportions.
+// One scale from a 760×480 design; the layout then takes the window's full width and height at that scale.
 function fit() {
 	const z = Math.max(0.6, Math.min(innerWidth / 760, innerHeight / 480));
 	document.body.style.zoom = z;
+	document.body.style.width = innerWidth / z + "px";
+	document.body.style.height = innerHeight / z + "px";
 }
 addEventListener("resize", fit); fit();
 
@@ -447,50 +480,164 @@ document.addEventListener("click", () => showDownloads(false));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") showDownloads(false); });
 const installed = (id, yes) => { $(id).textContent = yes ? "✓ Installed" : "Download"; $(id).className = yes ? "ok" : ""; };
 
-async function refreshDiscord() {
-	let dc;
-	try { dc = await (await fetch("/api/discord")).json(); } catch { return; }
-	webhookSet = dc.webhookSet;
-	$("dcset").classList.toggle("hidden", !webhookSet);
-	$("dcsettext").textContent = dc.group ? (dc.team ? "You're in team " + dc.team : "You're in a team") : "Your own Discord channel is set";
-	$("dcremove").textContent = dc.group ? "Leave team" : "Remove";
-	$("teamwhat").classList.toggle("hidden", webhookSet && !dc.group);
-	$("teamwhat").textContent = dc.group ? "Every party invite you send goes to the team's Discord channel. Invite friends with a team link: one click and they're in."
-		: "A party is one session you watch together, with a 5-letter code. Your team is your group of friends with one shared Discord channel: every party invite from the team goes there.";
-	$("dcgroup").classList.toggle("hidden", !dc.group);
-	$("dcnew").classList.toggle("hidden", webhookSet);
-	$("dcinfobtn").classList.toggle("hidden", webhookSet);
-	if (webhookSet) showInfo(false);
-	$("invite").classList.toggle("hidden", !webhookSet || mode !== "host");
+// ---- Friends and teams (people.go). Refreshed every few seconds while the Friends tab is open.
+let people = { friends: [], teams: [], invites: [], teamInvites: [], ownWebhook: false };
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null)); return e; };
+const watching = (st) => st ? (st.title || "an F1 Party") + (st.live ? " · LIVE" : "") : "";
+async function joinParty(code, from) {
+	try { await post("/api/joinparty", { to: code, from: from || "" }); showTab("party"); } catch (e) { $("dcerr").textContent = e.message; }
 }
+async function refreshDiscord() {
+	try { people = await (await fetch("/api/people")).json(); } catch { return; }
+	webhookSet = people.teams.length > 0 || people.ownWebhook;
+	$("invite").classList.toggle("hidden", mode === "idle" || (!webhookSet && !people.friends.length));
+	if (tab === "friends") renderPeople();
+}
+function renderPeople() {
+	const d = people;
+	// waiting invites
+	const inbox = $("inbox"); inbox.innerHTML = "";
+	for (const i of d.invites) inbox.append(el("div", { className: "invite-card" },
+		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to their party" }), el("span", { textContent: i.title || "Code " + i.code })),
+		btn("Join", "Join " + i.name + "'s party", () => joinParty(i.code, i.from), "primary"),
+		btn("Not now", "", async () => { await post("/api/partyinvite/dismiss", { from: i.from }); refreshDiscord(); })));
+	for (const i of d.teamInvites) inbox.append(el("div", { className: "invite-card" },
+		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to team " + i.team }), el("span", { textContent: "Party invites can then go to the team's Discord channel" })),
+		btn("Accept", "", async () => { try { await post("/api/teaminvite/accept", { token: i.token }); } catch (e) { $("dcerr").textContent = e.message; } refreshDiscord(); }, "primary"),
+		btn("Not now", "", async () => { await post("/api/teaminvite/dismiss", { token: i.token }); refreshDiscord(); })));
+
+	// friends: watching now first, then online, then by last seen together
+	const fl = $("flist"); fl.innerHTML = "";
+	$("fempty").classList.toggle("hidden", d.friends.length > 0);
+	const rank = (f) => (f.status ? 2 : f.online ? 1 : 0);
+	for (const f of d.friends.slice().sort((a, b) => rank(b) - rank(a) || (b.seen || 0) - (a.seen || 0))) {
+		const line = f.status ? el("span", { className: "st" + (f.status.live ? " live" : ""), textContent: "Watching " + watching(f.status) })
+			: f.online ? el("span", { className: "on", textContent: "Online" })
+			: el("span", { textContent: "Last watched together " + dateFmt.format(new Date((f.seen || f.since) * 1000)) });
+		fl.append(el("li", {},
+			el("div", { className: "nm" }, el("b", { textContent: f.name }), line),
+			el("div", { className: "acts" },
+				f.status && f.status.code ? btn("Join", "Join " + f.name + "'s party", () => joinParty(f.status.code), "primary") : null,
+				btn("Remove", "Remove " + f.name + " from your friends", async () => {
+					if (!confirm("Remove " + f.name + " from your friends?")) return;
+					await post("/api/friend/remove", { id: f.id }); refreshDiscord();
+				}))));
+	}
+
+	// teams
+	const tl = $("tlist"); tl.innerHTML = "";
+	for (const t of d.teams) {
+		const mates = el("div", { className: "mates" });
+		for (const m of (t.people || []).slice().sort((a, b) => (b.status ? 1 : 0) - (a.status ? 1 : 0))) {
+			mates.append(el("div", { className: "mate" }, el("b", { textContent: m.name }),
+				el("span", { textContent: m.status ? "Watching " + watching(m.status) : "" }),
+				m.status && m.status.code ? btn("Join", "Join " + m.name + "'s party", () => joinParty(m.status.code)) : null));
+		}
+		tl.append(el("li", { className: "team-row" },
+			el("div", { className: "nm" }, el("b", { textContent: t.name || "Team" }),
+				el("span", { textContent: t.members + (t.members === 1 ? " member" : " members") + (t.owner ? " · you started it" : "") })),
+			el("div", { className: "acts" },
+				btn("Invite", "Invite a friend to " + t.name + ", or copy a team link", () => teamInviteDialog(t)),
+				t.owner ? btn("Rename", "", async () => {
+					const name = prompt("New name for the team", t.name); if (!name) return;
+					try { await post("/api/team/rename", { id: t.id, name }); } catch (e) { $("dcerr").textContent = e.message; } refreshDiscord();
+				}) : null,
+				btn("Leave", "", async () => {
+					if (!confirm("Leave team " + t.name + "? You can join again with a team link.")) return;
+					try { await post("/api/team/leave", { id: t.id }); } catch (e) { $("dcerr").textContent = e.message; } refreshDiscord();
+				})),
+			t.people && t.people.length ? mates : null));
+	}
+	$("ownhook").classList.toggle("hidden", !d.ownWebhook);
+}
+
+// A small dialog: title, body, OK button text and what OK does (throw to show an error and stay open).
+function dialog(title, body, okText, onOk) {
+	$("modaltitle").textContent = title;
+	$("modalbody").innerHTML = ""; $("modalbody").append(body);
+	$("modalerr").textContent = "";
+	$("modalok").textContent = okText;
+	$("modalok").classList.add("primary");
+	$("modal").classList.remove("hidden");
+	$("modalok").onclick = async () => {
+		$("modalerr").textContent = ""; $("modalok").disabled = true;
+		try { await onOk(); $("modal").classList.add("hidden"); } catch (e) { $("modalerr").textContent = e.message; }
+		$("modalok").disabled = false;
+	};
+}
+$("modalcancel").onclick = () => $("modal").classList.add("hidden");
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.add("hidden"); });
+
+// checkbox list: groups of [value, label, sublabel, checked]
+function picker(groups) {
+	const box = el("div", { className: "pick" });
+	for (const [title, items] of groups) {
+		if (!items.length) continue;
+		box.append(el("div", { className: "lbl", textContent: title }));
+		for (const [value, label, sub, checked] of items)
+			box.append(el("label", {}, el("input", { type: "checkbox", value, checked: !!checked }), el("span", { textContent: label }), sub ? el("span", { className: "sub", textContent: sub }) : null));
+	}
+	return box;
+}
+const picked = (box, prefix) => [...box.querySelectorAll("input:checked")].map((i) => i.value).filter((v) => v.startsWith(prefix)).map((v) => v.slice(prefix.length));
+
+// Team > Invite: tick friends (they get it in their app) or copy a team link.
+function teamInviteDialog(t) {
+	const friends = people.friends.filter((f) => f.mutual && !(t.people || []).some((m) => m.id === f.id));
+	const body = el("div", {},
+		el("p", { className: "hint", style: "margin:0 0 6px", textContent: "Friends you tick get the invite in F1 Party. Or copy a link for anyone else." }),
+		picker([["Friends", friends.map((f) => ["f:" + f.id, f.name, f.online ? "online" : "", false])]]),
+		friends.length ? null : el("p", { className: "hint", textContent: "No friends to invite here yet: use the link." }),
+		el("div", { className: "row", style: "margin-top:12px" }, btn("Copy team link", "Works 7 days, 5 times", async (e) => {
+			try { await post("/api/team/link", { id: t.id }); e.target.textContent = "Link copied"; } catch (err) { $("modalerr").textContent = err.message; }
+		})));
+	dialog("Invite to team " + t.name, body, "Send invites", async () => {
+		const ids = picked(body, "f:");
+		if (!ids.length) throw new Error("Tick a friend, or copy the team link");
+		for (const id of ids) await post("/api/team/invitefriend", { id: t.id, to: id });
+	});
+}
+
+// Party > Invite: teams (their Discord channel), the own webhook, friends (in their app).
+async function partyInviteDialog() {
+	await refreshDiscord();
+	let last = {}; try { last = (await (await fetch("/api/invitechoice")).json()) || {}; } catch {}
+	const has = (list, v) => (list || []).includes(v);
+	const body = picker([
+		["Teams · Discord channel", people.teams.map((t) => ["t:" + t.id, t.name, t.members + " members", has(last.teams, t.id)])
+			.concat(people.ownWebhook ? [["o:own", "My own Discord channel", "webhook", !!last.own]] : [])],
+		["Friends · in F1 Party", people.friends.filter((f) => f.mutual).map((f) => ["f:" + f.id, f.name, f.status ? "watching" : f.online ? "online" : "", has(last.friends, f.id)])],
+	]);
+	if (!body.children.length) body.append(el("p", { className: "hint", textContent: "Add friends or start a team under Friends first." }));
+	dialog("Invite to your party", body, "Send", async () => {
+		const sel = { teams: picked(body, "t:"), friends: picked(body, "f:"), own: picked(body, "o:").length > 0 };
+		await post("/api/invite", sel);
+	});
+}
+$("invite").onclick = partyInviteDialog;
+
+$("friendinv").onclick = async () => {
+	$("friendmsg").textContent = "";
+	try { await post("/api/friendlink", {}); $("friendmsg").textContent = "Link copied: paste it in Discord or send it to a friend (works 7 days)"; }
+	catch (e) { $("friendmsg").textContent = e.message; }
+};
 $("dcsave").onclick = async () => {
 	$("dcerr").textContent = "";
-	try { await post("/api/discord", { webhook: $("dchook").value }); $("dchook").value = ""; } catch (e) { $("dcerr").textContent = e.message; }
+	try { await post("/api/addlink", { link: $("dchook").value }); $("dchook").value = ""; } catch (e) { $("dcerr").textContent = e.message; }
 	refreshDiscord();
 };
-let infoOpen = false;
-function showInfo(on) { infoOpen = on; $("dcinfo").classList.toggle("hidden", !on); $("dcinfobtn").setAttribute("aria-expanded", String(on)); document.querySelector("aside .foot").classList.toggle("hidden", on); if (on) showDownloads(false); refreshSession(); }
-$("dcinfobtn").onclick = () => showInfo($("dcinfo").classList.contains("hidden"));
+$("ownremove").onclick = async () => { await post("/api/addlink", { link: "" }); refreshDiscord(); };
 $("teamstart").onclick = () => { $("teamform").classList.toggle("hidden"); $("teamname").focus(); };
 $("teamcreate").onclick = async () => {
 	$("dcerr").textContent = ""; $("teamcreate").disabled = true;
 	try {
 		await post("/api/team/create", { name: $("teamname").value, webhook: $("teamhook").value });
 		$("teamname").value = ""; $("teamhook").value = ""; $("teamform").classList.add("hidden");
-		$("dcgroupmsg").textContent = "Team created: now invite your friends";
 	} catch (e) { $("dcerr").textContent = e.message; }
 	$("teamcreate").disabled = false;
 	refreshDiscord();
 };
-$("dcgroupinv").onclick = async () => {
-	$("dcerr").textContent = ""; $("dcgroupmsg").textContent = "";
-	try { await post("/api/groupinvite", {}); $("dcgroupmsg").textContent = "Team link copied: send it to your friend"; }
-	catch (e) { $("dcerr").textContent = e.message; }
-};
-$("dcremove").onclick = async () => {
-	if ($("dcremove").textContent === "Leave team" && !confirm("Leave the team? Party invites stop going to the team's Discord channel.")) return;
-	await post("/api/discord", { webhook: "" }); refreshDiscord();
-};
+setInterval(() => { if (tab === "friends" || mode !== "idle") refreshDiscord(); }, 5000);
 
 const mvAct = (btn, path, body) => async () => {
 	$("mverr").textContent = ""; btn.disabled = true;
@@ -681,23 +828,7 @@ function showTab(t) {
 }
 $("tabfriends").onclick = () => showTab("friends");
 const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
-async function refreshFriends() {
-	let d; try { d = await (await fetch("/api/friends")).json(); } catch { return; }
-	const ul = $("flist"); ul.innerHTML = "";
-	$("fempty").classList.toggle("hidden", d.friends.length > 0);
-	for (const f of d.friends.slice().sort((a, b) => (b.seen || 0) - (a.seen || 0))) {
-		const li = document.createElement("li");
-		const nm = document.createElement("div"); nm.className = "nm";
-		const b = document.createElement("b"); b.textContent = f.name;
-		const sp = document.createElement("span"); sp.textContent = "Last watched together " + dateFmt.format(new Date((f.seen || f.since) * 1000));
-		nm.append(b, sp);
-		li.append(nm, btn("Remove", "Remove " + f.name + " from your friends", async () => {
-			if (!confirm("Remove " + f.name + " from your friends?")) return;
-			await post("/api/friend/remove", { id: f.id }); refreshFriends();
-		}));
-		ul.append(li);
-	}
-}
+function refreshFriends() { refreshDiscord(); }
 $("tabparty").onclick = () => showTab("party");
 $("tabcal").onclick = () => showTab("cal");
 $("calprev").onclick = () => { if (calData?.prev) { calMeeting = calData.prev; picking = 0; refreshCal(); } };

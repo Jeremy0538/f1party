@@ -658,8 +658,8 @@ func Plan(key int, at int64, name string) (*plan, error) {
 		}
 		pl.At, pl.Replay = at, true
 	}
-	if wh := loadConfig().Webhook; wh != "" {
-		if err := announcePlan(wh, name, pl); err != nil {
+	if len(discordDests()) > 0 {
+		if err := toAllDests(func(d string) error { return announcePlan(d, name, pl) }); err != nil {
 			log.Printf("plan announcement: %v", err)
 		} else {
 			pl.Announced = true
@@ -755,18 +755,16 @@ func (p *Party) runPlans() {
 				}
 				changed = true
 				continue
-			case !pl.Announced && c.Webhook != "" && now.Before(at.Add(-remindBefore)):
-				// planned without a webhook (or Discord didn't answer): announce it now
-				if err := announcePlan(c.Webhook, cleanName(c.Name), &pl); err != nil {
+			case !pl.Announced && len(discordDests()) > 0 && now.Before(at.Add(-remindBefore)):
+				// planned without a team (or Discord didn't answer): announce it now
+				if err := toAllDests(func(d string) error { return announcePlan(d, cleanName(c.Name), &pl) }); err != nil {
 					log.Printf("plan announcement: %v", err)
 				} else {
 					pl.Announced, changed = true, true
 				}
 			case !pl.Reminded && now.After(at.Add(-remindBefore)):
-				if c.Webhook != "" {
-					if err := remindPlan(c.Webhook, cleanName(c.Name), &pl); err != nil {
-						log.Printf("plan reminder: %v", err)
-					}
+				if err := toAllDests(func(d string) error { return remindPlan(d, cleanName(c.Name), &pl) }); err != nil {
+					log.Printf("plan reminder: %v", err)
 				}
 				notifyPlan(&pl)
 				pl.Reminded, changed = true, true
@@ -800,14 +798,14 @@ func (p *Party) startPlan(pl plan, c config) {
 		p.Start("host", pl.Code, name)
 	}
 	p.SetNote("Your planned party: " + pl.Title)
-	if c.Webhook != "" {
+	if len(discordDests()) > 0 {
 		what := pl.Title
 		if pl.Replay {
 			what += " · replay"
 		} else {
 			what += " · LIVE"
 		}
-		if err := sendInvite(c.Webhook, name, pl.Code, what); err != nil {
+		if err := toAllDests(func(d string) error { return sendInvite(d, name, pl.Code, what) }); err != nil {
 			log.Printf("plan start: %v", err)
 		}
 	}
