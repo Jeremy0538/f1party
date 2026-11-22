@@ -25,11 +25,17 @@
 	header { display:flex; align-items:center; gap:10px; padding:14px 20px 12px; }
 	header img { width:26px; height:26px; }
 	header b { font:700 15px/1 var(--num); letter-spacing:.03em; }
-	header .ver { margin-left:auto; font-size:11px; color:var(--faint); }
+	header .ver { display:none; } /* the version is under Settings → Updates */
 	header .update { margin-left:auto; font-size:12px; color:#fff; background:var(--red); padding:3px 9px; border-radius:999px; text-decoration:none; }
-	header .update:not(.hidden) + .ver { margin-left:10px; }
-	button.gear { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; margin-left:6px; color:var(--dim); border-color:transparent; background:none; }
+	header .update:not(.hidden) ~ .gear { margin-left:8px; }
+	button.gear { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; margin-left:auto; color:var(--dim); border-color:transparent; background:none; }
 	button.gear:hover { color:var(--text); background:#1c1f25; }
+	/* a red dot: something waits there (an update) */
+	button.gear { position:relative; }
+	button.gear.hasdot::after, .settabs button.hasdot::after { content:""; position:absolute; width:7px; height:7px; border-radius:50%; background:var(--red); box-shadow:0 0 0 2px var(--bg); }
+	button.gear.hasdot::after { top:4px; right:4px; }
+	.settabs button { position:relative; }
+	.settabs button.hasdot::after { top:5px; right:3px; box-shadow:none; }
 	button.gear svg { width:17px; height:17px; }
 	.inparty { font-size:11px; color:var(--ok); border:1px solid rgba(34,197,94,.4); border-radius:999px; padding:2px 8px; white-space:nowrap; }
 	.setrow { display:flex; align-items:center; gap:10px; min-height:34px; }
@@ -702,6 +708,48 @@ $("update").onclick = async () => {
 	try { await post("/api/update"); } catch (e) { $("update").textContent = e.message; }
 };
 let updateURL = "", updateAuto = false;
+
+// Settings → Updates: which version you have, and a button that looks for a newer one right away.
+function updatesTab(group, hint) {
+	const cur = el("b", { textContent: $("ver").textContent || "" });
+	const res = el("p", { className: "hint sethint", style: "margin:10px 0 0" });
+	const install = btn("", "", async () => {
+		if (!install.dataset.auto) return openURL(install.dataset.url);
+		install.disabled = true; install.textContent = "Installing…";
+		try { await post("/api/update"); res.textContent = "Downloading the new version: F1 Party restarts by itself (you stay in your party). If Windows asks whether F1 Party may make changes, click Yes."; }
+		catch (e) { res.textContent = e.message; install.disabled = false; }
+	}, "primary hidden");
+	const ago = (t) => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m === 1 ? "a minute ago" : m < 60 ? m + " minutes ago" : "over an hour ago"; };
+	const show = (r, fresh) => {
+		cur.textContent = r.version || cur.textContent;
+		const u = r.update;
+		install.classList.toggle("hidden", !u);
+		if (u) {
+			install.dataset.url = u.url || ""; install.dataset.auto = u.auto && !u.error ? "1" : "";
+			install.disabled = !!u.busy;
+			install.textContent = u.busy || (u.auto && !u.error ? "Install " + u.version + " now" : "Download " + u.version);
+			res.textContent = u.error ? u.error : "F1 Party " + u.version + " is out.";
+		} else if (r.error) res.textContent = r.error;
+		else if (r.latest) res.textContent = "You have the newest version" + (fresh ? "." : " (checked " + ago(r.checked) + ").");
+		else res.textContent = r.checked ? "" : "Not checked yet.";
+	};
+	const checkBtn = btn("Check for updates", "Looks on GitHub for a newer version now", async () => {
+		checkBtn.disabled = true; checkBtn.textContent = "Checking…"; res.textContent = "";
+		try {
+			const r = await fetch("/api/update/check?now=1", { method: "POST" });
+			if (!r.ok) throw new Error((await r.text()).trim() || "Couldn't check");
+			show(await r.json(), true);
+		} catch (e) { res.textContent = e.message; }
+		checkBtn.disabled = false; checkBtn.textContent = "Check for updates";
+	});
+	fetch("/api/update/check").then((r) => r.json()).then((r) => show(r, false)).catch(() => {});
+	return el("div", {},
+		group("F1 Party",
+			el("div", { className: "setrow" }, el("span", { className: "setlbl", textContent: "Your version" }), cur),
+			hint("F1 Party also looks for updates by itself: when it starts, every 20 minutes and when you bring the window to the front. Outside a party it installs them straight away; in a party the red button at the top waits for your click."),
+			el("div", { className: "row", style: "gap:8px; margin-top:4px" }, checkBtn, install),
+			res));
+}
 $("sync").onclick = async () => { $("syncerr").textContent = ""; try { await post("/api/sync"); } catch (e) { $("syncerr").textContent = e.message; } };
 // Downloads menu: opens above the link, closes on a pick, a click elsewhere or Escape
 function showDownloads(on) { $("dlmenu").classList.toggle("hidden", !on); $("dlbtn").setAttribute("aria-expanded", String(on)); }
@@ -1055,6 +1103,8 @@ async function refresh() {
 	welcome(s.welcome);
 	const up = s.update;
 	$("update").classList.toggle("hidden", !up);
+	$("settingsbtn").classList.toggle("hasdot", !!up);
+	document.querySelector('.settabs button[data-k="updates"]')?.classList.toggle("hasdot", !!up);
 	if (up) {
 		updateURL = up.url; updateAuto = !!up.auto && !up.error;
 		$("update").textContent = up.busy || up.error || "Update to " + up.version;
@@ -1303,6 +1353,7 @@ async function openSettings(opts = {}) {
 		})()],
 		lights: ["Lights", lightsTab(c, { check, pick, row, hint, group, ids })],
 		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
+		updates: ["Updates", updatesTab(group, hint)],
 		close: ["Close", el("div", {},
 			group("Close F1 closes",
 				hint("The Close F1 button under MultiViewer closes what's ticked here, and puts the lights and the taskbar back."),
@@ -1315,6 +1366,7 @@ async function openSettings(opts = {}) {
 		for (const [key, [, node]] of Object.entries(tabs)) node.classList.toggle("hidden", key !== k); };
 	for (const [k, [label, node]] of Object.entries(tabs)) {
 		const b = btn(label, "", () => show(k)); b.dataset.k = k; b.setAttribute("role", "tab"); bar.append(b);
+		if (k === "updates" && $("settingsbtn").classList.contains("hasdot")) { b.classList.add("hasdot"); b.title = "There's an update"; }
 		pane.append(node);
 	}
 	if (opts.tab && tabs[opts.tab]) setTab = opts.tab;
@@ -1331,7 +1383,7 @@ async function openSettings(opts = {}) {
 	};
 	if (!opts.wizard) { dialog("Settings", el("div", {}, el("div", { className: "settabswrap" }, bar), pane), "Save", save); return; }
 	// The guide: every tab that applies here, in order; Finish saves everything at once.
-	const steps = Object.keys(tabs).filter((k) => k !== "windows" || c.places || c.windows !== false);
+	const steps = Object.keys(tabs).filter((k) => k !== "updates" && (k !== "windows" || c.places || c.windows !== false));
 	const intro = {
 		general: "Welcome to F1 Party! Let's go through the settings once, so everything works the way you like. You can change all of it later under the gear at the top right.",
 		sessions: "How a session opens: with one of your MultiViewer setups, the Stream Deck plugin, or just F1 Live.",
