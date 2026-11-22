@@ -50,8 +50,16 @@ jobs:
           echo "C:/Program Files (x86)/NSIS" >> "$GITHUB_PATH"
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+      - name: Version from the tag
+        # A tag v1.2.3 makes the app report 1.2.3, so the update check always sees the new release
+        # (main.go's version is only the fallback for builds without a tag).
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          echo "LDFLAGS=-X main.version=$v" >> "$GITHUB_ENV"
+          sed -i.bak "s/\"productVersion\": \"[^\"]*\"/\"productVersion\": \"$v\"/" wails.json && rm -f wails.json.bak
       - name: Build
-        run: wails build -clean -trimpath -platform ${{ matrix.platform }} ${{ matrix.flags }} ${{ matrix.tags && format('-tags {0}', matrix.tags) || '' }}
+        run: wails build -clean -trimpath -platform ${{ matrix.platform }} ${{ matrix.flags }} ${{ matrix.tags && format('-tags {0}', matrix.tags) || '' }} ${LDFLAGS:+-ldflags "$LDFLAGS"}
       - name: Package
         run: |
           mkdir -p ../dist
