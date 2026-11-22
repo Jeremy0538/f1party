@@ -408,6 +408,8 @@
 	/* who's in the party: one row per person, status under the name */
 	/* the party: one box with who you are, the code and its buttons, End party as a cross */
 	.asktext { margin:8px 0 0; color:var(--dim); line-height:1.5; }
+	.sess #together { width:100%; height:40px; margin:12px 0 4px; }
+	.ptop #sync { flex:none; font-size:12px; padding:0 2px; }
 	.pcard { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:14px 16px 16px; margin-bottom:12px; }
 	.ptop { display:flex; align-items:center; gap:10px; }
 	.ptop .boxtitle { white-space:nowrap; }
@@ -542,6 +544,7 @@
 					<div class="ptop">
 						<span class="boxtitle" id="roleline">Your party</span><span id="rolebadge"></span>
 						<span class="pstatus" id="pstatus"><span class="dot" id="dot"></span><span id="status">…</span></span>
+						<button class="link hidden" id="sync">Sync</button>
 						<button class="ib" id="leave" title="End the party" aria-label="End the party"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
 					</div>
 					<div class="pmid">
@@ -553,8 +556,6 @@
 					</div>
 					<div class="feedline"><span id="feed"></span><span class="gap" id="gap"></span></div>
 				</section>
-				<div class="row pacts"><button class="primary hidden" id="together">Start together</button><button id="sync">Sync</button>
-					<label class="autosync hidden" id="autosyncrow" title="Follow the host by itself: their pause, play and skips, and your onboards stay with the main stream. Off: only when you click Sync to host."><input type="checkbox" id="autosync" checked> Auto-sync</label></div>
 				<div class="note" id="note"></div>
 				<div class="error" id="syncerr"></div>
 				<section class="card mcard">
@@ -649,6 +650,7 @@
 					<span class="sublbl">Layout</span>
 					<div class="row"><select id="setup" class="grow" aria-label="Layout for this session"></select><button id="setupopen">Open</button></div>
 				</div>
+				<button class="primary wide hidden" id="together" title="The five lights for everyone, then the whole party plays from here at the same moment">Start together</button>
 				<div class="sesspart jumpspart">
 					<span class="sublbl">Go to</span>
 					<div class="jumps">
@@ -775,7 +777,6 @@ $("together").onclick = async () => {
 	}
 	b.disabled = false;
 };
-$("autosync").onchange = async () => { await post("/api/autosync", { on: $("autosync").checked }); refresh(); };
 $("update").onclick = async () => {
 	if (!updateAuto) return openURL(updateURL);
 	try { await post("/api/update"); } catch (e) { $("update").textContent = e.message; }
@@ -1218,19 +1219,23 @@ async function refresh() {
 	}
 	if (($("note").textContent || "") !== (s.note || "")) refreshDiscord(); // e.g. a group invite link just set up Discord
 	$("note").textContent = s.note || "";
-	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync everyone";
 	$("sync").title = s.mode === "guest" ? "Jump to the host and take your onboards along" : "Everyone, and your own onboards, to your main stream";
 	$("pstatus").title = s.status || "";
 	$("leave").title = s.mode === "host" ? "End the party" : "Leave the party";
 	$("leave").setAttribute("aria-label", $("leave").title);
-	$("together").classList.toggle("hidden", s.mode !== "host");
-	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
-	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
-	// the host's usual status says what the heading already does: keep it short next to it
-	// only what matters here: the session box on the right already says whether a session is open
-	let stTxt = /^Hosting: guests follow/.test(s.status || "") ? ((s.members || []).length > 1 ? "Guests follow you" : "") : (s.status || "");
-	if (s.mode === "host" && !s.mvOnline) stTxt = "";
+	// The status only when it matters: someone out of step (with a Sync button), or no connection. Whether a
+	// session is open, and starting it, is the session box's job on the right.
+	const inSync = (st) => /^In sync/.test(st || "");
+	const behind = s.mode === "host"
+		? (s.members || []).filter((m) => m.role === "guest" && !inSync(m.status))
+		: (!inSync(s.status) && s.feed ? [{ name: "you" }] : []);
+	let stTxt = "";
+	if (!s.connected) stTxt = "Connecting…";
+	else if (s.mode === "host" && behind.length) stTxt = behind.length === 1 ? behind[0].name + " isn't in sync" : behind.length + " people aren't in sync";
+	else if (s.mode === "guest" && s.feed && !inSync(s.status)) stTxt = s.status || "Not in sync";
+	else if (s.mode === "guest" && !s.feed) stTxt = s.status || "";
 	$("status").textContent = stTxt;
+	$("sync").classList.toggle("hidden", !(s.connected && behind.length));
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
 	const ok = s.mvOnline && s.connected;
@@ -1305,6 +1310,7 @@ async function refreshSession() {
 	document.querySelector(".sess .jumpspart").classList.toggle("hidden", !v || !!v.stopped);
 	// End session: with a session open (host: for everyone, guest: just you); Watch again after a guest's end
 	$("sessend").classList.toggle("hidden", v ? !!v.stopped : !mvWasRunning);
+	$("together").classList.toggle("hidden", !hosting || !v || !!v.stopped);
 	$("sesslayout").classList.toggle("hidden", !v || !!v.stopped);
 	if (!v) delete $("setup").dataset.touched;
 	$("sessend").title = hosting ? "Close this session for everyone; the party stays" : "Stop watching this session; the party stays";
