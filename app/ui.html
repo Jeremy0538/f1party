@@ -354,6 +354,11 @@
 	.sesslayout { margin-top:10px; gap:8px; }
 	.sesslayout select { min-width:0; height:30px; font-size:12px; }
 	.sesslayout button { height:30px; font-size:12px; }
+	.startpicks { display:flex; flex-direction:column; gap:8px; }
+	button.startpick { height:auto; display:flex; flex-direction:column; align-items:flex-start; gap:2px; padding:10px 12px; text-align:left; }
+	button.startpick b { font-weight:600; }
+	button.startpick span { font-size:12px; color:var(--dim); font-weight:400; }
+	button.startpick:hover { border-color:var(--red); }
 	.autosync { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--dim); cursor:pointer; }
 	.autosync input { width:15px; height:15px; accent-color:var(--red); margin:0; }
 	.calhint { color:var(--warn); }
@@ -590,9 +595,11 @@ $("together").onclick = async () => {
 	const b = $("together"); $("syncerr").textContent = ""; b.disabled = true;
 	try { await post("/api/start"); }
 	catch (e) {
-		if (e.message === "pick-session") {
+		let pick = null; try { pick = JSON.parse(e.message); } catch {}
+		if (pick && pick.pick === "live") liveStartDialog(pick.session, pick.name);
+		else if (pick && pick.pick === "session") {
 			showTab("cal");
-			$("calhint").textContent = "Pick the session you want to watch together: Watch now opens it for the whole party. Then click Start together again.";
+			$("calhint").textContent = "Pick a session that has been on: Watch opens it for the whole party. Then click Start together again.";
 		} else $("syncerr").textContent = e.message;
 	}
 	b.disabled = false;
@@ -771,12 +778,31 @@ function teamEditDialog(t) {
 	name.focus();
 }
 
+// A live session: open it for the party, starting where you choose.
+function liveStartDialog(session, name) {
+	const go = (start) => async () => {
+		$("modalerr").textContent = "";
+		try { await post("/api/calendar/watch", { session, start }); $("modal").classList.add("hidden"); showTab("party"); }
+		catch (e) { $("modalerr").textContent = e.message; }
+	};
+	const choice = (title, sub, start) => el("button", { className: "startpick", onclick: go(start) }, el("b", { textContent: title }), el("span", { textContent: sub }));
+	const body = el("div", {},
+		el("p", { className: "hint", style: "margin:0 0 10px", textContent: name + " is on now. Where should the party start?" }),
+		el("div", { className: "startpicks" },
+			choice("From the beginning", "The start of the stream", "begin"),
+			choice("Just before the start", "A minute before the session starts, with the lights", "start"),
+			choice("Live", "Where it is right now", "live")));
+	dialog("Watch " + name, body, "", async () => {});
+	$("modalok").classList.add("hidden");
+}
+
 // A small dialog: title, body, OK button text and what OK does (throw to show an error and stay open).
 function dialog(title, body, okText, onOk) {
 	$("modaltitle").textContent = title;
 	$("modalbody").innerHTML = ""; $("modalbody").append(body);
 	$("modalerr").textContent = "";
 	$("modalok").textContent = okText;
+	$("modalok").classList.remove("hidden");
 	$("modalok").classList.add("primary");
 	$("modal").classList.remove("hidden");
 	$("modalok").onclick = async () => {
@@ -1045,7 +1071,7 @@ async function refreshSession() {
 			: b.dataset.tip;
 	}
 }
-$("sesschange").onclick = () => showTab("calendar");
+$("sesschange").onclick = () => showTab("cal");
 // Settings (gear at the top right): tabs per subject, groups with a heading and a line between them.
 // Everything is optional. Ultimate F1 Viewer has its own switch; its options are greyed out while it's off
 // or not installed. Desktops, taskbar and window positions are Windows only.
@@ -1361,17 +1387,18 @@ async function refreshCal() {
 			acts.append(btn("Cancel", "Cancel this planned party", () => calAct("/api/calendar/unplan", { id: x.plan.id })));
 		} else if (x.status === "live") {
 			st.className = "st live"; st.textContent = "LIVE";
-			const wb = btn(hosting ? "Switch" : "Watch now", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to the live session" : "Host a party on the live session", () => calAct("/api/calendar/watch", { session: x.key }), "primary");
+			const wb = btn(hosting ? "Switch" : "Watch now", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to the live session" : "Host a party on the live session", () => liveStartDialog(x.key, (w.meeting.name || "").replace("Grand Prix", "GP") + " · " + x.name), "primary");
 			wb.disabled = guest; acts.append(wb);
 		} else if (x.status === "soon") {
 			st.textContent = inTime(start - now);
 			if (notifyOK) acts.append(bell(x));
-			acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
+			if (mode === "idle") acts.append(btn("Plan", "Plan a party for the live session: announced in Discord, a reminder 15 minutes before, and the party starts on its own", () => calAct("/api/calendar/plan", { session: x.key })));
 		} else {
 			st.textContent = "Replay";
 			const wb = btn(hosting ? "Switch" : "Watch", guest ? "Only the host picks the party's session" : hosting ? "The whole party switches to this replay, from a minute before the start" : "Host a party on the replay now, from a minute before the start", () => calAct("/api/calendar/watch", { session: x.key }));
 			wb.disabled = guest;
-			acts.append(wb, btn("Plan", "Plan a replay party at a time you pick", () => { picking = picking === x.key ? 0 : x.key; refreshCal(); }));
+			acts.append(wb);
+			if (mode === "idle") acts.append(btn("Plan", "Plan a replay party at a time you pick", () => { picking = picking === x.key ? 0 : x.key; refreshCal(); }));
 		}
 		li.append(nm, st, acts);
 		if (picking === x.key) {

@@ -466,7 +466,13 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/start", func(w http.ResponseWriter, r *http.Request) {
 		err := party.StartTogether()
 		if errors.Is(err, errNoSession) {
-			http.Error(w, "pick-session", 409) // the window opens the calendar
+			// no session open: one that is live now opens after asking where to start; else pick one in the calendar
+			pick := map[string]any{"pick": "session"}
+			if s, m, ok := liveCalSession(); ok {
+				pick = map[string]any{"pick": "live", "session": s.Key, "name": sessionTitle(s, m)}
+			}
+			b, _ := json.Marshal(pick)
+			http.Error(w, string(b), 409)
 			return
 		}
 		replyErr(w, err)
@@ -514,9 +520,17 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		writeJSON(w, s)
 	})
 	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ Session int }
+		var in struct {
+			Session int
+			Start   string // begin | start | live | ""
+		}
 		json.NewDecoder(r.Body).Decode(&in)
-		replyErr(w, party.WatchNow(in.Session, cleanName(loadConfig().Name)))
+		switch in.Start {
+		case "", "begin", "start", "live":
+		default:
+			in.Start = ""
+		}
+		replyErr(w, party.WatchNow(in.Session, cleanName(loadConfig().Name), in.Start))
 	})
 	mux.HandleFunc("POST /api/calendar/plan", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
