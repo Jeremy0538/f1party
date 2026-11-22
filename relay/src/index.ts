@@ -247,7 +247,9 @@ export class Room extends DurableObject<Env> {
 			case "presence": {
 				m.status = cmd.status || null;
 				m.seen = now;
-				m.friends = (cmd.friends as string[]).slice(0, 300);
+				// friends made through a friend link the app hasn't heard about yet (still in its inbox) stay
+				const pending = ((await st.get<any[]>("inbox:" + cmd.uid)) || []).filter((e) => e.type === "friend").map((e) => e.id);
+				m.friends = [...new Set([...(cmd.friends as string[]), ...pending])].slice(0, 300);
 				const teams: string[] = cmd.teams.slice(0, 20);
 				for (const tid of new Set([...m.teams, ...teams])) {
 					const t = await st.get<TeamRec>("team:" + tid);

@@ -24,12 +24,28 @@ func TestTeamLinkToken(t *testing.T) {
 	for in, want := range map[string]string{
 		"https://jeremyklootwijk.nl/f1party/group/CZTcMWqVatN5uw6f": "CZTcMWqVatN5uw6f",
 		"f1party://group/CZTcMWqVatN5uw6f":                          "CZTcMWqVatN5uw6f",
-		"http://jeremyklootwijk.nl/f1party/group/CZTcMWqVatN5uw6f":  "",
+		"http://localhost:8787/f1party/group/CZTcMWqVatN5uw6f":      "CZTcMWqVatN5uw6f",
 		"https://jeremyklootwijk.nl/f1party/join/ABCDE":             "",
 		"f1p_ExampleExampleExample1":                                "",
 	} {
 		if got := teamLinkToken(in); got != want {
 			t.Errorf("teamLinkToken(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestFriendLinkToken(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://jeremyklootwijk.nl/f1party/friend/CZTcMWqVatN5uw6f": "CZTcMWqVatN5uw6f",
+		"f1party://friend/CZTcMWqVatN5uw6f":                          "CZTcMWqVatN5uw6f",
+		"https://jeremyklootwijk.nl/f1party/group/CZTcMWqVatN5uw6f":  "",
+		"https://evil.example/x?/f1party/friend/CZTcMWqVatN5uw6f":    "",
+	} {
+		if got := friendLinkToken(in); got != want {
+			t.Errorf("friendLinkToken(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if teamID("f1p_AbCdEfGh123456789012345678901234") != "AbCdEfGh" {
+		t.Error("teamID")
 	}
 }

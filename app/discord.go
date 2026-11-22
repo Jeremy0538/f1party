@@ -110,7 +110,7 @@ func teamLinkToken(s string) string {
 		return t
 	}
 	u, err := url.Parse(s)
-	if err != nil || u.Scheme != "https" {
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
 		return ""
 	}
 	if rest, ok := strings.CutPrefix(u.Path, "/f1party/group/"); ok {
@@ -138,10 +138,17 @@ func relayJSON(path string, in, out any) error {
 		}
 		return errors.New(res.Status)
 	}
-	return json.NewDecoder(res.Body).Decode(out)
+	b, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	if t := bytes.TrimSpace(b); len(t) == 0 || (t[0] != '{' && t[0] != '[') {
+		return nil // a plain "ok"
+	}
+	return json.Unmarshal(b, out)
 }
 
-// redeemGroupInvite trades a group invite token for the group key and saves it as the Discord setting.
+// redeemGroupInvite trades a team link token for the team key and joins the team.
 func redeemGroupInvite(token string) error {
 	var r struct{ Key, Name string }
 	if err := relayJSON("/group/redeem", map[string]string{"token": token}, &r); err != nil {
@@ -150,11 +157,11 @@ func redeemGroupInvite(token string) error {
 	if !isGroupKey(r.Key) {
 		return errors.New("the relay sent no team key")
 	}
-	updateConfig(func(c *config) { c.Webhook, c.TeamName = r.Key, r.Name })
+	addTeam(r.Key, r.Name)
 	return nil
 }
 
-// createTeam makes a new team at the relay (name + the team's Discord webhook) and joins it.
+// createTeam makes a new team at the relay (name + the team's Discord webhook), with this app as its owner.
 func createTeam(name, webhook string) error {
 	if name == "" {
 		return errors.New("give your team a name")
@@ -163,39 +170,14 @@ func createTeam(name, webhook string) error {
 		return errors.New("that isn't a Discord webhook URL (https://discord.com/api/webhooks/…)")
 	}
 	var r struct{ Key, Name string }
-	if err := relayJSON("/team/create", map[string]string{"name": name, "webhook": webhook}, &r); err != nil {
+	if err := relayJSON("/team/create", with(me(), "teamName", name, "webhook", webhook), &r); err != nil {
 		return err
 	}
 	if !isGroupKey(r.Key) {
 		return errors.New("the relay sent no team key")
 	}
-	updateConfig(func(c *config) { c.Webhook, c.TeamName = r.Key, r.Name })
+	addTeam(r.Key, r.Name)
 	return nil
-}
-
-// fetchTeamName asks the relay for the name of the team a key belongs to and saves it.
-func fetchTeamName(key string) {
-	var r struct{ Name string }
-	if relayJSON("/team/info", map[string]string{"key": key}, &r) == nil && r.Name != "" {
-		updateConfig(func(c *config) {
-			if c.Webhook == key {
-				c.TeamName = r.Name
-			}
-		})
-	}
-}
-
-// newGroupInvite asks the relay for a group invite link (valid 7 days, 5 uses); needs the group key set.
-func newGroupInvite() (string, error) {
-	key := loadConfig().Webhook
-	if !isGroupKey(key) {
-		return "", errors.New("join a team first")
-	}
-	var r struct{ URL string }
-	if err := relayJSON("/group/invite", map[string]string{"key": key}, &r); err != nil {
-		return "", err
-	}
-	return r.URL, nil
 }
 
 // sendInvite posts the party code (and what the host is watching) to the Discord channel.
