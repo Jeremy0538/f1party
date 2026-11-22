@@ -354,6 +354,15 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		writeJSON(w, map[string]any{"weekend": wk, "webhookSet": c.Webhook != "", "notify": c.Notify, "leads": notifyLeads(c),
 			"notifications": sendNotification != nil})
 	})
+	mux.HandleFunc("GET /api/calendar/season", func(w http.ResponseWriter, r *http.Request) {
+		y, _ := strconv.Atoi(r.URL.Query().Get("year"))
+		s, err := season(y)
+		if err != nil {
+			http.Error(w, err.Error(), 503)
+			return
+		}
+		writeJSON(w, s)
+	})
 	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Session int }
 		json.NewDecoder(r.Body).Decode(&in)

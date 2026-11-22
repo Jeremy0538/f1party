@@ -123,6 +123,31 @@
 	.calhead h1 { margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.calhead .d { font-size:12px; color:var(--dim); }
 	.calhead button { width:32px; padding:0; font-size:15px; }
+	/* the weekend's name opens the season list: every year, every race */
+	.calhead button.calpick { flex:1; min-width:0; width:auto; height:auto; padding:2px 6px; margin-left:-6px; border:0; background:none; text-align:left; display:block; font-size:inherit; }
+	.calhead button.calpick:hover { background:#16191e; }
+	.calhead .calpick .nmrow { display:flex; align-items:center; gap:6px; min-width:0; }
+	.calhead .calpick svg { width:16px; height:16px; flex:none; color:var(--dim); transition:transform .15s; }
+	.calhead .calpick[aria-expanded="true"] svg { transform:rotate(180deg); }
+	.seasonpanel { position:absolute; left:0; right:0; top:58px; bottom:0; overflow:auto; background:#15181d; border:1px solid var(--line-2); border-radius:8px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:5; }
+	.seasonpanel { scrollbar-width:thin; scrollbar-color:#2c313a transparent; }
+	.seasonpanel::-webkit-scrollbar { width:8px; }
+	.seasonpanel::-webkit-scrollbar-thumb { background:#2c313a; border-radius:4px; }
+	.seasonpanel::-webkit-scrollbar-track { background:transparent; }
+	.seasonpanel { padding-top:0; }
+	.seasonpanel .years { display:flex; gap:4px; align-items:center; margin:0 -12px 8px; padding:12px 12px 8px; position:sticky; top:0; background:#15181d; z-index:1; }
+	.seasonpanel .years button { height:28px; padding:0 10px; font-size:12px; font-variant-numeric:tabular-nums; }
+	.seasonpanel .years button.link { height:28px; font-size:12px; }
+	.seasonpanel .years button.on { background:var(--text); color:#0b0c0e; border-color:var(--text); }
+	.seasonpanel .years .now { margin-left:auto; }
+	.seasonpanel .races { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:4px; }
+	.seasonpanel .races button { height:auto; padding:6px 9px; text-align:left; display:flex; flex-direction:column; gap:1px; font-size:12px; border-color:transparent; background:#1b1f25; }
+	.seasonpanel .races button:hover { border-color:var(--line-2); }
+	.seasonpanel .races button.cur { border-color:var(--red); }
+	.seasonpanel .races button.later b { color:var(--dim); }
+	.seasonpanel .races b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.seasonpanel .races span { font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; }
+	.seasonpanel .msg { font-size:12px; color:var(--dim); padding:6px 2px; }
 	.sessions { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
 	.sessions li { display:flex; align-items:center; gap:12px; padding:0 2px; height:42px; border-bottom:1px solid var(--line); }
 	.sessions .nm { flex:1; min-width:0; }
@@ -260,9 +285,16 @@
 			<div id="cal" class="hidden" role="tabpanel">
 				<div class="calhead">
 					<button id="calprev" aria-label="Previous weekend" title="Previous weekend">‹</button>
-					<div class="t"><h1 id="calname">Calendar</h1><div class="d" id="caldates"></div></div>
+					<button class="calpick" id="calpick" aria-haspopup="true" aria-expanded="false" aria-controls="seasonpanel" title="Every season and race">
+						<span class="nmrow"><h1 id="calname">Calendar</h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+						<span class="d" id="caldates"></span>
+					</button>
 					<button id="notifbtn" class="notifbtn" aria-haspopup="true" aria-expanded="false" aria-controls="notifpanel" title="Notifications" aria-label="Notifications"></button>
 					<button id="calnext" aria-label="Next weekend" title="Next weekend">›</button>
+				</div>
+				<div class="seasonpanel hidden" id="seasonpanel" role="dialog" aria-label="Seasons and races">
+					<div class="years" id="seasonyears" role="group" aria-label="Season"></div>
+					<div class="races" id="seasonraces"></div>
 				</div>
 				<div class="notifpanel hidden" id="notifpanel" role="dialog" aria-label="Notifications">
 				<b>Notifications</b>
@@ -725,11 +757,58 @@ async function refreshCal() {
 // When notifications come: any of these moments before the start, several at once.
 const LEADS = [[1440, "1 day"], [180, "3 h"], [60, "1 h"], [30, "30 min"], [15, "15 min"], [5, "5 min"], [0, "At start"]];
 setTimeout(() => { if (!$("notifbtn").innerHTML) $("notifbtn").innerHTML = bellSVG("none"); });
-function showNotif(on) { $("notifpanel").classList.toggle("hidden", !on); $("notifbtn").setAttribute("aria-expanded", String(on)); }
+function showNotif(on) { $("notifpanel").classList.toggle("hidden", !on); $("notifbtn").setAttribute("aria-expanded", String(on)); if (on) showSeason(false); }
 $("notifbtn").onclick = (e) => { e.stopPropagation(); showNotif($("notifpanel").classList.contains("hidden")); };
 $("notifpanel").onclick = (e) => e.stopPropagation();
-document.addEventListener("click", () => showNotif(false));
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") showNotif(false); });
+document.addEventListener("click", () => { showNotif(false); showSeason(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { showNotif(false); showSeason(false); } });
+
+// Season list: pick a year, then any race of it (older seasons load once, then come from disk).
+const raceDay = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+let seasonShown = 0;
+function showSeason(on) {
+	$("seasonpanel").classList.toggle("hidden", !on);
+	$("calpick").setAttribute("aria-expanded", String(on));
+	if (!on) return;
+	showNotif(false);
+	loadSeason(calData ? new Date(calData.meeting.start).getUTCFullYear() : 0);
+}
+async function loadSeason(year) {
+	seasonShown = year;
+	const races = $("seasonraces");
+	races.innerHTML = '<div class="msg">Loading…</div>';
+	let s;
+	try {
+		const r = await fetch("/api/calendar/season" + (year ? "?year=" + year : ""));
+		if (!r.ok) throw new Error((await r.text()).trim());
+		s = await r.json();
+	} catch (e) { races.innerHTML = ""; races.append(Object.assign(document.createElement("div"), { className: "msg", textContent: e.message })); return; }
+	if (seasonShown !== year) return; // another year was picked meanwhile
+	const ys = $("seasonyears"); ys.innerHTML = "";
+	for (const y of s.years) {
+		const b = btn(String(y), y + " season", (e) => { e.stopPropagation(); loadSeason(y); });
+		b.classList.toggle("on", y === s.year); b.setAttribute("aria-pressed", String(y === s.year));
+		ys.append(b);
+	}
+	const now = btn("This weekend", "Back to the current race weekend", (e) => { e.stopPropagation(); calMeeting = 0; showSeason(false); refreshCal(); });
+	now.classList.add("link", "now"); ys.append(now);
+	races.innerHTML = "";
+	if (!s.races.length) races.innerHTML = '<div class="msg">No races in this season yet.</div>';
+	const today = Date.now();
+	for (const x of s.races) {
+		const b = document.createElement("button");
+		b.className = (calData && x.key === calData.meeting.key ? "cur" : "") + (new Date(x.start) > today ? " later" : "");
+		b.title = x.name + " · " + x.location;
+		const nm = document.createElement("b"); nm.textContent = x.name;
+		const sub = document.createElement("span"); sub.textContent = "R" + x.round + " · " + raceDay.format(new Date(x.start));
+		b.append(nm, sub);
+		b.onclick = (e) => { e.stopPropagation(); calMeeting = x.key; showSeason(false); refreshCal(); };
+		races.append(b);
+	}
+	races.querySelector(".cur")?.scrollIntoView({ block: "center" }); // the weekend you're on, in view
+}
+$("calpick").onclick = (e) => { e.stopPropagation(); showSeason($("seasonpanel").classList.contains("hidden")); };
+$("seasonpanel").onclick = (e) => e.stopPropagation();
 let leadsOn = [];
 function renderLeads(on) {
 	leadsOn = on;

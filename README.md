@@ -71,6 +71,9 @@ Also in the app:
 - **Notifications** (the bell at the top of the calendar): which sessions (races only, races and qualifyings,
   every session, or single sessions with their own bell) and when (1 day, 3 h, 1 h, 30 min, 15 min, 5 min
   before, at the start; any combination). Planned parties notify too. Clicking one opens F1 Party.
+- **Every season**: click the weekend's name in the calendar for a list of all seasons (from 2023, OpenF1's
+  first) and every race of the one you pick, to jump straight to an old race. An older season is fetched once
+  and then kept on your computer (`calendar-<year>.json`), since it doesn't change.
 - **Calendar offline**: the calendar is saved on your computer, so it still shows when OpenF1 can't be reached
   (OpenF1 shuts out everyone without a paid key while a session is live).
 - **Friends**: next to someone in your party who isn't a friend yet is an add button; they see **Accept**

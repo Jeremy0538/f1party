@@ -127,10 +127,148 @@ func loadCalendar() error {
 		}
 		return err
 	}
-	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Start.Before(sessions[j].Start) })
 	calendar.sessions, calendar.meetings, calendar.loaded, calendar.lastErr, calendar.wait = sessions, meetings, time.Now(), nil, 0
-	writeCalendarCache()
+	writeCalendarCache() // only the recent seasons; older ones have files of their own
+	mergeArchive()
 	return nil
+}
+
+// ---------------------------------------------------------------- older seasons
+
+// firstSeason: OpenF1's first season (and so the first with meeting keys for F1 TV's replay search).
+const firstSeason = 2023
+
+// archive: older seasons, loaded only when you go there, then kept on disk for good (they don't change).
+var archive = map[int]calendarCache{}
+
+func archivePath(y int) string {
+	p := calendarCachePath()
+	if p == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(p), fmt.Sprintf("calendar-%d.json", y))
+}
+
+// recentSeason: kept up to date by the normal calendar (last, this and next year).
+func recentSeason(y int) bool { return y >= time.Now().UTC().Year()-1 }
+
+// loadSeason makes sure season y is in the calendar: an older one from its file, else once from OpenF1.
+// Called with the calendar locked.
+func loadSeason(y int) error {
+	if recentSeason(y) || y < firstSeason {
+		return nil
+	}
+	if _, ok := archive[y]; ok {
+		return nil
+	}
+	if b, err := os.ReadFile(archivePath(y)); err == nil {
+		var c calendarCache
+		if json.Unmarshal(b, &c) == nil && len(c.Sessions) > 0 {
+			archive[y] = c
+			mergeArchive()
+			return nil
+		}
+	}
+	ss, ms, err := fetchSeason(y)
+	if err == nil && len(ss) == 0 {
+		err = fmt.Errorf("OpenF1 has no %d season", y)
+	}
+	if err != nil {
+		return err
+	}
+	c := calendarCache{Sessions: ss, Saved: time.Now()}
+	for _, m := range ms {
+		c.Meetings = append(c.Meetings, m)
+	}
+	archive[y] = c
+	if b, err := json.Marshal(c); err == nil && archivePath(y) != "" {
+		_ = os.WriteFile(archivePath(y), b, 0o644)
+	}
+	mergeArchive()
+	return nil
+}
+
+// mergeArchive adds the loaded older seasons to the calendar (once each) and keeps it in time order.
+func mergeArchive() {
+	have := map[int]bool{}
+	for _, s := range calendar.sessions {
+		have[s.Key] = true
+	}
+	if calendar.meetings == nil {
+		calendar.meetings = map[int]CalMeeting{}
+	}
+	for _, c := range archive {
+		for _, m := range c.Meetings {
+			calendar.meetings[m.Key] = m
+		}
+		for _, s := range c.Sessions {
+			if !have[s.Key] {
+				calendar.sessions = append(calendar.sessions, s)
+				have[s.Key] = true
+			}
+		}
+	}
+	sort.Slice(calendar.sessions, func(i, j int) bool { return calendar.sessions[i].Start.Before(calendar.sessions[j].Start) })
+}
+
+// SeasonRace: one race weekend in the season list.
+type SeasonRace struct {
+	Key      int       `json:"key"`
+	Round    int       `json:"round"`
+	Name     string    `json:"name"` // "Las Vegas GP"
+	Location string    `json:"location"`
+	Start    time.Time `json:"start"`
+	End      time.Time `json:"end"`
+}
+
+// Season: the weekends of one year, for jumping straight to any race.
+type Season struct {
+	Year  int          `json:"year"`
+	Years []int        `json:"years"` // the seasons there are, newest first
+	Races []SeasonRace `json:"races"`
+}
+
+func season(y int) (*Season, error) {
+	if err := loadCalendar(); err != nil {
+		return nil, err
+	}
+	calendar.Lock()
+	defer calendar.Unlock()
+	now := time.Now().UTC().Year()
+	if y == 0 {
+		y = now
+	}
+	err := loadSeason(y)
+	out := &Season{Year: y}
+	for yy := now + 1; yy >= firstSeason; yy-- {
+		out.Years = append(out.Years, yy)
+	}
+	seen := map[int]bool{}
+	for _, s := range calendar.sessions {
+		m, ok := calendar.meetings[s.Meeting]
+		if !ok || seen[m.Key] || m.Start.Year() != y {
+			continue
+		}
+		seen[m.Key] = true
+		out.Races = append(out.Races, SeasonRace{Key: m.Key, Round: len(out.Races) + 1, Name: shortGP(m.Name),
+			Location: m.Location, Start: m.Start, End: m.End})
+	}
+	if len(out.Races) == 0 && err != nil {
+		return out, err
+	}
+	if out.Years[0] == now+1 && y != now+1 && !hasSeason(now+1) {
+		out.Years = out.Years[1:] // next year's calendar isn't out yet
+	}
+	return out, nil
+}
+
+func hasSeason(y int) bool {
+	for _, m := range calendar.meetings {
+		if m.Start.Year() == y {
+			return true
+		}
+	}
+	return false
 }
 
 // fetchCalendar: last year's, this year's and next year's sessions and meetings from OpenF1.
@@ -142,6 +280,26 @@ func fetchCalendar() ([]CalSession, map[int]CalMeeting, error) {
 		if i > 0 {
 			time.Sleep(400 * time.Millisecond)
 		}
+		ss, ms, err := fetchSeason(y)
+		if err != nil {
+			if y == year+1 {
+				break // next year's calendar isn't always out
+			}
+			return nil, nil, err
+		}
+		sessions = append(sessions, ss...)
+		for k, m := range ms {
+			meetings[k] = m
+		}
+	}
+	return sessions, meetings, nil
+}
+
+// fetchSeason: one season's sessions and race weekends from OpenF1 (no testing, nothing cancelled).
+func fetchSeason(y int) ([]CalSession, map[int]CalMeeting, error) {
+	var sessions []CalSession
+	meetings := map[int]CalMeeting{}
+	{
 		var ss []struct {
 			Key       int    `json:"session_key"`
 			Meeting   int    `json:"meeting_key"`
@@ -152,9 +310,6 @@ func fetchCalendar() ([]CalSession, map[int]CalMeeting, error) {
 			Cancelled bool   `json:"is_cancelled"`
 		}
 		if err := getJSON(fmt.Sprintf("https://api.openf1.org/v1/sessions?year=%d", y), &ss); err != nil {
-			if y == year+1 {
-				break // next year's calendar isn't always out
-			}
 			return nil, nil, err
 		}
 		var ms []struct {
@@ -166,7 +321,7 @@ func fetchCalendar() ([]CalSession, map[int]CalMeeting, error) {
 			Cancelled bool   `json:"is_cancelled"`
 		}
 		time.Sleep(400 * time.Millisecond)
-		if err := getJSON(fmt.Sprintf("https://api.openf1.org/v1/meetings?year=%d", y), &ms); err != nil && y != year+1 {
+		if err := getJSON(fmt.Sprintf("https://api.openf1.org/v1/meetings?year=%d", y), &ms); err != nil {
 			return nil, nil, err
 		}
 		for _, m := range ms {
@@ -222,6 +377,7 @@ func readCalendarCache() {
 	for _, m := range c.Meetings {
 		calendar.meetings[m.Key] = m
 	}
+	mergeArchive()
 }
 
 func writeCalendarCache() {
@@ -229,9 +385,16 @@ func writeCalendarCache() {
 	if path == "" {
 		return
 	}
-	c := calendarCache{Sessions: calendar.sessions, Saved: time.Now()}
+	c := calendarCache{Saved: time.Now()}
+	for _, s := range calendar.sessions {
+		if recentSeason(s.Start.UTC().Year()) {
+			c.Sessions = append(c.Sessions, s)
+		}
+	}
 	for _, m := range calendar.meetings {
-		c.Meetings = append(c.Meetings, m)
+		if recentSeason(m.Start.UTC().Year()) {
+			c.Meetings = append(c.Meetings, m)
+		}
 	}
 	b, _ := json.Marshal(c)
 	if os.WriteFile(path+".tmp", b, 0o644) == nil {
