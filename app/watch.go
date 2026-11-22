@@ -30,9 +30,45 @@ const setupAuto = "@auto"
 // defaultTopTeams: the teams whose onboards a setup keeps; "best of the rest" fills the others.
 var defaultTopTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racing"}
 
+// knownTeams: the grid's teams as the timing names them (2026), for the Settings tick boxes; the teams in
+// the timing of the session that is open are added to them.
+var knownTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racing", "Aston Martin", "Alpine", "Williams",
+	"Racing Bulls", "Haas F1 Team", "Audi", "Cadillac"}
+
+// allTeams: the known teams, the teams in the open session's timing and the chosen ones, without doubles.
+func allTeams() []string {
+	out := append([]string{}, knownTeams...)
+	add := func(t string) {
+		if t != "" && !slices.ContainsFunc(out, func(x string) bool { return strings.EqualFold(x, t) }) {
+			out = append(out, t)
+		}
+	}
+	if t, ok := timingNow(); ok {
+		for _, d := range t.DriverList {
+			add(d.TeamName)
+		}
+	}
+	for _, t := range topTeams() {
+		add(t)
+	}
+	return out
+}
+
+// battleEvery: how often battle mode follows the race (0 = only when its layout opens).
+func battleEvery() time.Duration {
+	c := loadConfig()
+	if c.BattleEvery > 0 {
+		return time.Duration(c.BattleEvery) * time.Second
+	}
+	if c.BattleLive {
+		return 30 * time.Second
+	}
+	return 0
+}
+
 func topTeams() []string {
-	if t := loadConfig().TopTeams; len(t) > 0 {
-		return t
+	if c := loadConfig(); c.TopTeamsSet || len(c.TopTeams) > 0 {
+		return append([]string{}, c.TopTeams...)
 	}
 	return defaultTopTeams
 }
@@ -183,16 +219,19 @@ var afterSetupWindows = func() {}
 
 // watchLoop keeps the best of the rest and battle mode current during the session.
 func watchLoop() {
-	for n := 0; ; n++ {
-		time.Sleep(10 * time.Second)
+	var restAt, battleAt time.Time
+	for {
+		time.Sleep(5 * time.Second)
 		c := loadConfig()
-		if c.RestOn && c.RestLive {
+		if c.RestOn && c.RestLive && time.Since(restAt) >= 10*time.Second {
+			restAt = time.Now()
 			updateRestSlots(false)
 		}
 		watchNow.mu.Lock()
 		race, active := watchNow.kind == "race", watchNow.active
 		watchNow.mu.Unlock()
-		if active && race && c.BattleOn && c.BattleLive && n%3 == 0 {
+		if every := battleEvery(); active && race && c.BattleOn && every > 0 && time.Since(battleAt) >= every {
+			battleAt = time.Now()
 			updateBattle()
 		}
 	}
@@ -492,8 +531,8 @@ func fitLiveTiming(fit bool) {
 	}
 }
 
-// updateBattle: battle mode left = the session's top 4, right = the championship top 3 (or P5-8). False while
-// its windows haven't loaded their driver list yet.
+// updateBattle: the first battle mode window (from the left) shows the session's top 4, a second one the
+// championship top 3 (or P5-8). False while its windows haven't loaded their driver list yet.
 func updateBattle() bool {
 	t, ok := timingNow()
 	if !ok {

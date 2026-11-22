@@ -40,6 +40,12 @@
 	.sethead::before { content:""; width:3px; height:13px; border-radius:2px; background:var(--red); flex:none; }
 	.sethint { margin:0 0 6px; }
 	.setoff { opacity:.4; }
+	.setmaster { margin:4px 0; padding:8px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.03); }
+	.setmaster label { font-weight:700; font-size:13.5px; }
+	.setsub { margin:6px 0 0 14px; padding-left:12px; border-left:2px solid var(--line-2); }
+	.teamgrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2px 12px; }
+	.teamgrid label { display:flex; align-items:center; gap:8px; min-height:28px; cursor:pointer; font-size:12.5px; }
+	.teamgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
 	.setoff label, .setoff select, .setoff input { cursor:not-allowed; }
 	.uf1row { margin-top:8px; gap:8px; }
 	.uf1row .label { margin:0; white-space:nowrap; }
@@ -1116,17 +1122,31 @@ $("settingsbtn").onclick = async () => {
 				uf1(check("uf1CloseFirst", c.uf1CloseFirst, "Close the open Ultimate F1 Viewer windows first"))));
 			return box;
 		})()],
-		drivers: ["Drivers", el("div", {},
-			group("Best of the rest",
-				hint("The setup's onboards of drivers outside the top teams show the best-placed of them."),
-				check("restOn", c.restOn, "Fill these onboards when a setup opens"),
-				check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits."),
-				row("Top teams", text("topTeams", (c.topTeams || []).join(", "), { style: "flex:1", title: "Comma separated, as in the timing" }))),
-			uf1(group("Battle mode",
-				hint("In Ultimate F1 Viewer's battle mode windows, races only."),
-				check("battleOn", c.battleOn, "Pick the drivers automatically", "Left: the top 4 of the race"),
-				row("Right side", pick("battleRight", c.battleRight, [["", "Championship top 3"], ["p5to8", "Positions 5 to 8"]])),
-				check("battleLive", c.battleLive, "Keep them up to date during the race"))))],
+		drivers: ["Drivers", (() => {
+			// teams whose onboards always stay: tick boxes, the rest of the setup's onboards follow the order
+			const keep = new Set((c.topTeams || []).map((t) => t.toLowerCase()));
+			const grid = el("div", { className: "teamgrid" });
+			const boxes = [];
+			for (const t of c.teams || []) {
+				const i = el("input", { type: "checkbox", checked: keep.has(t.toLowerCase()) });
+				boxes.push([t, i]);
+				grid.append(el("label", {}, i, el("span", { textContent: t })));
+			}
+			ids.topTeams = () => boxes.filter(([, i]) => i.checked).map(([t]) => t);
+			return el("div", {},
+				group("Best of the rest",
+					hint("Your setup has onboards of some teams that always stay, and other onboards that F1 Party fills with the best-placed drivers of all other teams."),
+					check("restOn", c.restOn, "Fill those onboards when a setup opens"),
+					check("restLive", c.restLive, "Keep them up to date during the session", "Race: a change must hold 3 laps, at most one swap per 5 laps, never under SC or a red flag. Qualifying: only drivers back in the pits."),
+					el("div", { className: "setlbl", style: "margin:8px 0 4px", textContent: "These teams' onboards always stay:" }),
+					grid),
+				uf1(group("Battle mode",
+					hint("For races, in Ultimate F1 Viewer's battle mode windows. Your layout can have one or more; they're filled from left to right."),
+					check("battleOn", c.battleOn, "Pick the drivers automatically"),
+					row("First window", el("span", { className: "hint", style: "margin:0", textContent: "Top 4 of the race" })),
+					row("Second window (if any)", pick("battleRight", c.battleRight, [["", "Championship top 3"], ["p5to8", "Positions 5 to 8"]])),
+					row("Update", pick("battleEvery", String(c.battleEvery || 0), [["0", "Only when the layout opens"], ["15", "Every 15 seconds"], ["30", "Every 30 seconds"], ["60", "Every minute"], ["120", "Every 2 minutes"]])))));
+		})()],
 		lights: ["Lights", lightsTab(c, { check, pick, row, hint, group, ids })],
 		windows: ["Windows", windowsTab(c, { check, row, hint, group, uf1, ids })],
 		close: ["Close", el("div", {},
@@ -1150,7 +1170,7 @@ $("settingsbtn").onclick = async () => {
 		const out = {};
 		for (const [k, f] of Object.entries(ids)) out[k] = f();
 		if (!c.uf1) delete out.uf1On; // not installed: keep what was set
-		if (typeof out.topTeams === "string") out.topTeams = out.topTeams.split(",").map((t) => t.trim()).filter(Boolean);
+		if (out.battleEvery !== undefined) out.battleEvery = parseInt(out.battleEvery, 10) || 0;
 		await post("/api/settings", out);
 		refresh(); refreshMV();
 	});
@@ -1160,25 +1180,56 @@ function lightsTab(c, h) {
 	const hue = c.hue;
 	if (!hue) return h.hint("Philips Hue isn't available in this version.");
 	const st = el("p", { className: "hint sethint" });
-	const pairBtn = btn(hue.paired ? "Pair again" : "Pair bridge", "Press the button on your Hue bridge first", async () => {
-		st.textContent = "Looking for your bridge…";
-		try { await post("/api/hue/pair", {}); st.textContent = "Paired. Save, then open Settings again to choose the lights."; } catch (e) { st.textContent = e.message; }
+	// Pairing: pick a bridge found on your network (or type its address), click Pair, then press the round
+	// button on the bridge within 30 seconds.
+	const list = el("select", {});
+	const ip = el("input", { placeholder: "or type its IP address", autocomplete: "off", spellcheck: false, style: "width:170px" });
+	const find = async () => {
+		list.innerHTML = ""; list.append(new Option("Looking for bridges…", "")); list.disabled = true;
+		let found = []; try { found = await (await fetch("/api/hue/bridges")).json(); } catch {}
+		list.innerHTML = ""; list.disabled = false;
+		if (!found.length) list.append(new Option("No bridge found", ""));
+		for (const b of found) list.append(new Option((b.name || "Hue bridge") + " · " + b.ip, b.ip));
+	};
+	const pairBtn = btn(hue.paired ? "Pair again" : "Pair", "", async () => {
+		const addr = ip.value.trim() || list.value;
+		if (!addr) { st.textContent = "Choose a bridge or type its IP address."; return; }
+		pairBtn.disabled = true; st.textContent = "Now press the round button on your Hue bridge (30 seconds)…";
+		try { await post("/api/hue/pair", { ip: addr }); st.textContent = "Paired"; setTab = "lights"; $("modal").classList.add("hidden"); $("settingsbtn").click(); }
+		catch (e) { st.textContent = e.message; }
+		pairBtn.disabled = false;
 	});
-	const testBtn = btn("Test the flags now", "", async () => { st.textContent = ""; try { await post("/api/hue/test", {}); } catch (e) { st.textContent = e.message; } });
+	const testBtn = btn("Test the flags now", "Shows each ticked flag for a moment, then the lights go back", async () => { st.textContent = ""; try { await post("/api/hue/test", {}); } catch (e) { st.textContent = e.message; } });
+	const pairing = el("div", {}, h.row("Bridge", list, btn("Search again", "", find)), h.row("", ip, pairBtn));
+	if (hue.paired) pairing.classList.add("hidden");
+	find();
 	return el("div", {},
 		h.group("Bridge",
-			h.row("Bridge", el("span", { textContent: hue.paired ? (hue.bridge || "paired") : "Not paired yet" }), pairBtn),
-			hue.paired ? null : h.hint("Press the round button on your Hue bridge, then click Pair bridge."),
+			hue.paired ? h.row("Paired with", el("span", { textContent: hue.bridge || "your bridge" }), btn("Pair another", "", () => { pairing.classList.remove("hidden"); })) : h.hint("Choose your bridge, click Pair, then press the round button on the bridge."),
+			pairing,
 			st,
 			hue.paired ? h.row("Lights", h.pick("hueGroup", hue.group, [["", "Choose a room or zone"], ...(hue.groups || []).map((g) => [g, g])])) : null),
-		h.group("Flags on the lights",
-			h.check("hueEnabled", hue.enabled, "Show track flags on the lights"),
-			h.check("hueYellow", hue.showYellow !== false, "Yellow flag"),
-			h.check("hueSafetyCar", hue.showSafetyCar !== false, "Safety Car and VSC (orange)"),
-			h.check("hueVscPulse", hue.vscPulse !== false, "Pulse during VSC"),
-			h.check("hueRed", hue.showRed !== false, "Red flag"),
-			h.check("hueChequered", hue.showChequered !== false, "Chequered flag (white, pulsing)"),
-			hue.paired ? el("div", { className: "setrow" }, testBtn) : null));
+		(() => {
+			// the main switch; the flags below only count while it's on
+			const master = h.check("hueEnabled", hue.enabled, "Show flags on my lights");
+			master.classList.add("setmaster");
+			const which = el("div", { className: "setsub" },
+				el("div", { className: "setlbl", style: "margin:2px 0 4px", textContent: "Which flags:" }),
+				h.check("hueYellow", hue.showYellow !== false, "Yellow flag (yellow)"),
+				h.check("hueSafetyCar", hue.showSafetyCar !== false, "Safety Car and VSC (orange)"),
+				h.check("hueVscPulse", hue.vscPulse !== false, "Pulse during VSC"),
+				h.check("hueRed", hue.showRed !== false, "Red flag (red)"),
+				h.check("hueChequered", hue.showChequered !== false, "Chequered flag (white, pulsing)"));
+			const sync = () => { const on = master.input.checked && !!hue.paired;
+				which.classList.toggle("setoff", !on); for (const i of which.querySelectorAll("input")) i.disabled = !on; };
+			master.input.addEventListener("change", sync);
+			if (!hue.paired) { master.input.disabled = true; master.classList.add("setoff"); }
+			sync();
+			return h.group("Flags on the lights",
+				h.hint("During a session the lights take the colour of the flag on track, and go back as they were afterwards." + (hue.paired ? "" : " Pair your bridge first.")),
+				master, which,
+				hue.paired ? el("div", { className: "setrow" }, testBtn) : null);
+		})());
 }
 function windowsTab(c, h) {
 	const pl = c.places;

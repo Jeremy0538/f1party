@@ -759,10 +759,12 @@ type config struct {
 	FitTiming     bool     `json:"fitTiming,omitempty"`     // zoom Live Timing to fill its window
 	RestOn        bool     `json:"restOn,omitempty"`        // best of the rest in the onboards outside the top teams
 	RestLive      bool     `json:"restLive,omitempty"`      // keep them up to date during the session
-	TopTeams      []string `json:"topTeams,omitempty"`      // nil = McLaren, Ferrari, Mercedes, Red Bull Racing
+	TopTeams      []string `json:"topTeams,omitempty"`      // the teams whose onboards always stay
+	TopTeamsSet   bool     `json:"topTeamsSet,omitempty"`   // TopTeams was chosen (also none); else McLaren, Ferrari, Mercedes, Red Bull Racing
 	BattleOn      bool     `json:"battleOn,omitempty"`      // pick battle mode's drivers in Ultimate F1 Viewer
-	BattleLive    bool     `json:"battleLive,omitempty"`    // keep them up to date during the race
-	BattleRight   string   `json:"battleRight,omitempty"`   // "" championship top 3, "p5to8" positions 5 to 8
+	BattleLive    bool     `json:"battleLive,omitempty"`    // (1.5) keep them up to date: now BattleEvery
+	BattleEvery   int      `json:"battleEvery,omitempty"`   // seconds between battle mode updates during the race (0 = only when it opens)
+	BattleRight   string   `json:"battleRight,omitempty"`   // second battle mode window: "" championship top 3, "p5to8" positions 5 to 8
 	// Close F1
 	CloseMVOff   bool `json:"closeMvOff,omitempty"`   // leave MultiViewer open
 	CloseUf1Off  bool `json:"closeUf1Off,omitempty"`  // leave Ultimate F1 Viewer open

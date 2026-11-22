@@ -30,8 +30,8 @@ func settingsView() map[string]any {
 		"uf1": uf1Installed(), "uf1On": !c.Uf1Off, "uf1Layouts": uf1Layouts(), "uf1For": c.Uf1For, "uf1CloseFirst": c.Uf1CloseFirst,
 		"fitTiming": c.FitTiming,
 		// Drivers
-		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(),
-		"battleOn": c.BattleOn, "battleLive": c.BattleLive, "battleRight": c.BattleRight,
+		"restOn": c.RestOn, "restLive": c.RestLive, "topTeams": topTeams(), "teams": allTeams(),
+		"battleOn": c.BattleOn, "battleEvery": int(battleEvery().Seconds()), "battleRight": c.BattleRight,
 		// Close F1
 		"closeMv": !c.CloseMVOff, "closeUf1": !c.CloseUf1Off, "closeDesktop": c.CloseDesktop,
 	}
@@ -64,7 +64,7 @@ type settingsIn struct {
 	RestLive      *bool
 	TopTeams      []string
 	BattleOn      *bool
-	BattleLive    *bool
+	BattleEvery   *int
 	BattleRight   *string
 	CloseMv       *bool
 	CloseUf1      *bool
@@ -118,7 +118,7 @@ func applySettings(in settingsIn, party *Party) {
 		set(&c.RestOn, in.RestOn, false)
 		set(&c.RestLive, in.RestLive, false)
 		if in.TopTeams != nil {
-			c.TopTeams = nil
+			c.TopTeams, c.TopTeamsSet = nil, true
 			for _, t := range in.TopTeams {
 				if t = clip(t, 40); t != "" && len(c.TopTeams) < 10 {
 					c.TopTeams = append(c.TopTeams, t)
@@ -126,7 +126,9 @@ func applySettings(in settingsIn, party *Party) {
 			}
 		}
 		set(&c.BattleOn, in.BattleOn, false)
-		set(&c.BattleLive, in.BattleLive, false)
+		if in.BattleEvery != nil {
+			c.BattleEvery, c.BattleLive = max(0, min(600, *in.BattleEvery)), false
+		}
 		if in.BattleRight != nil {
 			c.BattleRight = ""
 			if *in.BattleRight == "p5to8" {
