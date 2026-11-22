@@ -57,6 +57,7 @@ func main() {
 	go party.watchPeople()
 	go rememberParty(party)
 	go party.runPlans()
+	go followMainStream()
 	go func() { // friend requests in the party
 		for range time.Tick(2 * time.Second) {
 			if party.Snapshot().Mode != "idle" {
@@ -114,7 +115,17 @@ func main() {
 		}
 		return s.Code, nil
 	}
-	startControl(party, func() (string, error) { return hostAndInvite(true) }, show)
+	startControl(party, controlHooks{
+		host:   func() (string, error) { return hostAndInvite(true) },
+		invite: func() (string, error) { return hostAndInvite(false) },
+		copy: func(text string) error {
+			if appCtx == nil {
+				return errors.New("F1 Party is still starting")
+			}
+			return wruntime.ClipboardSetText(appCtx, text)
+		},
+		show:   show,
+	})
 	hostArg := func(args []string) bool {
 		for _, a := range args {
 			if a == "--host" {
@@ -161,10 +172,10 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:            "F1 Party",
-		Width:            780,
-		Height:           530,
-		MinWidth:         600,
-		MinHeight:        420,
+		Width:            880,
+		Height:           660,
+		MinWidth:         680,
+		MinHeight:        480,
 		BackgroundColour: &options.RGBA{R: 15, G: 17, B: 21, A: 255},
 		AssetServer: &assetserver.Options{Handler: newHandler(party, func() { wruntime.Quit(appCtx) }, func(u string) { wruntime.BrowserOpenURL(appCtx, u) },
 			func(text string) error { return wruntime.ClipboardSetText(appCtx, text) }, hostAndInvite)},
@@ -259,8 +270,17 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		s := party.Snapshot()
-		s.Welcome = welcomeFor(loadConfig())
-		writeJSON(w, s)
+		cfg := loadConfig()
+		s.Welcome = welcomeFor(cfg)
+		if s.Mode == "idle" {
+			s.Name = cfg.Name // the name from Settings (shown on the start screen)
+		}
+		// open: a tab the window should show once (the Stream Deck's Start session asks for the calendar)
+		open, _ := uiOpen.Swap("").(string)
+		writeJSON(w, struct {
+			Status
+			Open string `json:"open,omitempty"`
+		}{s, open})
 	})
 	// The setup guide or the what's new window was shown: not again (until the next version).
 	mux.HandleFunc("POST /api/welcome/done", func(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +290,10 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("POST /api/host", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Name string }
 		json.NewDecoder(r.Body).Decode(&in)
+		// the name from Settings, unless one is sent (older windows)
+		if strings.TrimSpace(in.Name) == "" {
+			in.Name = loadConfig().Name
+		}
 		name := cleanName(in.Name)
 		updateConfig(func(c *config) { c.Name = name })
 		code := newCode()
@@ -288,6 +312,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		if len(code) < 4 || len(code) > 8 {
 			http.Error(w, "That doesn't look like a party code", 400)
 			return
+		}
+		if strings.TrimSpace(in.Name) == "" {
+			in.Name = loadConfig().Name
 		}
 		name := cleanName(in.Name)
 		updateConfig(func(c *config) { c.Name = name })
@@ -620,7 +647,12 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		Unplan(in.ID)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	// Sync: a host has everyone (and their own onboards) sync to their main stream; a guest jumps to the host.
 	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
+		if party.Snapshot().Mode == "host" {
+			replyErr(w, party.ResyncAll())
+			return
+		}
 		replyErr(w, party.SyncNow())
 	})
 	// Settings (the gear at the top right).
@@ -639,7 +671,8 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		}
 		writeJSON(w, map[string]bool{"ok": true})
 	})
-	// Close F1: MultiViewer and Ultimate F1 Viewer closed, desktop, lights and taskbar back (as set).
+	// Close F1 (older windows; the app now does this with End session): MultiViewer and Ultimate F1 Viewer
+	// closed, desktop, lights and taskbar back (as set).
 	mux.HandleFunc("POST /api/closef1", func(w http.ResponseWriter, r *http.Request) {
 		go closeF1()
 		writeJSON(w, map[string]bool{"ok": true})

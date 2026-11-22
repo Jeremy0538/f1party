@@ -24,7 +24,7 @@ func settingsView() map[string]any {
 		"windows": runtime.GOOS == "windows",
 		"desktops": desktopsSupported(),
 		// General
-		"desktop": !c.DesktopOff, "desktopName": name, "taskbar": c.Taskbar, "autoSync": !c.AutoSyncOff,
+		"name": c.Name, "desktop": !c.DesktopOff, "desktopName": name, "taskbar": c.Taskbar, "autoSync": !c.AutoSyncOff,
 		// Sessions
 		"openWith": openWithOf(c.Setup), "plugin": pluginInfo(),
 		"setups": setups, "setupRace": c.SetupRace, "setupQuali": c.SetupQuali, "setupPractice": c.SetupPractice,
@@ -51,6 +51,7 @@ var (
 
 // settingsIn: what the Settings window sends; only the fields it sends change.
 type settingsIn struct {
+	Name          *string
 	Desktop       *bool
 	DesktopName   *string
 	Taskbar       *string
@@ -90,6 +91,9 @@ func applySettings(in settingsIn, party *Party) {
 			if v != nil {
 				*dst = *v != invert
 			}
+		}
+		if in.Name != nil {
+			c.Name = cleanName(*in.Name)
 		}
 		set(&c.DesktopOff, in.Desktop, true)
 		if in.DesktopName != nil {

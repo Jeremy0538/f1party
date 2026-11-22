@@ -11,6 +11,9 @@ type newsItem struct {
 }
 
 var whatsNew = []newsItem{
+	{"1.12.0", "One End session button: it closes the streams, MultiViewer and Ultimate F1 Viewer, the watching desktop, lights and taskbar (as set). The party stays; End party leaves it.", "close"},
+	{"1.12.0", "Your other streams follow the main stream: pause, skip or rewind it and they do the same, and they sync again when you play.", ""},
+	{"1.12.0", "The F1 Race Control Stream Deck plugin now drives F1 Party: Party, Race, Quali, Start together and End session keys.", ""},
 	{"1.8.0", "A setup guide on the first start, and this window after every update.", ""},
 	{"1.8.0", "New look for the party and the session: who's in the party, the setup and the session each in their own box.", ""},
 	{"1.7.0", "Start together on a live session now works without the Stream Deck plugin.", ""},

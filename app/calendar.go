@@ -427,6 +427,25 @@ func liveCalSession() (CalSession, CalMeeting, bool) {
 	return CalSession{}, CalMeeting{}, false
 }
 
+// latestCalSession: the Race ("Race") or the qualifying ("Qualifying") on now, else the last one that ended
+// (also when the next weekend has begun already).
+func latestCalSession(name string) (CalSession, bool) {
+	calendar.Lock()
+	defer calendar.Unlock()
+	now := time.Now()
+	var best CalSession
+	found := false
+	for _, s := range calendar.sessions {
+		if s.Name != name || s.Start.After(now) {
+			continue
+		}
+		if !found || s.Start.After(best.Start) {
+			best, found = s, true
+		}
+	}
+	return best, found
+}
+
 // shortGP: "Abu Dhabi Grand Prix" → "Abu Dhabi GP".
 func shortGP(name string) string { return strings.Replace(name, "Grand Prix", "GP", 1) }
 
@@ -639,7 +658,11 @@ func (p *Party) openCalSession(s CalSession, contentID string) error {
 // minute before the start with the lights. Keeps the party you're hosting; a guest can't.
 // startAt: where the party starts once the session is open: "begin" (the broadcast's beginning), "start" (a
 // minute before the session starts) or "live"; "" = a minute before the start for a replay, live as it comes.
-func (p *Party) WatchNow(key int, name, startAt string) error {
+func (p *Party) WatchNow(key int, name, startAt string) error { return p.watch(key, name, startAt, true) }
+
+// watch: WatchNow, or with host false (the Stream Deck's Race, Quali and Session keys) only open the session,
+// without a party when you're not in one (a party you host switches to it).
+func (p *Party) watch(key int, name, startAt string, host bool) error {
 	s, m, ok := calSession(key)
 	if !ok {
 		return errors.New("unknown session")
@@ -664,7 +687,7 @@ func (p *Party) WatchNow(key int, name, startAt string) error {
 		}
 	}
 	switching := p.Snapshot().Mode == "host"
-	if !switching {
+	if !switching && host {
 		p.Start("host", newCode(), name)
 	}
 	p.SetNote("Opening " + sessionTitle(s, m) + "…")

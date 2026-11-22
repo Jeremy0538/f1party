@@ -12,7 +12,9 @@ func TestEndSession(t *testing.T) {
 	closed := 0
 	old := closeSession
 	closeSession = func() { closed++ } // never the real MultiViewer
-	defer func() { closeSession = old }()
+	oldRest := closeRest
+	closeRest = func() {}
+	defer func() { closeSession, closeRest = old, oldRest }()
 
 	p := &Party{st: Status{Mode: "guest"}, host: &FeedState{ContentID: "1000001"}}
 	if err := p.EndSession(); err != nil {
