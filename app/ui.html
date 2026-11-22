@@ -489,6 +489,7 @@ async function joinParty(code, from) {
 }
 async function refreshDiscord() {
 	try { people = await (await fetch("/api/people")).json(); } catch { return; }
+	for (const k of ["friends", "teams", "invites", "teamInvites"]) people[k] = people[k] || [];
 	webhookSet = people.teams.length > 0 || people.ownWebhook;
 	$("invite").classList.toggle("hidden", mode === "idle" || (!webhookSet && !people.friends.length));
 	if (tab === "friends") renderPeople();

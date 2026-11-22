@@ -322,7 +322,9 @@ func peopleView() PeopleView {
 	for _, x := range peopleNow.people {
 		byID[x.ID] = x
 	}
-	v := PeopleView{Online: peopleNow.online, OwnWebhook: validWebhook(c.Webhook), Invites: []PartyInvite{}, TeamInvites: []TeamInvite{}}
+	// empty lists, never null: the window walks them
+	v := PeopleView{Online: peopleNow.online, OwnWebhook: validWebhook(c.Webhook), Friends: []FriendView{}, Teams: []TeamView{},
+		Invites: []PartyInvite{}, TeamInvites: []TeamInvite{}}
 	for _, f := range c.Friends {
 		fv := FriendView{Friend: f}
 		if x, ok := byID[f.ID]; ok {
@@ -331,7 +333,7 @@ func peopleView() PeopleView {
 		v.Friends = append(v.Friends, fv)
 	}
 	for _, t := range c.Teams {
-		tv := TeamView{TeamInfo: TeamInfo{ID: teamID(t.Key), Name: t.Name, Members: 1}}
+		tv := TeamView{TeamInfo: TeamInfo{ID: teamID(t.Key), Name: t.Name, Members: 1}, People: []Person{}}
 		for _, ti := range peopleNow.teams {
 			if ti.ID == tv.ID {
 				tv.TeamInfo = ti
