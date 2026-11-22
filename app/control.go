@@ -18,7 +18,8 @@ package main
 //   POST /control/calendar → the window comes up on the calendar, to pick a session (Start session key)
 //   POST /control/start  → Start together: the five lights for everyone, then the session plays (hosts a
 //                          party first when you're not in one)
-//   status also has "session": true while a session is open (End session), and "countdown": seconds until the lights go out (Start together), when counting
+//   status also has "desktop": the name of F1's own desktop ("" = none), "session": true while a session is
+//   open (End session), and "countdown": seconds until the lights go out (Start together), when counting
 
 import (
 	"encoding/json"
@@ -66,6 +67,14 @@ func startControl(party *Party, h controlHooks) {
 		}
 		if v := party.Session(); v != nil && !v.Stopped {
 			out["session"] = true
+		}
+		// F1's own desktop as set in Settings: its name, or "" when everything opens on the current desktop
+		if c := loadConfig(); c.DesktopOff || !desktopsSupported() {
+			out["desktop"] = ""
+		} else if n := strings.TrimSpace(c.DesktopName); n != "" {
+			out["desktop"] = n
+		} else {
+			out["desktop"] = f1DesktopName
 		}
 		writeJSON(w, out)
 	})

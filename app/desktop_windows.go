@@ -143,7 +143,8 @@ func toF1Desktop() {
 	ids, cur := desktops()
 	target := -1
 	for i, id := range ids {
-		if id == vdMade || strings.EqualFold(strings.TrimSpace(desktopName(id)), name) {
+		// never the first desktop: that is where you work; a name left on it would make F1 open there
+		if i > 0 && (id == vdMade || strings.EqualFold(strings.TrimSpace(desktopName(id)), name)) {
 			target = i
 			break
 		}
