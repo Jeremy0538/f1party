@@ -360,6 +360,7 @@
 					<p>Got a group key (it starts with <i>f1p_</i>) from your friends? Paste that instead: invites then go to your group's channel without a webhook of your own.</p>
 				</div>
 				<div id="dcset" class="hidden row" style="justify-content:space-between"><span><span class="dot ok"></span>Discord set</span><button class="link" id="dcremove">Remove</button></div>
+				<div id="dcgroup" class="hidden row" style="margin-top:6px"><button class="link" id="dcgroupinv" title="Copies a link for a friend: one click sets up the group's Discord invites in their F1 Party (works 7 days, 5 times)">Invite a friend to the group</button><span class="hint" id="dcgroupmsg" style="margin:0 0 0 8px"></span></div>
 				<div id="dcnew" class="hidden">
 					<div class="row"><input id="dchook" class="grow" placeholder="Webhook URL or group key" autocomplete="off" spellcheck="false"><button id="dcsave">Save</button></div>
 				</div>
@@ -429,8 +430,11 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") showDownlo
 const installed = (id, yes) => { $(id).textContent = yes ? "✓ Installed" : "Download"; $(id).className = yes ? "ok" : ""; };
 
 async function refreshDiscord() {
-	try { webhookSet = (await (await fetch("/api/discord")).json()).webhookSet; } catch { return; }
+	let dc;
+	try { dc = await (await fetch("/api/discord")).json(); } catch { return; }
+	webhookSet = dc.webhookSet;
 	$("dcset").classList.toggle("hidden", !webhookSet);
+	$("dcgroup").classList.toggle("hidden", !dc.group);
 	$("dcnew").classList.toggle("hidden", webhookSet);
 	$("dcinfobtn").classList.toggle("hidden", webhookSet);
 	if (webhookSet) showInfo(false);
@@ -444,6 +448,11 @@ $("dcsave").onclick = async () => {
 let infoOpen = false;
 function showInfo(on) { infoOpen = on; $("dcinfo").classList.toggle("hidden", !on); $("dcinfobtn").setAttribute("aria-expanded", String(on)); document.querySelector("aside .foot").classList.toggle("hidden", on); if (on) showDownloads(false); refreshSession(); }
 $("dcinfobtn").onclick = () => showInfo($("dcinfo").classList.contains("hidden"));
+$("dcgroupinv").onclick = async () => {
+	$("dcerr").textContent = ""; $("dcgroupmsg").textContent = "";
+	try { await post("/api/groupinvite", {}); $("dcgroupmsg").textContent = "Link copied: paste it in Discord"; }
+	catch (e) { $("dcerr").textContent = e.message; }
+};
 $("dcremove").onclick = async () => { await post("/api/discord", { webhook: "" }); refreshDiscord(); };
 
 const mvAct = (btn, path, body) => async () => {
@@ -520,6 +529,7 @@ async function refresh() {
 
 	$("roleline").textContent = s.mode === "host" ? "You're hosting" : "Party";
 	$("bigcode").textContent = s.code;
+	if (($("note").textContent || "") !== (s.note || "")) refreshDiscord(); // e.g. a group invite link just set up Discord
 	$("note").textContent = s.note || "";
 	$("sync").textContent = s.mode === "guest" ? "Sync to host" : "Sync onboards";
 	$("leave").textContent = s.mode === "host" ? "End party" : "Leave";

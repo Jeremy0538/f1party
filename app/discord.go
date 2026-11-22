@@ -86,6 +86,72 @@ func postGroup(key string, facts map[string]any) error {
 	return nil
 }
 
+// groupToken: the token in an f1party://group/TOKEN link (a group invite), or "".
+func groupToken(arg string) string {
+	rest, ok := strings.CutPrefix(arg, "f1party://group/")
+	if !ok {
+		return ""
+	}
+	t := strings.Trim(rest, "/ ")
+	if len(t) < 12 || len(t) > 32 {
+		return ""
+	}
+	for _, r := range t {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return ""
+		}
+	}
+	return t
+}
+
+// relayJSON posts in to the relay path and decodes the answer into out; the relay's text is the error.
+func relayJSON(path string, in, out any) error {
+	base := relayBase()
+	if base == "" {
+		return errors.New("no relay")
+	}
+	body, _ := json.Marshal(in)
+	res, err := discordHTTP.Post(base+path, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return errors.New("can't reach the F1 Party relay")
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 300))
+		if msg := strings.TrimSpace(string(b)); msg != "" {
+			return errors.New(msg)
+		}
+		return errors.New(res.Status)
+	}
+	return json.NewDecoder(res.Body).Decode(out)
+}
+
+// redeemGroupInvite trades a group invite token for the group key and saves it as the Discord setting.
+func redeemGroupInvite(token string) error {
+	var r struct{ Key string }
+	if err := relayJSON("/group/redeem", map[string]string{"token": token}, &r); err != nil {
+		return err
+	}
+	if !isGroupKey(r.Key) {
+		return errors.New("the relay sent no group key")
+	}
+	updateConfig(func(c *config) { c.Webhook = r.Key })
+	return nil
+}
+
+// newGroupInvite asks the relay for a group invite link (valid 7 days, 5 uses); needs the group key set.
+func newGroupInvite() (string, error) {
+	key := loadConfig().Webhook
+	if !isGroupKey(key) {
+		return "", errors.New("join the group first")
+	}
+	var r struct{ URL string }
+	if err := relayJSON("/group/invite", map[string]string{"key": key}, &r); err != nil {
+		return "", err
+	}
+	return r.URL, nil
+}
+
 // sendInvite posts the party code (and what the host is watching) to the Discord channel.
 func sendInvite(webhook, name, code, watching string) error {
 	if webhook == "" {
