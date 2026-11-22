@@ -13,7 +13,8 @@ Watch [MultiViewer](https://multiviewer.app) in sync with friends on Windows, ma
 ## How to use
 1. Open MultiViewer and sign in with F1 TV (everyone needs their own subscription).
 2. Start F1 Party. Its window opens.
-3. The host opens the world feed (International) and clicks **Host a party**, then shares the 5-letter code.
+3. The host opens the session in MultiViewer (F1 Live on the main monitor) and clicks **Host a party**, then
+   shares the 5-letter code.
 4. Everyone else enters the code and clicks **Join**. Their MultiViewer opens the same session and follows the
    host's play/pause/seek. Onboards you open yourself follow along.
 
@@ -84,7 +85,7 @@ First launch warnings (the app isn't signed):
 - **Linux:** needs WebKitGTK (`libwebkit2gtk-4.1-0`, installed on most desktops), then
   `chmod +x F1Party-linux && ./F1Party-linux`
 
-Keep the F1 Party window open while watching. Live sessions: a guest who is ahead waits for the host;
+Keep F1 Party running while watching (the tray is enough). Live sessions: a guest who is ahead waits for the host;
 one who is behind can't be pulled forward (live streams can't skip ahead).
 
 ## Developer notes

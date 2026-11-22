@@ -66,7 +66,8 @@
 	#start { max-width:360px; }
 	.or { display:flex; align-items:center; gap:10px; color:var(--faint); font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin:16px 0; }
 	.or::before, .or::after { content:""; flex:1; height:1px; background:var(--line-2); }
-	input.code { font:700 15px/1 var(--num); letter-spacing:.3em; text-transform:uppercase; }
+	input.codein { text-transform:uppercase; } /* looks like the other fields; letters typed show as capitals */
+	input.codein::placeholder { text-transform:none; }
 
 	/* in a party */
 	#party { display:flex; flex-direction:column; min-height:0; height:100%; }
@@ -219,7 +220,7 @@
 				<input id="name" maxlength="24" placeholder="Name">
 				<button class="primary" id="host" style="width:100%; margin-top:12px">Host a party</button>
 				<div class="or">or join</div>
-				<div class="row"><input id="code" class="code grow" maxlength="8" placeholder="CODE" aria-label="Party code"><button id="join">Join</button></div>
+				<div class="row"><input id="code" class="grow codein" maxlength="8" placeholder="Party code" aria-label="Party code"><button id="join">Join</button></div>
 				<div class="error" id="err"></div>
 			</div>
 
@@ -248,9 +249,9 @@
 			</div>
 			<div id="friends" class="hidden" role="tabpanel">
 				<h1>Friends</h1>
-				<p class="lead">People you watch with. Add someone from a party with the <span aria-hidden="true">+</span> icon next to their name.</p>
+				<p class="lead">People you watch with. Add someone from a party with the add-friend icon (a person with a +) next to their name.</p>
 				<ul class="flist" id="flist"></ul>
-				<p class="empty hidden" id="fempty">No friends yet. Join or host a party and click the person icon next to someone's name.</p>
+				<p class="empty hidden" id="fempty">No friends yet. Join or host a party and click the add-friend icon next to someone's name.</p>
 			</div>
 			<div id="cal" class="hidden" role="tabpanel">
 				<div class="calhead">

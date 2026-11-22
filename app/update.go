@@ -208,12 +208,18 @@ func expectedSum(url, name string) (string, error) {
 		return "", err
 	}
 	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("checksums.txt: %s", res.Status)
+	}
 	sc := bufio.NewScanner(io.LimitReader(res.Body, 1<<20))
 	for sc.Scan() {
 		f := strings.Fields(sc.Text())
 		if len(f) == 2 && strings.TrimPrefix(f[1], "*") == name && len(f[0]) == 64 {
 			return strings.ToLower(f[0]), nil
 		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", err
 	}
 	return "", errors.New("the release has no checksum for " + name)
 }

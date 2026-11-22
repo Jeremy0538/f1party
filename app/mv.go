@@ -126,7 +126,7 @@ func mainFeed(ps []Player, contentID string) *Player {
 	}
 	for _, title := range []string{mainTitle, "INTERNATIONAL"} {
 		for _, p := range feeds {
-			if p.Type == "ADDITIONAL" && p.StreamData.Title == title {
+			if p.StreamData.Title == title {
 				return p
 			}
 		}

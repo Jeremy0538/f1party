@@ -597,7 +597,16 @@ func rejoinLast(party *Party) {
 func updateConfig(f func(c *config)) {
 	configMu.Lock()
 	defer configMu.Unlock()
-	c := loadConfig()
+	c, err := readConfig()
+	for try := 0; err != nil && try < 5; try++ { // held open for a moment: try again
+		time.Sleep(100 * time.Millisecond)
+		c, err = readConfig()
+	}
+	if err != nil {
+		// never write over settings that couldn't be read: that would wipe the webhook, setup, plans...
+		log.Printf("settings not saved, the file can't be read: %v", err)
+		return
+	}
 	f(&c)
 	saveConfig(c)
 }
@@ -613,13 +622,26 @@ func configPath() (string, error) {
 }
 
 func loadConfig() config {
-	var c config
-	if p, err := configPath(); err == nil {
-		if b, err := os.ReadFile(p); err == nil {
-			json.Unmarshal(b, &c)
-		}
-	}
+	c, _ := readConfig()
 	return c
+}
+
+// readConfig: the settings, or an error when the file is there but can't be read (held open, damaged).
+// No file yet is no error: that is a fresh start.
+func readConfig() (config, error) {
+	var c config
+	p, err := configPath()
+	if err != nil {
+		return c, err
+	}
+	b, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return c, nil
+	}
+	if err != nil {
+		return c, err
+	}
+	return c, json.Unmarshal(b, &c)
 }
 
 func saveConfig(c config) {
@@ -636,7 +658,8 @@ func saveConfig(c config) {
 	if os.WriteFile(tmp, b, 0o644) != nil {
 		return
 	}
-	if os.Rename(tmp, p) != nil {
+	if os.Rename(tmp, p) != nil { // the file held open for a moment (a virus scanner): write it in place
 		os.Remove(tmp)
+		_ = os.WriteFile(p, b, 0o644)
 	}
 }
