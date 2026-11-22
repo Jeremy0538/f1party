@@ -409,6 +409,8 @@
 	.pcard { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:14px 16px 16px; margin-bottom:12px; }
 	.ptop { display:flex; align-items:center; gap:10px; }
 	.ptop .boxtitle { white-space:nowrap; }
+	.hostbadge.guest { color:var(--dim); background:rgba(255,255,255,.05); border-color:var(--line-2); }
+	.ptop .pstatus:has(#status:empty) { visibility:hidden; }
 	.ptop #leave { width:26px; height:26px; margin:-4px -6px -4px auto; border-color:transparent; }
 	.ptop #leave svg { width:14px; height:14px; }
 	.ptop #leave:hover { color:var(--bad); border-color:rgba(239,68,68,.4); }
@@ -536,7 +538,7 @@
 			<div id="party" class="hidden">
 				<section class="pcard">
 					<div class="ptop">
-						<span class="boxtitle" id="roleline">You're hosting</span>
+						<span class="boxtitle" id="roleline">Your party</span><span id="rolebadge"></span>
 						<span class="pstatus" id="pstatus"><span class="dot" id="dot"></span><span id="status">…</span></span>
 						<button class="ib" id="leave" title="End the party" aria-label="End the party"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
 					</div>
@@ -1187,7 +1189,13 @@ async function refresh() {
 	$("party").classList.toggle("hidden", !inParty || tab !== "party");
 	if (!inParty) return;
 
-	$("roleline").textContent = s.mode === "host" ? "You're hosting" : "You're a guest";
+	// who you are in the party: the host's crown badge (as in the member list) or a plain guest badge
+	if ($("rolebadge").dataset.mode !== s.mode) {
+		$("rolebadge").dataset.mode = s.mode;
+		const b = el("span", { className: "hostbadge" + (s.mode === "host" ? "" : " guest"), title: s.mode === "host" ? "You host: everyone follows your stream" : "You're a guest: you follow the host" });
+		b.innerHTML = (s.mode === "host" ? CROWN : "") + "<span>" + (s.mode === "host" ? "HOST" : "GUEST") + "</span>";
+		$("rolebadge").replaceChildren(b);
+	}
 	if ($("bigcode").dataset.code !== s.code) {
 		$("bigcode").dataset.code = s.code;
 		$("bigcode").replaceChildren(...[...s.code].map((c) => el("span", { textContent: c })));
@@ -1203,8 +1211,9 @@ async function refresh() {
 	$("autosyncrow").classList.toggle("hidden", s.mode !== "guest");
 	if (document.activeElement !== $("autosync")) $("autosync").checked = s.autoSync !== false;
 	// the host's usual status says what the heading already does: keep it short next to it
-	let stTxt = /^Hosting: guests follow/.test(s.status || "") ? "Guests follow you" : (s.status || "");
-	if (s.mode === "host" && !s.mvOnline) stTxt = sessData && !sessData.stopped ? "Session not open in MultiViewer" : "No session yet";
+	// only what matters here: the session box on the right already says whether a session is open
+	let stTxt = /^Hosting: guests follow/.test(s.status || "") ? ((s.members || []).length > 1 ? "Guests follow you" : "") : (s.status || "");
+	if (s.mode === "host" && !s.mvOnline) stTxt = "";
 	$("status").textContent = stTxt;
 	const f = s.feed;
 	$("feed").textContent = f ? `${f.title === "F1 LIVE" ? "F1 Live" : f.title === "INTERNATIONAL" ? "International" : f.title} · ${f.live ? "LIVE" : fmtTime(f.time)}${f.paused ? " · paused" : ""}` : "";
