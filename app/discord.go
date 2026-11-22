@@ -182,7 +182,7 @@ func joinLink(code string) string {
 }
 
 // Join pages, best first: the relay's (once deployed), then the static page on GitHub Pages.
-const pagesJoin = "https://stanvandaalen.github.io/f1party/join/?c="
+const pagesJoin = "https://jeremy0538.github.io/f1party/join/?c="
 
 var joinBaseCache struct {
 	sync.Mutex
