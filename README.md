@@ -35,8 +35,8 @@ Also in the app:
 - **Team** (Friends tab): a party is one session you watch together with a 5-letter code; your team is
   your group of friends with one shared Discord channel. Anyone in the team clicks **Invite a friend to the
   team** to copy a team link (works 7 days, 5 times); opening it puts F1 Party in the team, nothing to paste.
-  The team key (starts with `f1p_`) can also be pasted by hand. Invites go through the relay, which keeps the
-  channel's webhook secret (`wrangler secret put DISCORD_WEBHOOK` and `GROUP_KEY`) and only posts ordinary
+  Pasting a team link (or the team key, `f1p_…`) in the team field works too. **Start a team** with a name and
+  the Discord webhook of the team's channel. Invites go through the relay, which keeps that webhook secret and only posts ordinary
   invites, plans and reminders for real parties (one of each per party every 2 minutes, 30 an hour in total).
 - **Stream Deck Sync key** (F1 Race Control 1.15+): press = sync (a guest goes to the host first); hold 1 s =
   host a party and post the Discord invite. F1 Party listens on `127.0.0.1:47821` for this (`/control/status`,
