@@ -25,6 +25,7 @@ func settingsView() map[string]any {
 		// General
 		"desktop": !c.DesktopOff, "desktopName": name, "taskbar": c.Taskbar, "autoSync": !c.AutoSyncOff,
 		// Sessions
+		"openWith": openWithOf(c.Setup), "plugin": pluginInfo(),
 		"setups": setups, "setupRace": c.SetupRace, "setupQuali": c.SetupQuali, "setupPractice": c.SetupPractice,
 		"autoRace": setupForKind("race"), "autoQuali": setupForKind("quali"), "autoPractice": setupForKind("practice"),
 		"uf1": uf1Installed(), "uf1On": !c.Uf1Off, "uf1Layouts": uf1Layouts(), "uf1For": c.Uf1For, "uf1CloseFirst": c.Uf1CloseFirst,
@@ -53,6 +54,7 @@ type settingsIn struct {
 	DesktopName   *string
 	Taskbar       *string
 	AutoSync      *bool
+	OpenWith      *string
 	SetupRace     *string
 	SetupQuali    *string
 	SetupPractice *string
@@ -99,6 +101,12 @@ func applySettings(in settingsIn, party *Party) {
 			}
 		}
 		set(&c.AutoSyncOff, in.AutoSync, true)
+		if in.OpenWith != nil {
+			c.Setup = clip(*in.OpenWith, 100)
+			if c.Setup == setupAuto {
+				c.Setup = ""
+			}
+		}
 		for dst, v := range map[*string]*string{&c.SetupRace: in.SetupRace, &c.SetupQuali: in.SetupQuali, &c.SetupPractice: in.SetupPractice} {
 			if v != nil {
 				*dst = clip(*v, 100)
@@ -147,6 +155,9 @@ func applySettings(in settingsIn, party *Party) {
 	}
 	if in.AutoSync != nil {
 		party.SetAutoSync(*in.AutoSync)
+	}
+	if in.OpenWith != nil {
+		party.SetSetup(setupChoice(loadConfig().Setup))
 	}
 	if in.FitTiming != nil {
 		go fitLiveTiming(*in.FitTiming)

@@ -24,8 +24,30 @@ import (
 	"time"
 )
 
-// setupAuto: the setup choice "a setup per session type".
-const setupAuto = "@auto"
+// setupAuto: the setup choice "a setup per session type" (the default); setupLive: F1 Live only.
+const (
+	setupAuto = "@auto"
+	setupLive = "@live"
+)
+
+// setupChoice: what the saved "open sessions with" setting means for the party ("" there = F1 Live only).
+func setupChoice(saved string) string {
+	switch saved {
+	case "", setupAuto:
+		return setupAuto
+	case setupLive:
+		return ""
+	}
+	return saved
+}
+
+// openWithOf: the saved setting as the Settings window shows it.
+func openWithOf(saved string) string {
+	if saved == "" {
+		return setupAuto
+	}
+	return saved
+}
 
 // defaultTopTeams: the teams whose onboards a setup keeps; "best of the rest" fills the others.
 var defaultTopTeams = []string{"McLaren", "Ferrari", "Mercedes", "Red Bull Racing"}

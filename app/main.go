@@ -50,7 +50,7 @@ func envOr(k, def string) string {
 func main() {
 	afterUpdate(os.Args[1:])
 	cfg := loadConfig()
-	party := NewParty(cfg.Name, cfg.Setup)
+	party := NewParty(cfg.Name, setupChoice(cfg.Setup))
 	go party.watchUpdates()
 	go party.watchPresence()
 	migrateTeams()
@@ -295,13 +295,6 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	mux.HandleFunc("POST /api/mv/restart", func(w http.ResponseWriter, r *http.Request) {
 		replyErr(w, mvRestart())
-	})
-	mux.HandleFunc("POST /api/setup", func(w http.ResponseWriter, r *http.Request) {
-		var in struct{ Name string }
-		json.NewDecoder(r.Body).Decode(&in)
-		party.SetSetup(in.Name)
-		updateConfig(func(c *config) { c.Setup = in.Name })
-		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/setup/open", func(w http.ResponseWriter, r *http.Request) {
 		var in struct{ Name string }
@@ -728,7 +721,7 @@ func newCode() string {
 
 type config struct {
 	Name           string         `json:"name"`
-	Setup          string         `json:"setup,omitempty"`        // MultiViewer setup opened on joining
+	Setup          string         `json:"setup,omitempty"`        // how sessions open: "" automatic per session type, "@live" F1 Live only, "@streamdeck", or a setup
 	Webhook        string         `json:"webhook,omitempty"`      // own Discord webhook for party invites (a team key here is moved to Teams)
 	TeamName       string         `json:"teamName,omitempty"`     // (1.3.0) name of the team key kept in Webhook
 	Teams          []TeamRef      `json:"teams,omitempty"`        // teams this app is in

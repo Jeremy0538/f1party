@@ -47,8 +47,6 @@
 	.teamgrid label { display:flex; align-items:center; gap:8px; min-height:28px; cursor:pointer; font-size:12.5px; }
 	.teamgrid input { width:15px; height:15px; accent-color:var(--red); margin:0; }
 	.setoff label, .setoff select, .setoff input { cursor:not-allowed; }
-	.uf1row { margin-top:8px; gap:8px; }
-	.uf1row .label { margin:0; white-space:nowrap; }
 	/* Start together countdown */
 	.countdown { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(8,9,11,.88); z-index:5; }
 	.countdown .n { font:700 96px/1 var(--num); color:#fff; }
@@ -350,6 +348,12 @@
 	.pick label:hover { background:#1a1d23; }
 	.pick input { width:16px; height:16px; accent-color:var(--red); }
 	.pick .sub { margin-left:auto; font-size:11px; color:var(--dim); }
+	.mvbar .row { gap:8px; }
+	.mvbar .mvstate { display:flex; align-items:center; font-size:12px; }
+	.mvbar .mvacts { margin-left:auto; display:flex; gap:10px; }
+	.sesslayout { margin-top:10px; gap:8px; }
+	.sesslayout select { min-width:0; height:30px; font-size:12px; }
+	.sesslayout button { height:30px; font-size:12px; }
 	.autosync { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--dim); cursor:pointer; }
 	.autosync input { width:15px; height:15px; accent-color:var(--red); margin:0; }
 	.calhint { color:var(--warn); }
@@ -488,16 +492,16 @@
 		</main>
 
 		<aside>
-			<section>
-				<span class="label">MultiViewer</span>
-				<div class="row" style="justify-content:space-between; margin-bottom:12px">
-					<span><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
-					<button class="link hidden" id="mvstart">Open</button><button class="link hidden" id="mvrestart">Restart for setups</button>
+			<section class="mvbar">
+				<div class="row">
+					<span class="label" style="margin:0">MultiViewer</span>
+					<span class="mvstate"><span class="dot" id="mvdot"></span><span id="mvstate">…</span></span>
+					<span class="mvacts">
+						<button class="link hidden" id="mvstart">Start</button><button class="link hidden" id="mvrestart" title="MultiViewer runs without setup support: it closes and opens again">Restart</button>
+						<button class="link hidden" id="closef1" title="Close MultiViewer and Ultimate F1 Viewer, the desktop, lights and taskbar back (Settings → Close)">Close F1</button>
+					</span>
 				</div>
-				<div class="row"><select id="setup" class="grow" aria-label="Open with"></select><button id="setupopen">Open</button></div>
-				<div class="row uf1row hidden" id="uf1row"><span class="label">+ Ultimate F1 Viewer</span><select id="uf1sel" class="grow" aria-label="Ultimate F1 Viewer layout with this setup"></select></div>
 				<div class="hint" id="setuphint"></div>
-				<div class="row" style="justify-content:flex-end; margin-top:6px"><button class="link" id="closef1" title="Close MultiViewer and Ultimate F1 Viewer, the desktop, lights and taskbar back (Settings → Close)">Close F1</button></div>
 				<div class="error" id="mverr"></div>
 			</section>
 			<section class="sess hidden" id="sess">
@@ -506,6 +510,9 @@
 				</div>
 				<div class="sesshead"><div class="name" id="sessname"></div><button class="link hidden" id="sesschange" title="Pick a session in the calendar: the whole party switches to it">Change</button></div>
 				<div class="when" id="sesswhen"></div>
+				<div class="row sesslayout hidden" id="sesslayout" title="Open this session with another layout, just this time (the default is in Settings → Sessions)">
+					<span class="label" style="margin:0">Layout</span><select id="setup" class="grow" aria-label="Layout for this session"></select><button id="setupopen">Open</button>
+				</div>
 				<div class="jumps">
 					<button id="jbegin" title="Back to the beginning of the broadcast">Beginning</button>
 					<button id="jstart" title="To 1 minute before the session starts, then the five lights and everyone plays together">Start −1 min</button>
@@ -871,22 +878,13 @@ $("mvrestart").onclick = async () => {
 	await mvAct($("mvrestart"), "/api/mv/restart")();
 };
 let mvNow = {};
-$("setup").onchange = async () => {
-	await post("/api/setup", { name: $("setup").value });
-	await refreshMV();
-	// in a party with MultiViewer closed: start it and open the chosen setup right away
-	const v = $("setup").value;
-	if (mode !== "idle" && v && v !== SD && mvNow.installed && !mvNow.running) $("setupopen").click();
-};
 $("closef1").onclick = async () => {
 	if (!confirm("Close F1? MultiViewer and Ultimate F1 Viewer close (as set in Settings → Close).")) return;
 	try { await post("/api/closef1"); } catch (e) { $("mverr").textContent = e.message; }
 	setTimeout(refreshMV, 1500);
 };
-$("uf1sel").onchange = async () => {
-	try { await post("/api/setup/uf1", { setup: $("setup").value, layout: $("uf1sel").value }); } catch (e) { $("mverr").textContent = e.message; }
-	refreshMV();
-};
+// Session > Layout: open the session with another layout just this time (MultiViewer starts first if needed)
+$("setup").onchange = () => { $("setup").dataset.touched = "1"; };
 $("setupopen").onclick = async () => {
 	if (!mvNow.running && $("setup").value !== SD) { $("mvstate").textContent = "Starting…"; $("mvstart").classList.add("hidden"); }
 	await mvAct($("setupopen"), "/api/setup/open", () => ({ name: $("setup").value }))();
@@ -895,17 +893,6 @@ $("setupopen").onclick = async () => {
 async function refreshMV() {
 	let m; try { m = await (await fetch("/api/mv")).json(); } catch { return; }
 	mvNow = m;
-	// the Ultimate F1 Viewer layout that opens with a MultiViewer setup (saved per setup)
-	const setupName = m.setup, isMV = setupName && setupName !== SD && (m.setups || []).some((x) => x.name === setupName);
-	$("uf1row").classList.toggle("hidden", !(m.uf1 && isMV && (m.uf1Layouts || []).length));
-	if (m.uf1 && isMV && document.activeElement !== $("uf1sel")) {
-		const sel = $("uf1sel"), chosen = (m.uf1For || {})[setupName], auto = (m.uf1Layouts || []).find((l) => l.id === m.uf1Auto);
-		sel.innerHTML = "";
-		sel.append(new Option(auto && chosen === undefined ? "Same name: " + auto.name : "Same name (none found)", ""));
-		sel.append(new Option("None", "-"));
-		for (const l of m.uf1Layouts || []) sel.append(new Option(l.name, l.id));
-		sel.value = chosen === undefined ? "" : chosen;
-	}
 	const pl = m.plugin || {};
 	pluginDownload = pl.download || "";
 	installed("dlmv", m.installed); installed("dluf1", m.uf1); installed("dlsd", pl.installed);
@@ -913,30 +900,23 @@ async function refreshMV() {
 	$("mvstate").textContent = m.running ? "Running" : (m.installed ? "Not running" : "Not installed");
 	$("mvstart").classList.toggle("hidden", m.running || !m.installed);
 	$("mvrestart").classList.toggle("hidden", !m.running || m.setupsReady || !(m.setups || []).length);
-	const sel = $("setup"), names = (m.setups || []).map(s => s.name);
-	const want = ["", "@auto", SD, ...names].join("|");
+	$("closef1").classList.toggle("hidden", !m.running);
+	const hint = $("setuphint");
+	hint.innerHTML = "";
+	if (!m.installed) hint.append("Get MultiViewer at ", Object.assign(document.createElement("a"), { textContent: "multiviewer.app", onclick: () => openURL("https://multiviewer.app/download") }), ".");
+	// the layouts the Session block offers: automatic, each setup, the Stream Deck when it's there
+	const sel = $("setup"), names = (m.setups || []).map((x) => x.name);
+	const want = ["@auto", ...names, pl.installed ? SD : ""].join("|");
 	if (sel.dataset.list !== want) {
 		sel.innerHTML = "";
-		sel.append(new Option("F1 Live only", ""));
 		sel.append(new Option("Automatic per session type", "@auto"));
-		sel.append(new Option("Automatic (Stream Deck)", SD));
-		for (const s of m.setups || []) sel.append(new Option(s.name, s.name));
+		for (const n of names) sel.append(new Option(n, n));
+		if (pl.installed) sel.append(new Option("Stream Deck plugin", SD));
 		sel.dataset.list = want;
 	}
-	if (document.activeElement !== sel) sel.value = ["@auto", SD, ...names].includes(m.setup) ? m.setup : "";
-	const sd = sel.value === SD, hint = $("setuphint");
-	hint.innerHTML = "";
-	if (!m.installed) {
-		hint.append("Get MultiViewer at ", Object.assign(document.createElement("a"), { textContent: "multiviewer.app", onclick: () => openURL("https://multiviewer.app/download") }), ".");
-	} else if (sd && !pl.installed) {
-		hint.append("Plugin not installed. ", Object.assign(document.createElement("a"), { textContent: "Download", onclick: () => openURL(pl.download) }));
-	} else if (sd && !pl.running) {
-		hint.append("Start Stream Deck, or ", Object.assign(document.createElement("a"), { textContent: "update the plugin", onclick: () => openURL(pl.download) }), ".");
-	} else if (sd) {
-		hint.append("The Stream Deck plugin picks your Race, Qualifying or Practice setup for the session and opens Ultimate F1 Viewer too.");
-	}
-	// closed MultiViewer is fine: Open starts it first. Running without setup support needs a restart.
-	$("setupopen").disabled = sd ? !pl.running : (!sel.value || !m.installed || (m.running && !m.setupsReady));
+	if (document.activeElement !== sel && !sel.dataset.touched) sel.value = ["@auto", SD, ...names].includes(m.setup) ? m.setup : "@auto";
+	const sd = sel.value === SD;
+	$("setupopen").disabled = sd ? !pl.running : (!m.installed || (m.running && !m.setupsReady));
 }
 
 async function refresh() {
@@ -1021,12 +1001,14 @@ async function refreshSession() {
 	try { sessData = (await (await fetch("/api/session")).json()).session; } catch { sessData = null; }
 	const v = sessData;
 	const hosting = mode === "host";
-	$("sess").classList.toggle("hidden", (!v && !hosting) || infoOpen);
+	$("sess").classList.toggle("hidden", !v && !hosting);
 	$("sesschange").classList.toggle("hidden", !hosting);
 	$("sesschange").textContent = v ? "Change" : "Choose";
 	document.querySelector(".sess .jumps").classList.toggle("hidden", !v || !!v.stopped);
 	// End session: with a session open (host: for everyone, guest: just you); Watch again after a guest's end
 	$("sessend").classList.toggle("hidden", !v || !!v.stopped);
+	$("sesslayout").classList.toggle("hidden", !v || !!v.stopped);
+	if (!v) delete $("setup").dataset.touched;
 	$("sessend").title = hosting ? "Close this session for everyone; the party stays" : "Stop watching this session; the party stays";
 	$("sessagain").classList.toggle("hidden", !v || !v.stopped);
 	if (v && v.stopped) {
@@ -1107,7 +1089,14 @@ $("settingsbtn").onclick = async () => {
 				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host")))],
 		sessions: ["Sessions", (() => {
 			const setups = c.setups || [], layouts = c.uf1Layouts || [], uf1For = { ...(c.uf1For || {}) };
-			const box = el("div", {}, hint("Used when \"Automatic per session type\" is chosen under MultiViewer. Automatic picks the setup with that word in its name."));
+			const pl = c.plugin || {};
+			const openWith = pick("openWith", c.openWith || "@auto", [["@auto", "Automatic per session type"], ["@live", "F1 Live only"],
+				...(pl.installed ? [["@streamdeck", "Stream Deck plugin"]] : []), ...setups.map((n) => [n, "Always: " + n])]);
+			const box = el("div", {},
+				group("Open sessions with",
+					hint("What opens when you watch a session: from the calendar, joining a party, or when the host switches. Change it for one session under Session → Layout."),
+					row("Open with", openWith),
+					hint("Automatic per session type: each kind of session opens the setup below. Automatic there picks the setup with that word in its name.")));
 			for (const [k, label, auto] of [["setupRace", "Race", c.autoRace], ["setupQuali", "Qualifying", c.autoQuali], ["setupPractice", "Practice", c.autoPractice]]) {
 				const setupSel = pick(k, c[k], [["", "Automatic" + (auto ? " (" + auto + ")" : ", none found")], ...setups.map((n) => [n, n])]);
 				const l = el("select", {});
