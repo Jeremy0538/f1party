@@ -52,8 +52,8 @@ func TestTeammateFriendRequests(t *testing.T) {
 	}
 	as(dirA, "Anna")
 	p.checkPeople()
-	if friends, err := askTeammate(idB); err != nil || friends {
-		t.Fatal("ask:", friends, err)
+	if a, err := askTeammate(idB); err != nil || a.Friends {
+		t.Fatal("ask:", a, err)
 	}
 	p.checkPeople()
 	asked := false
@@ -70,14 +70,14 @@ func TestTeammateFriendRequests(t *testing.T) {
 	if v := peopleView(); len(v.Requests) != 1 || v.Requests[0].ID != idA || v.Requests[0].Name != "Anna" {
 		t.Fatalf("B has no request: %+v", v.Requests)
 	}
-	if err := answerFriendRequest(idA, false); err != nil {
+	if _, err := answerFriendRequest(idA, false); err != nil {
 		t.Fatal("decline:", err)
 	}
 	p.checkPeople()
 	if v := peopleView(); len(v.Requests) != 0 {
 		t.Fatalf("declined request still there: %+v", v.Requests)
 	}
-	if err := answerFriendRequest(idA, true); err == nil {
+	if _, err := answerFriendRequest(idA, true); err == nil {
 		t.Fatal("accepted a declined request")
 	}
 	as(dirA, "Anna")
@@ -86,8 +86,8 @@ func TestTeammateFriendRequests(t *testing.T) {
 	}
 	as(dirB, "Bram")
 	p.checkPeople()
-	if err := answerFriendRequest(idA, true); err != nil {
-		t.Fatal("accept:", err)
+	if a, err := answerFriendRequest(idA, true); err != nil || a.Already {
+		t.Fatal("accept:", a, err)
 	}
 	if !isFriend(loadConfig().Friends, idA) {
 		t.Fatal("B doesn't have A as friend")
@@ -96,6 +96,27 @@ func TestTeammateFriendRequests(t *testing.T) {
 	p.checkPeople()
 	if !isFriend(loadConfig().Friends, idB) {
 		t.Fatal("A doesn't have B as friend")
+	}
+
+	// asking a friend again says you already are
+	if a, err := askTeammate(idB); err != nil || !a.Friends || !a.Already {
+		t.Fatal("ask a friend:", a, err)
+	}
+
+	// A removes B: B loses A too
+	RemoveFriend(idB)
+	unfriendOnRelay(idB)
+	p.checkPeople()
+	as(dirB, "Bram")
+	p.checkPeople()
+	if isFriend(loadConfig().Friends, idA) {
+		t.Fatal("B still has A as friend after A removed B")
+	}
+	p.checkPeople()
+	as(dirA, "Anna")
+	p.checkPeople()
+	if isFriend(loadConfig().Friends, idB) {
+		t.Fatal("B came back as A's friend")
 	}
 	_ = idC
 }

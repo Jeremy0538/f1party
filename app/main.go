@@ -475,15 +475,25 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	})
 	// Friend requests to and from teammates (in a party: /api/friend/ask and /api/friend/decline).
 	handle("/api/friendreq/send", func(w http.ResponseWriter, in *peopleReq) {
-		friends, err := askTeammate(in.ID)
+		a, err := askTeammate(in.ID)
 		if err != nil {
 			replyErr(w, err)
 			return
 		}
-		writeJSON(w, map[string]bool{"friends": friends})
+		writeJSON(w, a)
 	})
-	handle("/api/friendreq/accept", func(w http.ResponseWriter, in *peopleReq) { replyErr(w, answerFriendRequest(in.ID, true)) })
-	handle("/api/friendreq/decline", func(w http.ResponseWriter, in *peopleReq) { replyErr(w, answerFriendRequest(in.ID, false)) })
+	answer := func(accept bool) func(http.ResponseWriter, *peopleReq) {
+		return func(w http.ResponseWriter, in *peopleReq) {
+			a, err := answerFriendRequest(in.ID, accept)
+			if err != nil {
+				replyErr(w, err)
+				return
+			}
+			writeJSON(w, a)
+		}
+	}
+	handle("/api/friendreq/accept", answer(true))
+	handle("/api/friendreq/decline", answer(false))
 	handle("/api/partyinvite/dismiss", func(w http.ResponseWriter, in *peopleReq) {
 		dismissInvite(in.From)
 		writeJSON(w, map[string]bool{"ok": true})
@@ -678,6 +688,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		var in struct{ ID string }
 		json.NewDecoder(r.Body).Decode(&in)
 		RemoveFriend(in.ID)
+		unfriendOnRelay(in.ID) // they lose you as a friend too
 		pokePeople()
 		writeJSON(w, map[string]bool{"ok": true})
 	})

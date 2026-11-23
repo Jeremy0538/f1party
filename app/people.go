@@ -321,6 +321,11 @@ func (p *Party) handleInbox(ev map[string]any) {
 		if sendNotification != nil {
 			_ = sendNotification(inv.Name+" invites you to team "+inv.Team, "Open F1 Party and click Accept under Teams.")
 		}
+	case "unfriend": // they removed us as a friend: gone here too
+		if id := str("id"); id != "" && isFriend(loadConfig().Friends, id) {
+			RemoveFriend(id)
+			p.SetNote(str("name") + " is no longer your friend")
+		}
 	case "kicked": // the team's owner removed us; the next check-in drops the key (see Lost)
 		p.SetNote(str("name") + " removed you from team " + str("team"))
 		pokePeople()
@@ -408,24 +413,37 @@ func friendRelay(path, to string, out any) error {
 	return err
 }
 
+// unfriendOnRelay: tell the relay, so the other app drops you as well (an old relay can't: then only here).
+func unfriendOnRelay(id string) {
+	var out any
+	_ = friendRelay("/friend/remove", id, &out)
+}
+
+// friendAnswer: what a friend request led to.
+type friendAnswer struct {
+	Friends bool   `json:"friends"`           // you're friends now
+	Already bool   `json:"already,omitempty"` // you already were
+	Name    string `json:"name,omitempty"`
+}
+
 // askTeammate: send a teammate a friend request (or accept theirs, when they asked first).
-func askTeammate(id string) (friends bool, err error) {
-	var out struct {
-		Friends bool
-		Name    string
-	}
-	if err = friendRelay("/friend/ask", id, &out); err != nil {
-		return false, err
+func askTeammate(id string) (friendAnswer, error) {
+	var out friendAnswer
+	if err := friendRelay("/friend/ask", id, &out); err != nil {
+		return out, err
 	}
 	if out.Friends {
 		addFriend(id, personName(id))
 	}
+	if out.Name == "" {
+		out.Name = personName(id)
+	}
 	pokePeople()
-	return out.Friends, nil
+	return out, nil
 }
 
 // answerFriendRequest: accept (friends on both sides) or decline a teammate's request.
-func answerFriendRequest(id string, accept bool) error {
+func answerFriendRequest(id string, accept bool) (friendAnswer, error) {
 	name := personName(id)
 	peopleNow.mu.Lock()
 	peopleNow.requests = slices.DeleteFunc(peopleNow.requests, func(q FriendRequest) bool { return q.ID == id })
@@ -434,19 +452,19 @@ func answerFriendRequest(id string, accept bool) error {
 		var out any
 		err := friendRelay("/friend/decline", id, &out)
 		pokePeople()
-		return err
+		return friendAnswer{}, err
 	}
-	var out struct{ Name string }
+	var out friendAnswer
 	if err := friendRelay("/friend/accept", id, &out); err != nil {
 		pokePeople()
-		return err
+		return out, err
 	}
-	if out.Name != "" {
-		name = out.Name
+	if out.Name == "" {
+		out.Name = name
 	}
-	addFriend(id, name)
+	addFriend(id, out.Name)
 	pokePeople()
-	return nil
+	return out, nil
 }
 
 // personName: the name the relay last gave for someone (requests, teammates).

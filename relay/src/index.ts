@@ -10,6 +10,7 @@
 //   POST /f1party/group/invite {key} -> {url}   GET /f1party/group/TOKEN (page)   POST /f1party/group/redeem {token, id} -> {key}
 //   POST /f1party/team/rename|leave|invitefriend|kick {id, secret, key, ...}  (kick: the owner removes {member})
 //   POST /f1party/friend/ask|accept|decline {id, secret, name, to}   friend requests between teammates
+//   POST /f1party/friend/remove {id, secret, name, to}   unfriend: gone on both sides
 //   POST /f1party/me/pic {id, secret, pic}   POST /f1party/team/logo {id, secret, key, logo}   (a small image as a
 //        data URL, "" removes it)   GET /f1party/pic/u/UID  GET /f1party/pic/t/TEAMID   (the image; ?v= for caching)
 //
@@ -52,6 +53,7 @@ export default {
 				case "/friend/ask": return friendOp(req, env, "friendAsk");
 				case "/friend/accept": return friendOp(req, env, "friendAccept");
 				case "/friend/decline": return friendOp(req, env, "friendDecline");
+				case "/friend/remove": return friendOp(req, env, "unfriend");
 				case "/invite/send": return sendInvites(req, env);
 			}
 		}
@@ -400,7 +402,7 @@ export class Room extends DurableObject<Env> {
 			}
 			case "friendAsk": { // a friend request to a teammate (they asked you already: friends now)
 				if (cmd.to === cmd.uid || !/^[0-9a-f]{12}$/.test(cmd.to || "")) return err("Bad request");
-				if (await mutual(m, cmd.uid, cmd.to)) return Response.json({ friends: true });
+				if (await mutual(m, cmd.uid, cmd.to)) return Response.json({ friends: true, already: true });
 				if (!(await sharesTeam(m, cmd.to))) return err("You can send a friend request to people in your teams", 403);
 				if ((await st.get("fq:" + cmd.uid + ":" + cmd.to)) !== undefined) return this.people({ ...cmd, op: "friendAccept" });
 				if (!(await cap("fq:" + cmd.uid, 30, 86400_000))) return err("Too many friend requests today", 429);
@@ -410,6 +412,7 @@ export class Room extends DurableObject<Env> {
 			case "friendAccept": { // only a request that was really sent makes friends
 				const k = "fq:" + cmd.uid + ":" + cmd.to;
 				const other = await user(cmd.to);
+				if (other && (await mutual(m, cmd.uid, cmd.to))) { await st.delete(k); return Response.json({ friends: true, already: true, id: cmd.to, name: other.name }); }
 				if ((await st.get(k)) === undefined || !other) return err("That friend request isn't there anymore", 410);
 				await st.delete(k);
 				if (!m.friends.includes(cmd.to)) m.friends.push(cmd.to);
@@ -417,6 +420,25 @@ export class Room extends DurableObject<Env> {
 				await saveMe();
 				await inbox(cmd.to, { type: "friend", id: cmd.uid, name: m.name, accepted: true });
 				return Response.json({ friends: true, id: cmd.to, name: other.name });
+			}
+			case "unfriend": { // both sides: the other app drops you too (an inbox event), and open requests go
+				if (!/^[0-9a-f]{12}$/.test(cmd.to || "")) return err("Bad request");
+				m.friends = m.friends.filter((f) => f !== cmd.to);
+				await saveMe();
+				const mine = (await st.get<any[]>("inbox:" + cmd.uid)) || [];
+				if (mine.some((e) => e.type === "friend" && e.id === cmd.to)) await st.put("inbox:" + cmd.uid, mine.filter((e) => !(e.type === "friend" && e.id === cmd.to)));
+				const other = await user(cmd.to);
+				if (other) {
+					other.friends = other.friends.filter((f) => f !== cmd.uid);
+					await st.put("u:" + cmd.to, other);
+					// a friend link they used but haven't heard about yet must not make you friends again
+					const box = ((await st.get<any[]>("inbox:" + cmd.to)) || []).filter((e) => !(e.type === "friend" && e.id === cmd.uid));
+					await st.put("inbox:" + cmd.to, box);
+					await inbox(cmd.to, { type: "unfriend", id: cmd.uid, name: m.name });
+				}
+				await st.delete("fq:" + cmd.uid + ":" + cmd.to);
+				await st.delete("fq:" + cmd.to + ":" + cmd.uid);
+				return new Response("ok");
 			}
 			case "friendDecline": {
 				await st.delete("fq:" + cmd.uid + ":" + cmd.to);

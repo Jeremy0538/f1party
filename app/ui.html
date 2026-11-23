@@ -1058,7 +1058,7 @@ function friendRequestCard(m, after) {
 	const [ok, no] = m.remote ? ["/api/friendreq/accept", "/api/friendreq/decline"] : ["/api/friend/ask", "/api/friend/decline"];
 	return el("div", { className: "invite-card" },
 		el("div", { className: "t" }, el("b", { textContent: m.name + " wants to be friends" }), el("span", { textContent: m.remote ? "From your team. Friends see what you watch and can invite you to their party" : "Friends see what you watch and can invite you to their party" })),
-		btn("Accept", "", async () => { after?.(); try { await post(ok, { id: m.id }); } catch (e) { peopleErr(e.message); } refresh(); refreshDiscord(); }, "primary"),
+		btn("Accept", "", async () => { after?.(); try { const r = await post(ok, { id: m.id }); if (m.remote) toast(r.already ? "You and " + m.name + " were already friends" : "You and " + m.name + " are friends now"); } catch (e) { peopleErr(e.message); } refresh(); refreshDiscord(); }, "primary"),
 		btn("Decline", "", async () => { after?.(); try { await post(no, { id: m.id }); } catch (e) { peopleErr(e.message); } refresh(); refreshDiscord(); }));
 }
 function inboxCount(id, n) {
@@ -1121,7 +1121,7 @@ function renderPeople() {
 				f.status && f.status.code ? joinOrIn(f.name, f.status.code, "primary") : null,
 				open.length ? iconBtn("toTeam", open.length === 1 ? "Invite " + f.name + " to team " + open[0].name : "Invite " + f.name + " to one of your teams", () => friendTeamDialog(f)) : null,
 				iconBtn("userMinus", "Remove " + f.name + " from your friends", async () => {
-					if (!(await ask("Remove friend?", "Remove " + f.name + " from your friends?", "Remove"))) return;
+					if (!(await ask("Remove friend?", "Remove " + f.name + " from your friends? You disappear from their friends too.", "Remove"))) return;
 					await post("/api/friend/remove", { id: f.id }); refreshDiscord();
 				}, "red"))));
 	}
@@ -1168,13 +1168,13 @@ function renderPeople() {
 function teammateFriend(m) {
 	if (m.id === "me" || m.friend || people.friends.some((f) => f.id === m.id && f.mutual)) return null;
 	if ((people.requests || []).some((q) => q.id === m.id)) return btn("Accept", m.name + " sent you a friend request", async () => {
-		try { await post("/api/friendreq/accept", { id: m.id }); } catch (e) { $("dcerr").textContent = e.message; }
+		try { const r = await post("/api/friendreq/accept", { id: m.id }); toast(r.already ? "You and " + m.name + " were already friends" : "You and " + m.name + " are friends now"); } catch (e) { $("dcerr").textContent = e.message; }
 		refreshDiscord();
 	}, "accept");
 	if (m.asked) return el("span", { className: "sent", textContent: "Request sent" });
 	const b = btn("", "Send " + m.name + " a friend request", async () => {
 		b.disabled = true;
-		try { const r = await post("/api/friendreq/send", { id: m.id }); if (r && r.friends) toast("You and " + m.name + " are friends now"); else toast("Friend request sent", m.name + " sees it in their inbox"); }
+		try { const r = await post("/api/friendreq/send", { id: m.id }); toast(r.already ? "You and " + m.name + " are already friends" : r.friends ? "You and " + m.name + " are friends now" : "Friend request sent", r.friends ? "" : m.name + " sees it in their inbox"); }
 		catch (e) { $("dcerr").textContent = e.message; b.disabled = false; }
 		refreshDiscord();
 	}, "ib fr");
