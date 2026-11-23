@@ -415,6 +415,7 @@
 	.setrow select.setwide { width:100%; max-width:360px; }
 	.setstate { font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px; background:#262a31; color:var(--dim); }
 	.setstate.on { background:rgba(33,197,93,.14); color:#4ade80; }
+	.setstate.new { background:rgba(225,6,0,.16); color:#ff6b63; }
 	.setrow input.grow { flex:1; min-width:0; max-width:300px; }
 	/* setups per kind of session: one table */
 	.setuptable { display:grid; grid-template-columns:84px minmax(0, 1fr) minmax(0, 1fr); gap:8px 10px; align-items:center; margin-top:2px; }
@@ -907,15 +908,20 @@ const installed = () => {}; // (the old Downloads menu's marks; the Downloads pa
 function downloadsTab(group, hint) {
 	const m = mvNow || {}, pl = m.plugin || {};
 	const have = { mv: m.installed, uf1: m.uf1, sd: pl.installed, party: true };
+	const ups = m.appUpdates || {};
 	const list = el("div", { className: "dllist" });
 	for (const [k, name, what, url] of DOWNLOADS) {
+		const v = ups[k] || {};
 		const state = k === "party" ? el("span", { className: "setstate", textContent: "Share" })
-			: el("span", { className: "setstate" + (have[k] ? " on" : ""), textContent: have[k] ? "Installed" : "Not installed" });
-		list.append(el("div", { className: "dlrow" },
-			el("div", { className: "dlname" }, el("b", { textContent: name }), el("span", { textContent: what })),
-			state, btn(have[k] && k !== "party" ? "Open page" : "Download", url, () => openURL(url))));
+			: v.update ? el("span", { className: "setstate new", textContent: "Update: " + v.latest })
+			: el("span", { className: "setstate" + (have[k] ? " on" : ""), textContent: have[k] ? (v.installed ? "Installed · " + v.installed : "Installed") : "Not installed" });
+		const act = v.update ? btn("Update", k === "sd" ? "Downloads version " + v.latest + "; open the file and Stream Deck installs it" : "Opens the download of version " + v.latest, () => openURL(v.url || url), "primary")
+			: btn(have[k] && k !== "party" ? "Open page" : "Download", url, () => openURL(url));
+		list.append(el("div", { className: "dlrow" + (v.update ? " hasupdate" : "") },
+			el("div", { className: "dlname" }, el("b", { textContent: name }), el("span", { textContent: v.update ? "You have " + v.installed + ". " + what : what })),
+			state, act));
 	}
-	return el("div", {}, group("Downloads", hint("The apps F1 Party works with. Downloads open in your browser."), list));
+	return el("div", {}, group("Downloads", hint("The apps F1 Party works with. F1 Party looks for new versions of them every few hours; downloads open in your browser."), list));
 }
 
 // ---- Friends and teams (people.go). Refreshed every few seconds while the Friends or Teams tab is open.
@@ -1278,7 +1284,15 @@ $("mvrestart").onclick = async () => {
 	if (!(await ask("Restart MultiViewer?", "MultiViewer closes and opens again, so F1 Party can open your setups.", "Restart"))) return;
 	await mvAct($("mvrestart"), "/api/mv/restart")();
 };
-let mvNow = {}, mvWasRunning = false;
+let mvNow = {}, mvWasRunning = false, partyUpdate = false;
+// red dots: an F1 Party update (gear, Updates) or one for MultiViewer, the plugin or Ultimate F1 Viewer (gear, Downloads)
+const appUpdate = () => Object.values(mvNow.appUpdates || {}).some((v) => v.update);
+function updateDots() {
+	$("settingsbtn").classList.toggle("hasdot", partyUpdate || appUpdate());
+	$("settingsbtn").title = partyUpdate ? "Settings: there's an update" : appUpdate() ? "Settings: an app has an update (Downloads)" : "Settings";
+	document.querySelector('.setnav button[data-k="updates"]')?.classList.toggle("hasdot", partyUpdate);
+	document.querySelector('.setnav button[data-k="downloads"]')?.classList.toggle("hasdot", appUpdate());
+}
 // Session > Layout: open the session with another layout just this time (MultiViewer starts first if needed)
 $("setup").onchange = () => { $("setup").dataset.touched = "1"; };
 $("setupopen").onclick = async () => {
@@ -1288,7 +1302,7 @@ $("setupopen").onclick = async () => {
 
 async function refreshMV() {
 	let m; try { m = await (await fetch("/api/mv")).json(); } catch { return; }
-	mvNow = m;
+	mvNow = m; updateDots();
 	const pl = m.plugin || {};
 	pluginDownload = pl.download || "";
 	installed("dlmv", m.installed); installed("dluf1", m.uf1); installed("dlsd", pl.installed);
@@ -1333,8 +1347,7 @@ async function refresh() {
 	if (s.open === "cal") showTab("cal");
 	const up = s.update;
 	$("update").classList.toggle("hidden", !up);
-	$("settingsbtn").classList.toggle("hasdot", !!up);
-	document.querySelector('.setnav button[data-k="updates"]')?.classList.toggle("hasdot", !!up);
+	partyUpdate = !!up; updateDots();
 	if (up) {
 		updateURL = up.url; updateAuto = !!up.auto && !up.error;
 		$("update").textContent = up.busy || up.error || "Update to " + up.version;
@@ -1772,7 +1785,8 @@ async function openSettings(opts = {}) {
 	for (const [k, [label, node]] of Object.entries(tabs)) {
 		const b = btn("", "", () => show(k)); b.dataset.k = k; b.setAttribute("role", "tab");
 		b.innerHTML = setIcons[k] || ""; b.append(el("span", { textContent: label }));
-		if (k === "updates") { bar.append(el("div", { className: "setnavgap" })); if ($("settingsbtn").classList.contains("hasdot")) { b.classList.add("hasdot"); b.title = "There's an update"; } }
+		if (k === "updates") { bar.append(el("div", { className: "setnavgap" })); if (partyUpdate) { b.classList.add("hasdot"); b.title = "There's an update"; } }
+		if (k === "downloads" && appUpdate()) { b.classList.add("hasdot"); b.title = "An app has an update"; }
 		bar.append(b);
 		pane.append(node);
 	}

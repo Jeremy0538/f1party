@@ -331,7 +331,8 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
 		running := mvRunning()
 		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
-			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed() && !loadConfig().Uf1Off}
+			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed() && !loadConfig().Uf1Off,
+			"appUpdates": appUpdates()}
 		// what really runs: Ultimate F1 Viewer only when it's up, and how many streams MultiViewer shows
 		_, out["uf1Running"] = uf1Main()
 		if running {

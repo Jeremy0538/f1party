@@ -85,11 +85,11 @@ func pluginInfo() PluginInfo {
 	return info
 }
 
-// pluginInstalled looks for the plugin's folder in Stream Deck (Windows, macOS) or OpenDeck (any system).
-func pluginInstalled() bool {
+// pluginDirs: the plugin folders of Stream Deck (Windows, macOS) and OpenDeck (any system).
+func pluginDirs() []string {
 	cfg, err := os.UserConfigDir()
 	if err != nil {
-		return false
+		return nil
 	}
 	dirs := []string{filepath.Join(cfg, "opendeck", "plugins")}
 	switch runtime.GOOS {
@@ -98,7 +98,12 @@ func pluginInstalled() bool {
 	case "darwin":
 		dirs = append(dirs, filepath.Join(cfg, "com.elgato.StreamDeck", "Plugins"))
 	}
-	for _, d := range dirs {
+	return dirs
+}
+
+// pluginInstalled looks for the plugin's folder in Stream Deck or OpenDeck.
+func pluginInstalled() bool {
+	for _, d := range pluginDirs() {
 		if fileExists(filepath.Join(d, "com.stan.f1.sdPlugin")) {
 			return true
 		}
