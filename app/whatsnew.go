@@ -2,7 +2,7 @@ package main
 
 // What's new: shown once after an update (and a setup guide on the very first start). Add an entry here for
 // every release that adds something people notice; Tab names the Settings tab where its options are
-// (party, sessions, drivers, screen, lights, end, updates) or is empty. The entries for a version are also the
+// (party, sync, sessions, drivers, screen, lights, end, updates, downloads) or is empty. The entries for a version are also the
 // "What's new" at the top of its GitHub release notes (build.yml). Older entries may still name general,
 // windows or close: the settings map those to party, screen and end.
 
@@ -13,6 +13,12 @@ type newsItem struct {
 }
 
 var whatsNew = []newsItem{
+	{"1.15.0", "Updates no longer install by themselves: you get a notification, and F1 Party updates when you click Update at the top.", "updates"},
+	{"1.15.0", "Friends and Teams have an inbox button: party invites, friend requests (Accept or Decline) and team invites, with a count. New ones also pop up at the bottom right.", ""},
+	{"1.15.0", "Downloads shows when MultiViewer, the Stream Deck plugin or Ultimate F1 Viewer has an update, with a red dot on the gear.", "downloads"},
+	{"1.15.0", "Calendar: every race in the season list has an info button to its page on formula1.com.", ""},
+	{"1.15.0", "Auto-sync has its own Sync tab in Settings, with what on and off do.", "sync"},
+	{"1.15.0", "Smoother: the app, menus, views and the party code now slide and fade in.", ""},
 	{"1.14.0", "Profile pictures: choose yours under Settings → You and party; your friends, teams and party see it instead of your initial.", "party"},
 	{"1.14.0", "Team logos: the one who started a team clicks the square next to its name (Teams) to give it a logo.", ""},
 	{"1.13.0", "A slimmer bar at the top, and a calendar that shows the next session's countdown and the sessions by day.", ""},

@@ -582,7 +582,36 @@
 	.news li { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line-2); border-radius:8px; background:rgba(255,255,255,.02); font-size:12.5px; }
 	.news li span { flex:1; }
 	.news li button { height:26px; font-size:11.5px; padding:0 9px; flex:none; }
-	@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+	/* Motion. Most of it plays when something stops being hidden (display:none restarts an animation), so a
+	   view, a menu or a panel slides in every time it opens and nothing has to remember to start it. */
+	@keyframes fadeup { from { opacity:0; transform:translateY(8px); } }
+	@keyframes fadein { from { opacity:0; } }
+	@keyframes popin { from { opacity:0; transform:translateY(10px) scale(.97); } }
+	@keyframes dropin { from { opacity:0; transform:translateY(-6px); } }
+	@keyframes charin { from { opacity:0; transform:translateY(-14px) scale(.8); } 60% { transform:translateY(2px) scale(1.04); } }
+	@keyframes headin { from { opacity:0; transform:translateY(-100%); } }
+	@keyframes savedpulse { 0% { box-shadow:0 0 0 0 rgba(34,197,94,.55); } 100% { box-shadow:0 0 0 10px rgba(34,197,94,0); } }
+	/* start: the bar drops in, then the page */
+	header { animation:headin .45s cubic-bezier(.2,.8,.2,1) both; }
+	.body { animation:fadein .5s .12s both; }
+	/* views: Host or join, the party, the calendar, friends, teams */
+	#start, #party, #cal, #friends, #teams { animation:fadeup .32s cubic-bezier(.2,.8,.2,1) both; }
+	#start .startcard:nth-of-type(1) { animation:fadeup .4s .05s cubic-bezier(.2,.8,.2,1) both; }
+	#start .startcard:nth-of-type(2) { animation:fadeup .4s .12s cubic-bezier(.2,.8,.2,1) both; }
+	/* a party starts or is joined: its code drops in letter by letter */
+	#bigcode span { animation:charin .5s cubic-bezier(.2,.8,.2,1) both; }
+	#bigcode span:nth-child(2) { animation-delay:.05s; } #bigcode span:nth-child(3) { animation-delay:.1s; }
+	#bigcode span:nth-child(4) { animation-delay:.15s; } #bigcode span:nth-child(5) { animation-delay:.2s; }
+	#party .mcard { animation:fadeup .4s .15s cubic-bezier(.2,.8,.2,1) both; }
+	/* menus and pop-ups */
+	.modal { animation:fadein .18s both; }
+	.modal .box { animation:popin .24s cubic-bezier(.2,.8,.2,1) both; }
+	.seasonpanel, .notifpanel, #inbox, #tinbox, #teamform { animation:dropin .2s cubic-bezier(.2,.8,.2,1) both; }
+	.setpane > div { animation:fadein .2s both; }
+	.tabs button { transition:background .2s, color .2s; }
+	.tabs .badge, .inboxbtn .n { animation:popin .3s cubic-bezier(.2,.8,.2,1) both; }
+	button.saved { animation:savedpulse .6s ease-out; }
+	@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
 </style>
 </head>
 <body>
@@ -1863,6 +1892,7 @@ async function openSettings(opts = {}) {
 		for (const k of ["battleMax1", "battleMax2"]) if (out[k] !== undefined) out[k] = parseInt(out[k], 10) || 4;
 		await post("/api/settings", out);
 		refresh(); refreshMV();
+		if (!opts.wizard) toast("Settings saved");
 	};
 	if (!opts.wizard) {
 		dialog("Settings", el("div", { className: "setlayout" }, bar, pane), "Save", save);
