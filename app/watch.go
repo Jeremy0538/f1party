@@ -752,7 +752,11 @@ func killApp(process string) {
 	case "darwin":
 		cmd = exec.Command("osascript", "-e", `quit app "`+process+`"`)
 	default:
-		cmd = exec.Command("pkill", "-f", strings.ToLower(process))
+		pat := strings.ToLower(process)
+		if process == uf1Process {
+			pat = uf1Pattern
+		}
+		cmd = exec.Command("pkill", "-f", pat)
 	}
 	detach(cmd)
 	_ = cmd.Run()

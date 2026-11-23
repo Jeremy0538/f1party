@@ -33,7 +33,7 @@ func hyprApp(pid int) string {
 	switch strings.ToLower(filepath.Base(exe)) {
 	case "multiviewer", "multiviewer-for-f1":
 		return "mv"
-	case "ultimate-f1viewer-with-f1mv", "ultimate-f1viewer":
+	case "ultimate-f1viewer-with-f1mv", "ultimate-f1viewer", "uf1":
 		return "uf1"
 	}
 	return ""

@@ -23,6 +23,8 @@ import (
 const (
 	uf1Process = "Ultimate-F1Viewer-With-F1MV"
 	uf1Port    = 9333
+	// uf1Pattern: the viewer's program in a process list on Linux (a package's name, or "uf1" in the AppImage)
+	uf1Pattern = `(^|/)(ultimate-f1viewer-with-f1mv|ultimate-f1viewer|uf1)( |$)`
 )
 
 // uf1Exe: where Ultimate F1 Viewer is installed ("" = not found).
@@ -38,10 +40,24 @@ func uf1Exe() string {
 		home, _ := os.UserHomeDir()
 		paths = []string{"/Applications/" + uf1Process + ".app", filepath.Join(home, "Applications", uf1Process+".app")}
 	default:
-		if p, err := exec.LookPath("ultimate-f1viewer"); err == nil {
-			return p
+		// a package puts it on PATH or in /opt; the AppImage (the only Linux build of 1.4.8) can be anywhere,
+		// so the usual AppImage folders are searched by name too. Its program inside is called "uf1".
+		for _, name := range []string{"ultimate-f1viewer", "ultimate-f1viewer-with-f1mv", "uf1"} {
+			if p, err := exec.LookPath(name); err == nil {
+				return p
+			}
 		}
+		home, _ := os.UserHomeDir()
 		paths = []string{"/opt/" + uf1Process + "/ultimate-f1viewer-with-f1mv"}
+		for _, dir := range []string{
+			filepath.Join(home, ".local", "opt", "uf1"), filepath.Join(home, "Applications"),
+			filepath.Join(home, ".local", "bin"), filepath.Join(home, "Downloads"), "/opt",
+		} {
+			for _, pat := range []string{"UF1*.AppImage", "*[Uu]ltimate*[Ff]1*[Vv]iewer*.AppImage"} {
+				m, _ := filepath.Glob(filepath.Join(dir, pat))
+				paths = append(paths, m...)
+			}
+		}
 	}
 	for _, p := range paths {
 		if fileExists(p) {
@@ -150,7 +166,7 @@ func uf1Ensure() error {
 			stop = exec.Command("osascript", "-e", `quit app "`+uf1Process+`"`)
 		}
 	default:
-		stop = exec.Command("pkill", "-f", `(^|/)(ultimate-f1viewer-with-f1mv|ultimate-f1viewer)( |$)`)
+		stop = exec.Command("pkill", "-f", uf1Pattern)
 	}
 	if stop != nil {
 		detach(stop)
