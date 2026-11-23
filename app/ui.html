@@ -1112,8 +1112,9 @@ function teamEditDialog(t) {
 		el("div", { className: "row", style: "gap:10px" }, teamLogo({ ...t, owner: false }),
 			btn("Choose logo", "", async () => { $("modal").classList.add("hidden"); await setTeamLogoPick(t); }),
 			t.logo ? btn("Remove", "", async () => { try { await post("/api/team/logo", { id: t.id, pic: "" }); } catch (e) { $("modalerr").textContent = e.message; return; } $("modal").classList.add("hidden"); refreshDiscord(); }, "link") : null),
-		el("div", { className: "row", style: "margin-top:14px" }, btn("Leave team", "", async () => { if (await leaveTeamAsk(t)) $("modal").classList.add("hidden"); }, "link")));
-	dialog("Edit team " + t.name, body, "Save", async () => {
+		el("div", { className: "row", style: "margin-top:18px; padding-top:14px; border-top:1px solid var(--line)" },
+			btn("Leave team", "Leave " + t.name + "; you can join again with a team link", async () => { if (await leaveTeamAsk(t)) $("modal").classList.add("hidden"); }, "danger")));
+	dialog("Edit team", body, "Save", async () => {
 		const n = name.value.trim();
 		if (!n) throw new Error("Give your team a name");
 		if (n !== t.name) await post("/api/team/rename", { id: t.id, name: n });
