@@ -989,9 +989,10 @@ func (p *Party) guestLoop(ctx context.Context) {
 		}
 
 		// Did this guest pause, play or skip in MultiViewer itself (not us following the host)? Then the whole
-		// party does it: we ask the host, everyone follows the host.
+		// party does it: we ask the host, everyone follows the host. With auto-sync off it stays your own: your
+		// stream runs on its own, so your pause or skip is only yours (Sync to host brings you back).
 		acted := false
-		if prevFeed == feed.ID && !prevAt.IsZero() && time.Since(prevAt) < 1500*time.Millisecond && time.Now().After(settleUntil) &&
+		if auto && prevFeed == feed.ID && !prevAt.IsZero() && time.Since(prevAt) < 1500*time.Millisecond && time.Now().After(settleUntil) &&
 			time.Since(mirroredAt) > 1500*time.Millisecond && host.CountdownAt == 0 && resumeAt.IsZero() {
 			expected := prevLocal
 			if !prevPaused {
