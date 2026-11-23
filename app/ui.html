@@ -584,6 +584,11 @@
 	.news li button { height:26px; font-size:11.5px; padding:0 9px; flex:none; }
 	/* Motion. Most of it plays when something stops being hidden (display:none restarts an animation), so a
 	   view, a menu or a panel slides in every time it opens and nothing has to remember to start it. */
+	.discardbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px; flex:none; padding:10px 12px; border:1px solid rgba(245,165,36,.45); background:rgba(245,165,36,.08); border-radius:10px; font-size:12.5px; animation:dropin .2s cubic-bezier(.2,.8,.2,1) both; }
+	.discardbar span { flex:1; min-width:180px; }
+	.discardbar button { height:30px; font-size:12px; }
+	.discardbar.shake { animation:shake .35s; }
+	@keyframes shake { 20%, 60% { transform:translateX(-5px); } 40%, 80% { transform:translateX(5px); } }
 	@keyframes fadeup { from { opacity:0; transform:translateY(8px); } }
 	@keyframes fadein { from { opacity:0; } }
 	@keyframes popin { from { opacity:0; transform:translateY(10px) scale(.97); } }
@@ -1267,9 +1272,10 @@ function liveStartDialog(session, name) {
 
 // A small dialog: title, body, OK button text and what OK does (throw to show an error and stay open).
 function dialog(title, body, okText, onOk) {
+	modalGuard = null; $("discardbar")?.remove(); $("modalok").parentNode.classList.remove("hidden");
 	$("modaltitle").textContent = title;
 	$("modalcancel").textContent = "Cancel"; $("modalcancel").classList.remove("hidden");
-	$("modalcancel").onclick = () => $("modal").classList.add("hidden");
+	$("modalcancel").onclick = closeModal;
 	$("modalbody").innerHTML = ""; $("modalbody").append(body);
 	$("modalerr").textContent = "";
 	$("modalok").textContent = okText;
@@ -1282,7 +1288,23 @@ function dialog(title, body, okText, onOk) {
 		$("modalok").disabled = false;
 	};
 }
-$("modalcancel").onclick = () => $("modal").classList.add("hidden");
+$("modalcancel").onclick = closeModal;
+// modalGuard: when set, it says whether closing would lose changes (Settings); then closing first asks, in a
+// bar above the buttons: discard them, keep editing, or save.
+let modalGuard = null;
+function closeModal() {
+	if ($("modal").classList.contains("hidden")) return;
+	if (!modalGuard || !modalGuard()) { $("modal").classList.add("hidden"); return; }
+	if ($("discardbar")) { $("discardbar").classList.remove("shake"); void $("discardbar").offsetWidth; $("discardbar").classList.add("shake"); return; }
+	const row = $("modalok").parentNode, done = () => { bar.remove(); row.classList.remove("hidden"); };
+	const bar = el("div", { id: "discardbar", className: "discardbar", role: "alert" },
+		el("span", { textContent: "You changed some settings. Close without saving them?" }),
+		btn("Keep editing", "", done),
+		btn("Don't save", "Close and forget the changes", () => { done(); modalGuard = null; $("modal").classList.add("hidden"); }, "danger"),
+		btn("Save", "", () => { done(); $("modalok").click(); }, "primary"));
+	row.before(bar); row.classList.add("hidden");
+	bar.querySelector("button").focus();
+}
 // A question in the app's own style instead of the browser's pop-up: resolves true on OK, false on Cancel,
 // Escape or closing.
 function ask(title, text, okText = "OK", cancelText = "Cancel") {
@@ -1305,7 +1327,7 @@ new MutationObserver(() => {
 	for (const b of m.querySelectorAll("[data-wiz]")) b.remove(); // the setup guide's Back and Next
 	$("modalcancel").style.marginRight = "";
 }).observe($("modal"), { attributes: true, attributeFilter: ["class"] });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.add("hidden"); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
 // checkbox list: groups of [value, label, sublabel, checked]
 function picker(groups) {
@@ -1919,6 +1941,10 @@ async function openSettings(opts = {}) {
 	if (!opts.wizard) {
 		dialog("Settings", el("div", { className: "setlayout" }, bar, pane), "Save", save);
 		$("modal").classList.add("side");
+		// Cancel or Escape with changes asks first
+		const values = () => JSON.stringify(Object.fromEntries(Object.entries(ids).map(([k, f]) => [k, f()])));
+		const opened = values();
+		modalGuard = () => values() !== opened;
 		return;
 	}
 	// The guide: every subject in order, without Updates; Finish saves everything at once.
