@@ -69,16 +69,12 @@ var lastCheck struct {
 	err    string
 }
 
+// watchUpdates: look for a new version when F1 Party starts and when it's opened again from the tray (and
+// on Settings → Updates → Check for updates), not on a timer.
 func (p *Party) watchUpdates() {
 	check := func() { _, _ = p.checkUpdate() }
 	check()
-	t := time.NewTicker(20 * time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-		case <-updateCheckNow:
-		}
+	for range updateCheckNow {
 		check()
 	}
 }
@@ -195,7 +191,7 @@ func (p *Party) checkUpdate() (latest string, err error) {
 	}
 }
 
-// updateCheckNow: check for an update right away (the window came to the front); at most once a minute.
+// updateCheckNow: check for an update right away (opened again from the tray); at most once a minute.
 var updateCheckNow = make(chan struct{}, 1)
 var updateCheckedAt atomic.Int64
 

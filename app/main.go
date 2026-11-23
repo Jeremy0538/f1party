@@ -184,7 +184,8 @@ func main() {
 			appCtx = ctx
 			restartAfterUpdate = func() { markQuitting(); wruntime.Quit(appCtx) }
 			setupNotifications(ctx, show)
-			startTray(show, func() { wruntime.Quit(appCtx) })
+			// opened again from the tray: look for updates then (F1 Party doesn't check on a timer)
+			startTray(func() { show(); checkUpdateSoon(); checkAppVersionsSoon() }, func() { wruntime.Quit(appCtx) })
 			switch {
 			case hostArg(os.Args[1:]):
 				go hostAndInvite(true)
@@ -209,6 +210,8 @@ func main() {
 			UniqueId: "nl.jeremyklootwijk.f1party",
 			OnSecondInstanceLaunch: func(d options.SecondInstanceData) { // already running: bring it to the front
 				show()
+				checkUpdateSoon() // started again: counts as starting, for the update check
+				checkAppVersionsSoon()
 				if hostArg(d.Args) {
 					go hostAndInvite(true)
 				}

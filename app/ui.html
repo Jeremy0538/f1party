@@ -937,7 +937,7 @@ function updatesTab(group, hint) {
 	return el("div", {},
 		group("F1 Party",
 			el("div", { className: "setrow" }, el("span", { className: "setlbl", textContent: "Your version" }), cur),
-			hint("F1 Party looks for updates by itself: when it starts, every 20 minutes and when you bring the window to the front. A new version shows a notification and the red Update button at the top; it installs only when you click it."),
+			hint("F1 Party looks for updates when it starts and when you open it again from the tray. A new version shows a notification and the red Update button at the top; it installs only when you click it."),
 			el("div", { className: "row", style: "gap:8px; margin-top:4px" }, checkBtn, install),
 			res));
 }
@@ -967,7 +967,7 @@ function downloadsTab(group, hint) {
 			el("div", { className: "dlname" }, el("b", { textContent: name }), el("span", { textContent: v.update ? "You have " + v.installed + ". " + what : what })),
 			state, act));
 	}
-	return el("div", {}, group("Downloads", hint("The apps F1 Party works with. F1 Party looks for new versions of them every few hours; downloads open in your browser."), list));
+	return el("div", {}, group("Downloads", hint("The apps F1 Party works with. F1 Party looks for new versions of them when it starts and when you open it again from the tray; downloads open in your browser."), list));
 }
 
 // ---- Friends and teams (people.go). Refreshed every few seconds while the Friends or Teams tab is open.
@@ -1647,7 +1647,6 @@ const setIcons = {
 	downloads: ico('<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 21h16"/>'),
 };
 $("settingsbtn").onclick = () => openSettings();
-addEventListener("focus", () => post("/api/update/check").catch(() => {}));
 // opts.wizard: the first-start guide, one tab per step with Back and Next; opts.tab: open on that tab.
 async function openSettings(opts = {}) {
 	let c = {}; try { c = await (await fetch("/api/settings")).json(); } catch {}

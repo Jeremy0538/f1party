@@ -2,7 +2,7 @@ package main
 
 // Updates for the apps F1 Party works with (Settings → Downloads): MultiViewer, the F1 Race Control Stream
 // Deck plugin and Ultimate F1 Viewer. Each has an installed version (when F1 Party can tell) and a newest
-// version (looked up at most every few hours); a newer one shows a red dot on the gear and on Downloads.
+// version (looked up when F1 Party starts and when it's opened again from the tray); a newer one shows a red dot on the gear and on Downloads.
 
 import (
 	"encoding/json"
@@ -30,7 +30,6 @@ const (
 	pluginRepo     = "StanvanDaalen/streamdeck-plugins"
 	pluginManifest = "F1/sdPlugin/manifest.json"
 	uf1Repo        = "MRAJEKO/UF1-Viewer-with-F1MV"
-	appCheckEvery  = 6 * time.Hour
 )
 
 var appVers struct {
@@ -92,7 +91,22 @@ func watchAppVersions() {
 		}
 		appVers.at = time.Now()
 		appVers.Unlock()
-		time.Sleep(appCheckEvery)
+		<-appCheckNow // next: F1 Party opened again from the tray
+	}
+}
+
+var appCheckNow = make(chan struct{}, 1)
+
+// checkAppVersionsSoon: look up the apps' newest versions again (at most once a minute).
+func checkAppVersionsSoon() {
+	appVers.Lock()
+	due := time.Since(appVers.at) >= time.Minute
+	appVers.Unlock()
+	if due {
+		select {
+		case appCheckNow <- struct{}{}:
+		default:
+		}
 	}
 }
 
