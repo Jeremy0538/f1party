@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -74,41 +75,54 @@ func mvSetups() []MVSetup {
 
 // ---------------------------------------------------------------- finding and starting MultiViewer
 
-// mvExe: the installed MultiViewer itself. On Windows that is the newest app-x.y.z\MultiViewer.exe, not
-// the updater stub in front of it, so the debug-port argument reaches the app.
-func mvExe() string {
+// mvApp: MultiViewer on any system (see appfind.go). Its known places come first: on Windows the newest
+// app-x.y.z\MultiViewer.exe (not the updater stub in front of it, so the debug-port argument reaches the app),
+// which a remembered path to an older version must not beat.
+var mvApp = &appSpec{
+	name:       "MultiViewer",
+	match:      regexp.MustCompile(`(?i)multi.?viewer`),
+	known:      mvCandidates,
+	remembered: func(c config) string { return c.MvPath },
+	remember:   func(c *config, p string) { c.MvPath = p },
+	running:    func() string { return runningPath("MultiViewer", `(?i)(^|/)(f1)?multi.?viewer[^/ ]*( |$)`) },
+	knownFirst: true,
+}
+
+func mvExe() string { return mvApp.exe() }
+
+// mvInstalled: the program is found, MultiViewer has been used on this computer, or it runs.
+func mvInstalled() bool { return mvExe() != "" || usedHere("MultiViewer") || mvRunning() }
+
+func mvCandidates() []string {
+	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
 	case "windows":
 		root := filepath.Join(os.Getenv("LOCALAPPDATA"), "multiviewer")
 		dirs, _ := filepath.Glob(filepath.Join(root, "app-*"))
 		slices.SortFunc(dirs, func(a, b string) int { return compareVersions(filepath.Base(b)[4:], filepath.Base(a)[4:]) })
+		var out []string
 		for _, d := range dirs {
-			if p := filepath.Join(d, "MultiViewer.exe"); fileExists(p) {
-				return p
-			}
+			out = append(out, filepath.Join(d, "MultiViewer.exe"))
 		}
-		if p := filepath.Join(root, "MultiViewer.exe"); fileExists(p) {
-			return p
-		}
+		return append(out, filepath.Join(root, "MultiViewer.exe"))
 	case "darwin":
-		home, _ := os.UserHomeDir()
-		for _, p := range []string{"/Applications/MultiViewer.app", filepath.Join(home, "Applications", "MultiViewer.app")} {
-			if fileExists(p) {
-				return p
-			}
-		}
-	default:
-		if p, err := exec.LookPath("multiviewer"); err == nil {
-			return p
-		}
-		for _, p := range []string{"/usr/bin/multiviewer-for-f1", "/opt/f1multiviewer-bin/multiviewer", "/opt/MultiViewer/multiviewer", "/opt/multiviewer/multiviewer",
-			"/usr/lib/multiviewer/multiviewer", "/usr/lib/multiviewer-for-f1/multiviewer-for-f1"} {
-			if fileExists(p) {
-				return p
-			}
+		return []string{"/Applications/MultiViewer.app", filepath.Join(home, "Applications", "MultiViewer.app")}
+	}
+	var out []string
+	for _, name := range []string{"multiviewer", "multiviewer-for-f1", "f1multiviewer"} {
+		if p, err := exec.LookPath(name); err == nil {
+			out = append(out, p)
 		}
 	}
-	return ""
+	return append(out, "/usr/bin/multiviewer-for-f1", "/opt/f1multiviewer-bin/multiviewer", "/opt/MultiViewer/multiviewer", "/opt/multiviewer/multiviewer",
+		"/usr/lib/multiviewer/multiviewer", "/usr/lib/multiviewer-for-f1/multiviewer-for-f1", filepath.Join(home, ".local", "opt", "MultiViewer", "multiviewer"))
+}
+
+func mvNotFound() error {
+	if mvInstalled() {
+		return errors.New("F1 Party can't find MultiViewer's program: start MultiViewer once yourself, then F1 Party remembers where it is")
+	}
+	return errors.New("MultiViewer isn't installed (multiviewer.app/download)")
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
@@ -145,7 +159,7 @@ func mvStart() error {
 	}
 	exe := mvExe()
 	if exe == "" {
-		return errors.New("MultiViewer isn't installed (multiviewer.app/download)")
+		return mvNotFound()
 	}
 	arg := fmt.Sprintf("--remote-debugging-port=%d", mvDebugPortDefault)
 	var cmd *exec.Cmd
@@ -198,7 +212,7 @@ func mvStartReady() error {
 // mvRestart closes MultiViewer and starts it again with its debug port (needed for setups).
 func mvRestart() error {
 	if mvExe() == "" {
-		return errors.New("MultiViewer isn't installed (multiviewer.app/download)")
+		return mvNotFound()
 	}
 	mvQuit(false)
 	for i := 0; i < 20 && mvRunning(); i++ {

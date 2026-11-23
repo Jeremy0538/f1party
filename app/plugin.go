@@ -92,6 +92,12 @@ func pluginDirs() []string {
 		return nil
 	}
 	dirs := []string{filepath.Join(cfg, "opendeck", "plugins")}
+	if runtime.GOOS == "linux" { // OpenDeck as a Flatpak keeps its settings in its own sandbox folder
+		if home, err := os.UserHomeDir(); err == nil {
+			m, _ := filepath.Glob(filepath.Join(home, ".var", "app", "*", "config", "opendeck", "plugins"))
+			dirs = append(dirs, m...)
+		}
+	}
 	switch runtime.GOOS {
 	case "windows":
 		dirs = append(dirs, filepath.Join(cfg, "Elgato", "StreamDeck", "Plugins"))

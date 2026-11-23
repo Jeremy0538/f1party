@@ -19,12 +19,12 @@ func processRunning(process string) bool {
 	return err == nil && strings.Contains(strings.ToLower(string(out)), strings.ToLower(process)+".exe")
 }
 
-// uf1RunningPath: the program of a running Ultimate F1 Viewer ("" when it doesn't run).
-func uf1RunningPath() string {
-	if !processRunning(uf1Process) {
+// runningPath: the program of a running app, by its process name ("" when it doesn't run).
+func runningPath(process, _ string) string {
+	if !processRunning(process) {
 		return ""
 	}
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", "(Get-Process -Name '"+uf1Process+"' | Select-Object -First 1).Path")
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", "(Get-Process -Name '"+process+"' | Select-Object -First 1).Path")
 	detach(cmd)
 	out, err := cmd.Output()
 	if err != nil {

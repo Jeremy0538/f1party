@@ -15,11 +15,12 @@ func detach(cmd *exec.Cmd) {}
 // processRunning is only needed on Windows (killApp asks first and ends what stays there).
 func processRunning(string) bool { return false }
 
-// uf1RunningPath: the program of a running Ultimate F1 Viewer ("" when it doesn't run, or on macOS). For an
-// AppImage that is the .AppImage file itself (its APPIMAGE variable), not the copy it runs from.
-func uf1RunningPath() string {
+// runningPath: the program of a running app whose program (first word) matches pattern ("" when it doesn't
+// run, or on macOS). For an AppImage that is the .AppImage file itself (its APPIMAGE variable), not the copy
+// it runs from.
+func runningPath(_, pattern string) string {
 	dirs, _ := filepath.Glob("/proc/[0-9]*")
-	re := regexp.MustCompile(uf1Pattern)
+	re := regexp.MustCompile(pattern)
 	for _, d := range dirs {
 		b, err := os.ReadFile(filepath.Join(d, "cmdline"))
 		if err != nil || len(b) == 0 {

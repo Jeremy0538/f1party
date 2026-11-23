@@ -333,7 +333,7 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	// MultiViewer itself: running, setup support (debug port), its setups and the one chosen here.
 	mux.HandleFunc("GET /api/mv", func(w http.ResponseWriter, r *http.Request) {
 		running := mvRunning()
-		out := map[string]any{"installed": mvExe() != "", "running": running, "setupsReady": running && mvDebugReady(),
+		out := map[string]any{"installed": mvInstalled(), "running": running, "setupsReady": running && mvDebugReady(),
 			"setups": mvSetups(), "setup": party.Setup(), "plugin": pluginInfo(), "uf1": uf1Installed() && !loadConfig().Uf1Off,
 			"appUpdates": appUpdates()}
 		// what really runs: Ultimate F1 Viewer only when it's up, and how many streams MultiViewer shows
@@ -870,7 +870,8 @@ type config struct {
 	SetupPractice string   `json:"setupPractice,omitempty"` //
 	Uf1Off        bool     `json:"uf1Off,omitempty"`        // don't use Ultimate F1 Viewer (even when it's installed)
 	Uf1CloseFirst bool     `json:"uf1CloseFirst,omitempty"` // close the viewer's open windows before its layout opens
-	Uf1Path       string   `json:"uf1Path,omitempty"`       // where Ultimate F1 Viewer was seen running (uf1find.go)
+	Uf1Path       string   `json:"uf1Path,omitempty"`       // where Ultimate F1 Viewer was seen running (appfind.go)
+	MvPath        string   `json:"mvPath,omitempty"`        // where MultiViewer was seen running
 	FitTiming     bool     `json:"fitTiming,omitempty"`     // zoom Live Timing to fill its window
 	RestOn        bool     `json:"restOn,omitempty"`        // best of the rest in the onboards outside the top teams
 	RestLive      bool     `json:"restLive,omitempty"`      // keep them up to date during the session
