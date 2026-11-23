@@ -137,6 +137,10 @@
 	@keyframes cboxblink { 50% { background-size:40% 0; } }
 
 	.startcard .hint { margin:4px 0 0; }
+	.starthead { display:flex; align-items:center; gap:10px; margin:0; font-size:17px; font-weight:700; color:var(--text); }
+	.starthead .sico { display:inline-grid; place-items:center; width:30px; height:30px; border-radius:8px; background:#22262d; color:var(--text); flex:none; }
+	.starthead .sico.host { background:var(--red); color:#fff; }
+	.starthead .sico svg { width:16px; height:16px; }
 	.startcard button.wide { width:100%; height:44px; margin-top:12px; }
 	#start .lead b { color:var(--text); }
 	/* your name on the start screen */
@@ -433,6 +437,8 @@
 	.setnav button:hover { background:#1f232a; color:var(--text); }
 	.setnav button[aria-selected="true"] { background:#262a31; color:var(--text); box-shadow:inset 3px 0 0 var(--red); }
 	.setnav button.hasdot::after { top:50%; right:10px; margin-top:-3.5px; box-shadow:none; }
+	.synclist { margin:6px 0 0; padding-left:18px; display:flex; flex-direction:column; gap:6px; }
+	.synclist b { color:var(--text); font-weight:600; }
 	.setnavgap { flex:1; min-height:16px; border-bottom:1px solid var(--line-2); margin:0 4px 6px; }
 	.setlayout .setpane { min-height:0; overflow-y:auto; padding:2px 8px 8px 0; scrollbar-width:thin; scrollbar-color:#2a2e36 transparent; }
 	.modal .box { width:380px; max-height:86%; overflow:hidden; background:var(--panel); border:1px solid var(--line-2); border-radius:12px; padding:16px 18px; }
@@ -594,13 +600,13 @@
 					<div class="metext"><span class="melbl">Your name</span><b id="asname">…</b></div>
 				</div>
 				<section class="pcard startcard">
-					<span class="boxtitle">Host</span>
-					<p class="hint">Start a party and share its code with your friends.</p>
-					<button class="primary wide" id="host">Host a party</button>
+					<h2 class="starthead"><span class="sico host"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>Host a party</h2>
+					<p class="hint">You pick the session and everyone follows your stream. Share the code with your friends.</p>
+					<button class="primary wide" id="host">Host</button>
 				</section>
 				<section class="pcard startcard">
-					<span class="boxtitle">Join</span>
-					<p class="hint">Fill in the code a friend sent you.</p>
+					<h2 class="starthead"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg></span>Join a party</h2>
+					<p class="hint">Fill in the 5-letter code a friend sent you, and follow their stream.</p>
 					<div class="codechars fill" id="codeboxes" role="group" aria-label="Party code">
 						<input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 1"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 2"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 3"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 4"><input class="cbox" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Character 5">
 					</div>
@@ -1507,6 +1513,7 @@ const oldTabs = { general: "party", windows: "screen", close: "end" };
 const ico = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const setIcons = {
 	party: ico('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.6 0 4.5 1.9 4.5 5"/>'),
+	sync: ico('<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/>'),
 	sessions: ico('<rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M10 8.5v5l4.5-2.5z"/><path d="M8 21h8"/>'),
 	drivers: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 14v7M10 12H3.2M14 12h6.8"/>'),
 	screen: ico('<rect x="2.5" y="3.5" width="19" height="13" rx="2"/><path d="M8 21h8M12 16.5V21"/>'),
@@ -1551,10 +1558,15 @@ async function openSettings(opts = {}) {
 				row("Name", text("name", c.name || "", { maxLength: 24, placeholder: "Name", style: "width:180px" })),
 				hint("Others see this name in the party and in invites.")),
 			profilePicGroup(c),
-			group("Party",
-				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host"),
-				hint("As a guest you follow the host's pause, play and skips by yourself, and your onboards stay with the main stream.")),
 			ownChannelGroup())],
+		sync: ["Sync", el("div", {},
+			group("Following the host",
+				hint("In someone else's party, the host's stream is the one everyone watches."),
+				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "On by default"),
+				el("ul", { className: "sethint synclist" },
+					el("li", { innerHTML: "<b>On:</b> your stream stays at the same moment as the host's. When the host pauses, plays or skips, you do too, and your onboards stay with the main stream." }),
+					el("li", { innerHTML: "<b>Off:</b> your stream runs on its own and can drift away from the host. Click <i>Sync</i> at the top of the party to jump back to the host." })),
+				hint("When you host, this setting does nothing: everyone follows you.")))],
 		sessions: ["Sessions", null],
 		drivers: ["Drivers", null],
 		screen: ["Screen", el("div", {},
@@ -1791,7 +1803,8 @@ async function openSettings(opts = {}) {
 		sessions: "How a session opens: with one of your MultiViewer setups, the Stream Deck plugin, or just F1 Live.",
 		drivers: "Which onboards F1 Party fills in by itself.",
 		screen: "Where F1 opens: its own desktop, the taskbar while you watch, and where MultiViewer and Ultimate F1 Viewer go.",
-		lights: "Philips Hue lights in the colour of the flag on track. Skip this if you don't have them.",
+		sync: "How you follow the host when you're a guest in someone's party.",
+		lights: "Philips Hue lights in the colour of the flag on track. Skip this if you don't have Hue.",
 		end: "What End session closes when you're done watching.",
 	};
 	const bars = el("div", { className: "steps" }), introP = el("p", { className: "hint sethint" });
@@ -1868,7 +1881,8 @@ function lightsTab(c, h) {
 	if (hue.paired) pairing.classList.add("hidden");
 	find();
 	return el("div", {},
-		h.group("Bridge",
+		h.hint("Lights work with Philips Hue, through a Hue bridge."),
+		h.group("Philips Hue bridge",
 			hue.paired ? h.row("Paired with", el("span", { textContent: hue.bridge || "your bridge" }), btn("Pair another", "", () => { pairing.classList.remove("hidden"); })) : h.hint("Choose your bridge, click Pair, then press the round button on the bridge."),
 			pairing,
 			st,
@@ -1889,7 +1903,7 @@ function lightsTab(c, h) {
 			master.input.addEventListener("change", sync);
 			if (!hue.paired) { master.input.disabled = true; master.classList.add("setoff"); }
 			sync();
-			return h.group("Flags on the lights",
+			return h.group("Flags on your Hue lights",
 				h.hint("During a session the lights take the colour of the flag on track, and go back as they were afterwards." + (hue.paired ? "" : " Pair your bridge first.")),
 				master, which,
 				hue.paired ? el("div", { className: "setrow" }, testBtn) : null);
