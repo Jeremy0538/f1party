@@ -2,7 +2,8 @@ package main
 
 // What's new: shown once after an update (and a setup guide on the very first start). Add an entry here for
 // every release that adds something people notice; Tab names the Settings tab where its options are
-// (party, sessions, drivers, screen, lights, end, updates) or is empty. Older entries may still name general,
+// (party, sessions, drivers, screen, lights, end, updates) or is empty. The entries for a version are also the
+// "What's new" at the top of its GitHub release notes (build.yml). Older entries may still name general,
 // windows or close: the settings map those to party, screen and end.
 
 type newsItem struct {

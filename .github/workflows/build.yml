@@ -111,8 +111,29 @@ jobs:
           merge-multiple: true
       - name: Checksums (the Windows app checks its self-update against these)
         run: cd dist && sha256sum * > checksums.txt && cat checksums.txt
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: app/whatsnew.go
+          sparse-checkout-cone-mode: false
+          path: src
+      - name: Patch notes (this version's "What's new" from app/whatsnew.go, like Clipper's CHANGELOG.md)
+        env:
+          V: ${{ needs.version.outputs.v }}
+        run: |
+          python3 - <<'PY' > notes.md
+          import os, re, json
+          v = os.environ["V"]
+          src = open("src/app/whatsnew.go", encoding="utf-8").read()
+          items = [json.loads(t) for ver, t in re.findall(r'\{"([0-9.]+)",\s*("(?:[^"\\]|\\.)*")', src) if ver == v]
+          if items:
+              print("## What's new\n")
+              print("\n".join("- " + t for t in items))
+          PY
+          [ -s notes.md ] || echo "::warning::app/whatsnew.go has no entry for $V: release notes are only the PR list"
+          cat notes.md
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: notes.md
           tag_name: v${{ needs.version.outputs.v }}
           name: F1 Party ${{ needs.version.outputs.v }}
           target_commitish: ${{ github.sha }}
