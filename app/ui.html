@@ -890,7 +890,7 @@ function updatesTab(group, hint) {
 	return el("div", {},
 		group("F1 Party",
 			el("div", { className: "setrow" }, el("span", { className: "setlbl", textContent: "Your version" }), cur),
-			hint("F1 Party also looks for updates by itself: when it starts, every 20 minutes and when you bring the window to the front. Outside a party it installs them straight away; in a party the red button at the top waits for your click."),
+			hint("F1 Party looks for updates by itself: when it starts, every 20 minutes and when you bring the window to the front. A new version shows a notification and the red Update button at the top; it installs only when you click it."),
 			el("div", { className: "row", style: "gap:8px; margin-top:4px" }, checkBtn, install),
 			res));
 }

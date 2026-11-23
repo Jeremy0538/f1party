@@ -116,8 +116,8 @@ func (p *Party) LastUpdateCheck() UpdateCheck {
 	return out
 }
 
-// checkUpdate looks up the newest release on GitHub. A newer one becomes p.update (and installs straight away
-// when you're not in a party). Returns the newest version.
+// checkUpdate looks up the newest release on GitHub. A newer one becomes p.update: the Update button and one
+// notification; it installs only on a click. Returns the newest version.
 func (p *Party) checkUpdate() (latest string, err error) {
 	defer func() {
 		lastCheck.Lock()
@@ -181,14 +181,15 @@ func (p *Party) checkUpdate() (latest string, err error) {
 		p.mu.Lock()
 		// a new version, or the same one whose files are there now (the release is published before its
 		// files are all uploaded)
-		if p.update == nil || p.update.Version != u.Version || (u.Auto && !p.update.Auto && p.update.Busy == "") {
+		fresh := p.update == nil || p.update.Version != u.Version
+		if fresh || (u.Auto && !p.update.Auto && p.update.Busy == "") {
 			p.update = u
 		}
-		idle := p.st.Mode == "idle"
 		p.mu.Unlock()
-		// Not in a party: update straight away (in a party the button waits for a click).
-		if idle && u.Auto {
-			go p.InstallUpdate()
+		// Nothing installs by itself (a half-finished swap is worse than an old version): the Update button
+		// at the top waits for a click, and a notification says once per version that it's there.
+		if fresh && sendNotification != nil {
+			_ = sendNotification("F1 Party "+latest+" is out", "Open F1 Party and click Update at the top.")
 		}
 		return latest, nil
 	}
