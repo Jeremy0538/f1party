@@ -281,7 +281,8 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		writeJSON(w, struct {
 			Status
 			Open string `json:"open,omitempty"`
-		}{s, open})
+			Pic  string `json:"pic,omitempty"` // your profile picture's version (none: your initial)
+		}{s, open, picVersion(cfg.Pic)})
 	})
 	// The setup guide or the what's new window was shown: not again (until the next version).
 	mux.HandleFunc("POST /api/welcome/done", func(w http.ResponseWriter, r *http.Request) {
@@ -435,6 +436,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 	handle("/api/team/kick", func(w http.ResponseWriter, in *peopleReq) {
 		replyErr(w, teamCall("/team/kick", in.ID, "member", in.To))
 	})
+	handle("/api/team/logo", func(w http.ResponseWriter, in *peopleReq) { replyErr(w, setTeamLogo(in.ID, in.Pic)) })
+	handle("/api/me/pic", func(w http.ResponseWriter, in *peopleReq) { replyErr(w, setMyPic(in.Pic)) })
+	mux.HandleFunc("GET /api/pic/", servePic)
 	// The join field: a team link, a friend link, a team key or an own Discord webhook ("" removes the webhook).
 	handle("/api/addlink", func(w http.ResponseWriter, in *peopleReq) {
 		v := strings.TrimSpace(in.Link)
@@ -808,6 +812,7 @@ type config struct {
 	Last           *lastParty     `json:"last,omitempty"`
 	Plans          []plan         `json:"plans,omitempty"`    // planned watch parties
 	MemberID       string         `json:"memberId,omitempty"` // this app's fixed id (friends know it by this)
+	Pic            string         `json:"pic,omitempty"`      // your profile picture (a small data URL, see pics.go)
 	Friends        []Friend       `json:"friends,omitempty"`
 	NotifyLeads    []int          `json:"notifyLeads"`              // minutes before a session to notify (nil = 15)
 	Notify         string         `json:"notify,omitempty"`         // calendar notifications: "", "main" or "all"

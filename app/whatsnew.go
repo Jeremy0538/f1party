@@ -12,6 +12,8 @@ type newsItem struct {
 }
 
 var whatsNew = []newsItem{
+	{"1.14.0", "Profile pictures: choose yours under Settings → You and party; your friends, teams and party see it instead of your initial.", "party"},
+	{"1.14.0", "Team logos: the one who started a team clicks the square next to its name (Teams) to give it a logo.", ""},
 	{"1.13.0", "A slimmer bar at the top, and a calendar that shows the next session's countdown and the sessions by day.", ""},
 	{"1.13.0", "Downloads moved into Settings, next to Updates.", "downloads"},
 	{"1.13.0", "Fixed onboards: choose whole teams or single drivers, in a card per team; the line-up follows the latest session, so a new driver shows up by himself.", "drivers"},

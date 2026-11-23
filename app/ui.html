@@ -336,6 +336,12 @@
 	.plist button.ib { width:28px; height:28px; }
 	.av { position:relative; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; flex:none; font:600 12px/1 var(--ui); color:#fff; }
 	.av.sm { width:24px; height:24px; font-size:10.5px; }
+	.av.big { width:46px; height:46px; font-size:18px; }
+	.av img { position:absolute; inset:0; width:100%; height:100%; border-radius:50%; object-fit:cover; }
+	.tlogo { position:relative; width:34px; height:34px; flex:none; border-radius:8px; display:grid; place-items:center; overflow:hidden; background:#262a31; font:700 14px/1 var(--num); color:var(--dim); }
+	.tlogo img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+	.tlogo.can { cursor:pointer; }
+	.tlogo.can:hover { outline:2px solid var(--line-2); }
 	.av i { position:absolute; right:-1px; bottom:-1px; width:9px; height:9px; border-radius:50%; border:2px solid var(--panel); }
 	.av i.on { background:var(--ok); } .av i.live { background:var(--red); }
 	.thead { display:flex; align-items:center; gap:10px; padding:11px 12px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02); }
@@ -947,10 +953,37 @@ const peopleErr = (msg) => { $(tab === "teams" ? "dcerr" : "friendmsg").textCont
 const teamsWithout = (f) => f.mutual ? people.teams.filter((t) => !(t.people || []).some((m) => m.id === f.id)) : [];
 
 // A round initial in a colour of its own per name, with a dot: online (green) or watching live (red).
-function avatar(name, dot, small) {
+function avatar(name, dot, small, pic) {
 	let h = 0; for (const c of name || "?") h = (h * 31 + c.charCodeAt(0)) % 360;
 	return el("span", { className: "av" + (small ? " sm" : ""), style: `background:hsl(${h} 42% 34%)`, textContent: (name || "?").trim().charAt(0).toUpperCase() },
-		dot ? el("i", { className: dot }) : null);
+		pic ? picImg(pic) : null, dot ? el("i", { className: dot }) : null);
+}
+// A picture over the letter; when it doesn't load (none set, the relay can't be reached) the letter stays.
+function picImg(src) { const i = el("img", { src, alt: "", draggable: false }); i.onerror = () => i.remove(); return i; }
+// Where someone's picture comes from: yourself from your settings, others from the relay by their id
+// (with the version the relay reported, when known).
+let myPicV = "";
+const picOf = (id, v) => id === "me" ? "/api/pic/me?v=" + myPicV : id ? "/api/pic/u/" + id + (v ? "?v=" + v : "") : null;
+// Choose a picture: any image, made square (the middle) and small, as a data URL.
+function chooseImage() {
+	return new Promise((resolve, reject) => {
+		const input = el("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif,image/bmp" });
+		input.onchange = async () => {
+			const f = input.files && input.files[0];
+			if (!f) return resolve(null);
+			try {
+				const bmp = await createImageBitmap(f);
+				const side = Math.min(bmp.width, bmp.height), size = 128;
+				const cv = el("canvas", { width: size, height: size });
+				cv.getContext("2d").drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, size, size);
+				let url = cv.toDataURL("image/webp", 0.85);
+				if (!url.startsWith("data:image/webp")) url = cv.toDataURL("image/jpeg", 0.85);
+				if (url.length > 64000) url = cv.toDataURL("image/jpeg", 0.6);
+				resolve(url);
+			} catch { reject(new Error("That file isn't a picture F1 Party can read")); }
+		};
+		input.click();
+	});
 }
 
 function renderPeople() {
@@ -981,7 +1014,7 @@ function renderPeople() {
 			: "Last watched together " + dateFmt.format(new Date((f.seen || f.since) * 1000));
 		const open = teamsWithout(f);
 		fl.append(el("li", {},
-			avatar(f.name, f.status ? (f.status.live ? "live" : "on") : f.online ? "on" : ""),
+			avatar(f.name, f.status ? (f.status.live ? "live" : "on") : f.online ? "on" : "", false, f.pic ? picOf(f.id, f.pic) : null),
 			el("div", { className: "nm" }, el("b", { textContent: f.name }), el("span", { textContent: line })),
 			el("div", { className: "acts" },
 				f.status && f.status.code ? joinOrIn(f.name, f.status.code, "primary") : null,
@@ -1004,7 +1037,7 @@ function renderPeople() {
 		for (const m of all) {
 			const mod = isMod(m.id);
 			grid.append(
-				el("div", {}, avatar(m.name, m.status ? (m.status.live ? "live" : "on") : "", true)),
+				el("div", {}, avatar(m.name, m.status ? (m.status.live ? "live" : "on") : "", true, m.id === "me" ? picOf("me") : m.pic ? picOf(m.id, m.pic) : null)),
 				el("div", { className: "who" }, el("b", { textContent: m.id === "me" ? m.name + " (you)" : m.name }),
 					m.status ? el("span", { textContent: "watching " + watching(m.status) }) : null),
 				el("div", {}, el("span", { className: "role" + (mod ? " mod" : ""), textContent: mod ? "Moderator" : "Member" })),
@@ -1018,6 +1051,7 @@ function renderPeople() {
 		}
 		tl.append(el("div", { className: "card" },
 			el("div", { className: "thead" },
+				teamLogo(t),
 				el("div", { className: "nm" }, el("b", { textContent: t.name || "Team" }),
 					el("span", { textContent: t.members + (t.members === 1 ? " member" : " members") })),
 				el("div", { className: "acts" },
@@ -1026,6 +1060,26 @@ function renderPeople() {
 						: iconBtn("leave", "Leave team " + t.name, () => leaveTeamAsk(t)))),
 			grid));
 	}
+}
+
+// A team's logo (or its first letter); the one who started the team clicks it to choose another.
+function teamLogo(t) {
+	const box = el("span", { className: "tlogo", textContent: (t.name || "T").trim().charAt(0).toUpperCase() });
+	if (t.logo) box.append(picImg("/api/pic/t/" + t.id + "?v=" + t.logo));
+	if (t.owner) {
+		box.classList.add("can"); box.title = "Choose a logo for " + t.name;
+		box.onclick = () => setTeamLogoPick(t);
+	}
+	return box;
+}
+async function setTeamLogoPick(t) {
+	try {
+		const url = await chooseImage();
+		if (!url) return;
+		await post("/api/team/logo", { id: t.id, pic: url });
+		peopleErr("Logo saved for " + t.name);
+	} catch (e) { $("dcerr").textContent = e.message; }
+	refreshDiscord();
 }
 
 async function leaveTeamAsk(t) {
@@ -1054,13 +1108,21 @@ function teamEditDialog(t) {
 	const name = el("input", { className: "grow", value: t.name, maxLength: 32, autocomplete: "off" });
 	const body = el("div", {},
 		el("label", { className: "label", textContent: "Name" }), el("div", { className: "row" }, name),
-		el("div", { className: "row", style: "margin-top:14px" }, btn("Leave team", "", async () => { if (await leaveTeamAsk(t)) $("modal").classList.add("hidden"); }, "link")));
-	dialog("Edit team " + t.name, body, "Save", async () => {
+		el("label", { className: "label", style: "margin-top:14px", textContent: "Logo" }),
+		el("div", { className: "row", style: "gap:10px" }, teamLogo({ ...t, owner: false }),
+			btn("Choose logo", "", async () => { $("modal").classList.add("hidden"); await setTeamLogoPick(t); }),
+			t.logo ? btn("Remove", "", async () => { try { await post("/api/team/logo", { id: t.id, pic: "" }); } catch (e) { $("modalerr").textContent = e.message; return; } $("modal").classList.add("hidden"); refreshDiscord(); }, "link") : null),
+		);
+	dialog("Edit team", body, "Save", async () => {
 		const n = name.value.trim();
 		if (!n) throw new Error("Give your team a name");
 		if (n !== t.name) await post("/api/team/rename", { id: t.id, name: n });
 		refreshDiscord();
 	});
+	// Leave team: in the bottom row on the left, with Cancel and Save (taken out again when it closes)
+	const leave = btn("Leave team", "Leave " + t.name + "; you can join again with a team link", async () => { if (await leaveTeamAsk(t)) $("modal").classList.add("hidden"); }, "danger");
+	leave.dataset.wiz = "1"; leave.style.marginRight = "auto";
+	$("modalcancel").before(leave);
 	name.focus();
 }
 
@@ -1254,8 +1316,12 @@ async function refresh() {
 	let s;
 	try { s = await (await fetch("/api/status")).json(); }
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
-	savedName = s.name || ""; $("asname").textContent = savedName || "Guest";
-	{ const a = avatar(savedName || "Guest"); $("asav").style.background = a.style.background; $("asav").textContent = a.textContent; }
+	savedName = s.name || ""; $("asname").textContent = savedName || "Guest"; myPicV = s.pic || "";
+	if ($("asav").dataset.for !== (savedName || "Guest") + "|" + myPicV) {
+		const a = avatar(savedName || "Guest", null, false, picOf("me"));
+		$("asav").dataset.for = (savedName || "Guest") + "|" + myPicV;
+		$("asav").style.background = a.style.background; $("asav").replaceChildren(...a.childNodes);
+	}
 	$("ver").textContent = s.version;
 	welcome(s.welcome);
 	if (s.open === "cal") showTab("cal");
@@ -1355,7 +1421,7 @@ function renderMembers(s) {
 		const what = host ? (s.feed || m.me ? "Hosting" : m.status || "Hosting") : synced ? "Watching along" : (m.status || "Joining…");
 		const dotCls = host || synced ? "ok" : /can't|error|offline/i.test(what) ? "bad" : "warn";
 		const st = el("span", { className: "st" }, el("span", { className: "dot " + dotCls }), el("span", { textContent: what }));
-		const li = el("li", {}, avatar(m.name, null, true), el("span", { className: "nm" }, top, st));
+		const li = el("li", {}, avatar(m.name, null, true, m.me ? picOf("me") : picOf(m.id)), el("span", { className: "nm" }, top, st));
 		if (!host && synced && m.drift != null) {
 			const d = Math.abs(m.drift);
 			li.append(el("span", { className: "drift " + (d <= 0.3 ? "ok" : d <= 2 ? "warn" : "bad"), textContent: fmtDrift(m.drift), title: "How far behind (−) or ahead (+) of the host" }));
@@ -1484,6 +1550,7 @@ async function openSettings(opts = {}) {
 			group("Your name",
 				row("Name", text("name", c.name || "", { maxLength: 24, placeholder: "Name", style: "width:180px" })),
 				hint("Others see this name in the party and in invites.")),
+			profilePicGroup(c),
 			group("Party",
 				check("autoSync", c.autoSync !== false, "Auto-sync with the host", "As a guest, follow the host by yourself; off: only when you click Sync to host"),
 				hint("As a guest you follow the host's pause, play and skips by yourself, and your onboards stay with the main stream.")),
@@ -1632,6 +1699,25 @@ async function openSettings(opts = {}) {
 				})()));
 		})();
 	tabs.lights[1] = lightsTab(c, { check, pick, row, hint, group, ids });
+	// Your profile picture: next to your name for you, your friends, teams and party. Counts straight away.
+	function profilePicGroup(c) {
+		const box = el("div", {}), err = el("p", { className: "error", style: "margin:4px 0 0" });
+		let v = c.pic || "";
+		const draw = () => {
+			box.innerHTML = "";
+			const prev = avatar(c.name || "Guest", null, false, v ? "/api/pic/me?v=" + v : null); prev.classList.add("big");
+			const set = async (url) => {
+				err.textContent = "";
+				try { await post("/api/me/pic", { pic: url }); } catch (e) { err.textContent = e.message; }
+				const s = await (await fetch("/api/settings")).json(); v = s.pic || ""; myPicV = v; draw(); refresh(); refreshDiscord();
+			};
+			box.append(el("div", { className: "setrow", style: "gap:12px" }, prev,
+				btn(v ? "Change picture" : "Choose picture", "", async () => { try { const u = await chooseImage(); if (u) await set(u); } catch (e) { err.textContent = e.message; } }),
+				v ? btn("Remove", "", () => set("")) : null), err);
+		};
+		draw();
+		return group("Profile picture", hint("Shown instead of your initial: for you, your friends, your teams and your party."), box);
+	}
 	// Your own Discord channel: party invites go there too. Connected: a status and Remove; else a field
 	// for the channel's webhook link. Changes count straight away (not on Save).
 	function ownChannelGroup() {
