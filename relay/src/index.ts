@@ -11,6 +11,7 @@
 //   POST /f1party/team/rename|leave|invitefriend|kick {id, secret, key, ...}  (kick: the owner removes {member})
 //   POST /f1party/friend/ask|accept|decline {id, secret, name, to}   friend requests between teammates
 //   POST /f1party/friend/remove {id, secret, name, to}   unfriend: gone on both sides
+//   GET  /f1party/people/ws (WebSocket, headers X-F1P-Id and X-F1P-Secret)   push line: {"t":"poke"} = check in now
 //   POST /f1party/me/pic {id, secret, pic}   POST /f1party/team/logo {id, secret, key, logo}   (a small image as a
 //        data URL, "" removes it)   GET /f1party/pic/u/UID  GET /f1party/pic/t/TEAMID   (the image; ?v= for caching)
 //
@@ -65,6 +66,7 @@ export default {
 		if (pic && req.method === "GET") return getPic(env, pic[1], pic[2], url.searchParams.has("v"));
 		const friendLinkPath = path.match(/^\/friend\/([A-Za-z0-9]{12,32})$/);
 		if (friendLinkPath) return friendPage(friendLinkPath[1]);
+		if (path === "/people/ws") return peopleSocket(req, env);
 		if (path !== "/ws") return new Response("Not found", { status: 404 });
 		if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
 		const room = (url.searchParams.get("room") || "").toUpperCase();
@@ -73,13 +75,14 @@ export default {
 	},
 };
 
-type Attachment = { role: "host" | "guest"; name: string; drift?: number; status?: string };
+type Attachment = { role: "host" | "guest"; name: string; drift?: number; status?: string; people?: string };
 
 export class Room extends DurableObject<Env> {
 	async fetch(req: Request): Promise<Response> {
 		const url = new URL(req.url);
 		if (url.pathname === "/internal/group") return this.people(await req.json());
 		if (url.pathname === "/internal/allow") return this.allowPost(url.searchParams.get("kind") || "", url.searchParams.get("needHost") === "1");
+		if (url.pathname === "/internal/peoplews") return this.peopleSocket(req);
 		const role = url.searchParams.get("role") === "host" ? "host" : "guest";
 		const name = (url.searchParams.get("name") || "Guest").slice(0, 32);
 		const pair = new WebSocketPair();
@@ -109,7 +112,30 @@ export class Room extends DurableObject<Env> {
 		return new Response(null, { status: 101, webSocket: client });
 	}
 
+	// An app's push line (in the "__group" object): it says nothing itself; when something changes for that
+	// app (a friend request or its answer, an invite, a team change, a friend's status) it gets {"t":"poke"} and
+	// checks in right away instead of at its next 30-second check-in. "ping" is answered without waking the object.
+	private async peopleSocket(req: Request): Promise<Response> {
+		const uid = req.headers.get("x-f1p-id") || "", secret = req.headers.get("x-f1p-secret") || "";
+		const u = /^[0-9a-f]{12}$/.test(uid) && secret.length >= 20 ? await this.ctx.storage.get<User>("u:" + uid) : undefined;
+		if (!u || !sameKey(await sha256(secret), u.secret)) return new Response("Unknown app", { status: 403 });
+		const old = this.ctx.getWebSockets("p:" + uid);
+		if (old.length >= 3) for (const ws of old.slice(0, old.length - 2)) try { ws.close(4001, "replaced"); } catch {}
+		const pair = new WebSocketPair();
+		const [client, server] = Object.values(pair);
+		this.ctx.acceptWebSocket(server, ["p:" + uid]);
+		server.serializeAttachment({ role: "guest", name: "", people: uid } satisfies Attachment);
+		this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+		return new Response(null, { status: 101, webSocket: client });
+	}
+
+	// poke: tell these apps (their push lines) to check in now.
+	private poke(ids: Iterable<string>) {
+		for (const id of new Set(ids)) for (const ws of this.ctx.getWebSockets("p:" + id)) try { ws.send('{"t":"poke"}'); } catch {}
+	}
+
 	async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
+		if ((ws.deserializeAttachment() as Attachment)?.people) return; // push lines only listen
 		if (typeof raw !== "string" || raw.length > 4096) return;
 		let msg: any;
 		try { msg = JSON.parse(raw); } catch { return; }
@@ -138,6 +164,7 @@ export class Room extends DurableObject<Env> {
 	async webSocketClose(ws: WebSocket, code: number) {
 		const me = ws.deserializeAttachment() as Attachment;
 		try { ws.close(code === 1005 ? 1000 : code, "bye"); } catch {}
+		if (me?.people) return; // a push line, not someone in a party
 		if (me.role === "host" && this.ctx.getWebSockets("host").filter((w) => w !== ws).length === 0) {
 			this.broadcast({ t: "host", online: false }, "guest");
 		}
@@ -207,7 +234,17 @@ export class Room extends DurableObject<Env> {
 			const list = ((await st.get<object[]>("inbox:" + to)) || []).slice(-19);
 			list.push({ ...ev, at: now });
 			await st.put("inbox:" + to, list);
+			this.poke([to]);
 		};
+		// who sees this app: its mutual friends and everyone in its teams
+		const watchers = async (uid: string, u: User) => {
+			const out: string[] = [];
+			for (const f of u.friends) if ((await st.get<User>("u:" + f))?.friends.includes(uid)) out.push(f);
+			for (const tid of u.teams) out.push(...Object.keys((await st.get<TeamRec>("team:" + tid))?.members || {}));
+			return out.filter((id) => id !== uid);
+		};
+		const teamPeople = async (tid: string, skip?: string) =>
+			Object.keys((await st.get<TeamRec>("team:" + tid))?.members || {}).filter((id) => id !== skip);
 		const user = (id: string) => st.get<User>("u:" + id);
 		const mutual = async (a: User, aid: string, bid: string) => a.friends.includes(bid) && !!(await user(bid))?.friends.includes(aid);
 		const sharesTeam = async (a: User, bid: string) => {
@@ -269,6 +306,9 @@ export class Room extends DurableObject<Env> {
 
 		switch (cmd.op) {
 			case "presence": {
+				// what friends and teammates see changed (what you watch, or you came online): they hear it now
+				const seenChange = JSON.stringify(m.status ?? null) !== JSON.stringify(cmd.status || null) || now - m.seen > 90_000;
+				const teamChange: string[] = [];
 				m.status = cmd.status || null;
 				m.seen = now;
 				// friends made through a friend link the app hasn't heard about yet (still in its inbox) stay
@@ -285,10 +325,13 @@ export class Room extends DurableObject<Env> {
 					const was = t.members[cmd.uid];
 					if (teams.includes(tid)) t.members[cmd.uid] = now;
 					else delete t.members[cmd.uid];
+					if ((was === undefined) !== !teams.includes(tid)) teamChange.push(tid); // joined or left
 					if (was === undefined || !teams.includes(tid) || now - was > 3600_000) await st.put("team:" + tid, t);
 				}
 				m.teams = teams;
 				await saveMe();
+				if (seenChange) this.poke(await watchers(cmd.uid, m));
+				for (const tid of teamChange) this.poke(await teamPeople(tid, cmd.uid));
 
 				const people = new Map<string, any>();
 				const person = (id: string, u: User) => {
@@ -332,6 +375,7 @@ export class Room extends DurableObject<Env> {
 				if (cmd.pic) { await st.put("pic:u:" + cmd.uid, { data: cmd.pic }); m.pic = await picVersion(cmd.pic); }
 				else { await st.delete("pic:u:" + cmd.uid); delete m.pic; }
 				await saveMe();
+				this.poke(await watchers(cmd.uid, m));
 				return Response.json({ pic: m.pic || "" });
 			}
 			case "teamLogo": { // the team's logo, set by the one who started the team ("" removes it)
@@ -342,6 +386,7 @@ export class Room extends DurableObject<Env> {
 				if (cmd.logo) { await st.put("pic:t:" + cmd.team, { data: cmd.logo }); t.logo = await picVersion(cmd.logo); }
 				else { await st.delete("pic:t:" + cmd.team); delete t.logo; }
 				await st.put("team:" + cmd.team, t);
+				this.poke(await teamPeople(cmd.team, cmd.uid));
 				return Response.json({ logo: t.logo || "" });
 			}
 			case "teamRename": {
@@ -350,6 +395,7 @@ export class Room extends DurableObject<Env> {
 				if (t.owner !== cmd.uid) return err("Only the one who started the team can rename it", 403);
 				t.name = cmd.teamName;
 				await st.put("team:" + cmd.team, t);
+				this.poke(await teamPeople(cmd.team, cmd.uid));
 				return new Response("ok");
 			}
 			case "teamKick": { // the owner removes someone; they can come back only with a new team link
@@ -361,6 +407,7 @@ export class Room extends DurableObject<Env> {
 				(t.banned ||= {})[cmd.member] = now;
 				await st.put("team:" + cmd.team, t);
 				await inbox(cmd.member, { type: "kicked", team: t.name, name: m.name });
+				this.poke(await teamPeople(cmd.team, cmd.uid));
 				return new Response("ok");
 			}
 			case "teamLeave": {
@@ -368,6 +415,7 @@ export class Room extends DurableObject<Env> {
 				if (t?.members?.[cmd.uid] !== undefined) { delete t.members[cmd.uid]; await st.put("team:" + cmd.team, t); }
 				m.teams = m.teams.filter((x) => x !== cmd.team);
 				await saveMe();
+				this.poke(await teamPeople(cmd.team, cmd.uid));
 				return new Response("ok");
 			}
 			case "teamInviteFriend": {
@@ -407,6 +455,7 @@ export class Room extends DurableObject<Env> {
 				if ((await st.get("fq:" + cmd.uid + ":" + cmd.to)) !== undefined) return this.people({ ...cmd, op: "friendAccept" });
 				if (!(await cap("fq:" + cmd.uid, 30, 86400_000))) return err("Too many friend requests today", 429);
 				await st.put("fq:" + cmd.to + ":" + cmd.uid, now);
+				this.poke([cmd.to]);
 				return Response.json({ sent: true });
 			}
 			case "friendAccept": { // only a request that was really sent makes friends
@@ -442,6 +491,7 @@ export class Room extends DurableObject<Env> {
 			}
 			case "friendDecline": {
 				await st.delete("fq:" + cmd.uid + ":" + cmd.to);
+				this.poke([cmd.to]); // their "Request sent" goes
 				return new Response("ok");
 			}
 			case "send": { // party invite to friends / teammates, in their app
@@ -472,6 +522,7 @@ export class Room extends DurableObject<Env> {
 		const members = this.ctx.getWebSockets()
 			.filter((ws) => ws !== closing)
 			.map((ws) => ws.deserializeAttachment() as Attachment)
+			.filter((a) => !a.people)
 			.map(({ role, name, drift, status }) => ({ role, name, drift, status }));
 		this.broadcast({ t: "members", members }, undefined, closing);
 	}
@@ -755,4 +806,11 @@ p{color:#8a909c}a{color:#ff7a72}</style></head><body><main>
 <p>The link works for 7 days.</p>
 </main><script>location.href=${JSON.stringify(app)};</script></body></html>`;
 	return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
+}
+
+// An app's push line (see Room.peopleSocket): its id and secret come as headers, checked by the group object.
+async function peopleSocket(req: Request, env: Env): Promise<Response> {
+	if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected WebSocket", { status: 426 });
+	const fwd = new Request("https://room/internal/peoplews", req);
+	return groupRoom(env).fetch(fwd);
 }

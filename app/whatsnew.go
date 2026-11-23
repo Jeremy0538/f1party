@@ -13,6 +13,7 @@ type newsItem struct {
 }
 
 var whatsNew = []newsItem{
+	{"1.17.0", "Friends and Teams update right away: an accepted friend request, an invite, a new teammate, a team's new name or logo and what your friends watch show up within a second, with a pop-up when someone accepts your request.", ""},
 	{"1.16.0", "Removing a friend now removes you from their friends too.", ""},
 	{"1.16.0", "A friend request to someone who already is your friend says so.", ""},
 	{"1.16.0", "Closing Settings with changes you didn't save asks first: keep editing, don't save, or save.", ""},

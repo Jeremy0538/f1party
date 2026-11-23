@@ -1081,7 +1081,10 @@ function popCard(key, card) {
 	setTimeout(close, 20000);
 	return close;
 }
+let peopleVerSeen = -1;
+const newsSeen = new Set();
 function toastNew(d, reqs) {
+	for (const n of d.news || []) if (!newsSeen.has(n.id)) { newsSeen.add(n.id); toast(n.text); }
 	for (const i of d.invites) { const k = "p" + i.from + i.at; if (!toasted.has(k)) { let c; c = partyInviteCard(i, () => c.remove()); popCard(k, c); } }
 	for (const m of reqs) { const k = "f" + m.id; if (!toasted.has(k)) { let c; c = friendRequestCard(m, () => c.remove()); popCard(k, c); } }
 }
@@ -1467,6 +1470,8 @@ async function refresh() {
 	let s;
 	try { s = await (await fetch("/api/status")).json(); }
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
+	// friends, teams or invites changed (the relay pokes F1 Party): fetch them now, not at the next 5 s refresh
+	if (s.peopleVer !== peopleVerSeen) { peopleVerSeen = s.peopleVer; refreshDiscord(); }
 	const hadReqs = friendRequests().length; members = s.mode !== "idle" ? s.members || [] : [];
 	if (hadReqs || friendRequests().length) renderPeople();
 	savedName = s.name || ""; $("asname").textContent = savedName || "Guest"; myPicV = s.pic || "";

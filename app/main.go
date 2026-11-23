@@ -55,6 +55,7 @@ func main() {
 	go party.watchPresence()
 	migrateTeams()
 	go party.watchPeople()
+	go watchPush()
 	go rememberParty(party)
 	go party.runPlans()
 	go followMainStream()
@@ -285,7 +286,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			Status
 			Open string `json:"open,omitempty"`
 			Pic  string `json:"pic,omitempty"` // your profile picture's version (none: your initial)
-		}{s, open, picVersion(cfg.Pic)})
+			// friends, teams, invites or requests changed: the window fetches /api/people again (push.go)
+			PeopleVer int64 `json:"peopleVer"`
+		}{s, open, picVersion(cfg.Pic), peopleVer.Load()})
 	})
 	// The setup guide or the what's new window was shown: not again (until the next version).
 	mux.HandleFunc("POST /api/welcome/done", func(w http.ResponseWriter, r *http.Request) {

@@ -11,6 +11,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -57,6 +58,21 @@ type Person struct {
 	Asked  bool          `json:"asked,omitempty"` // we sent them a friend request (a teammate, not answered yet)
 }
 
+// PeopleNews: a short message the window shows once as a pop-up.
+type PeopleNews struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
+	At   int64  `json:"at"`
+}
+
+func addPeopleNews(text string) {
+	now := time.Now().UnixMilli()
+	peopleNow.mu.Lock()
+	peopleNow.news = append(slices.DeleteFunc(peopleNow.news, func(n PeopleNews) bool { return now-n.At > 120_000 }),
+		PeopleNews{ID: fmt.Sprint(now, len(peopleNow.news)), Text: text, At: now})
+	peopleNow.mu.Unlock()
+}
+
 // FriendRequest: a teammate asked to be friends (kept by the relay until accepted or declined).
 type FriendRequest struct {
 	ID   string `json:"id"`
@@ -99,6 +115,7 @@ type peopleState struct {
 	teamInvites []TeamInvite
 	requests    []FriendRequest
 	requestSeen map[string]bool // requests already shown as a notification
+	news        []PeopleNews    // short messages for the window (someone accepted, unfriended, removed you)
 	online      bool            // the last check-in worked
 	checked     int64           // unix ms of the last answer
 	poke        chan struct{}
@@ -275,6 +292,7 @@ func (p *Party) checkPeople() {
 	if r.Me != nil {
 		syncMyPic(&r.Me.Pic)
 	}
+	markPeopleChanged()
 }
 
 func anyString(v any) string {
@@ -293,6 +311,11 @@ func (p *Party) handleInbox(ev map[string]any) {
 		if id, name := str("id"), str("name"); id != "" {
 			addFriend(id, name)
 			p.SetNote("You and " + name + " are friends now")
+			if ev["accepted"] == true {
+				addPeopleNews(name + " accepted your friend request")
+			} else {
+				addPeopleNews(name + " used your friend link: you're friends now")
+			}
 			if sendNotification != nil {
 				how := "They used your friend link in F1 Party."
 				if ev["accepted"] == true {
@@ -325,9 +348,11 @@ func (p *Party) handleInbox(ev map[string]any) {
 		if id := str("id"); id != "" && isFriend(loadConfig().Friends, id) {
 			RemoveFriend(id)
 			p.SetNote(str("name") + " is no longer your friend")
+			addPeopleNews(str("name") + " is no longer your friend")
 		}
 	case "kicked": // the team's owner removed us; the next check-in drops the key (see Lost)
 		p.SetNote(str("name") + " removed you from team " + str("team"))
+		addPeopleNews(str("name") + " removed you from team " + str("team"))
 		pokePeople()
 	}
 }
@@ -347,6 +372,7 @@ type PeopleView struct {
 	Invites     []PartyInvite   `json:"invites"`
 	TeamInvites []TeamInvite    `json:"teamInvites"`
 	Requests    []FriendRequest `json:"requests"` // teammates who asked to be friends
+	News        []PeopleNews    `json:"news"`
 	OwnWebhook  bool            `json:"ownWebhook"`
 }
 
@@ -374,7 +400,7 @@ func peopleView() PeopleView {
 	}
 	// empty lists, never null: the window walks them
 	v := PeopleView{Online: peopleNow.online, OwnWebhook: validWebhook(c.Webhook), Friends: []FriendView{}, Teams: []TeamView{},
-		Invites: []PartyInvite{}, TeamInvites: []TeamInvite{}, Requests: []FriendRequest{}}
+		Invites: []PartyInvite{}, TeamInvites: []TeamInvite{}, Requests: []FriendRequest{}, News: []PeopleNews{}}
 	for _, f := range c.Friends {
 		fv := FriendView{Friend: f}
 		if x, ok := byID[f.ID]; ok {
@@ -401,6 +427,7 @@ func peopleView() PeopleView {
 	v.Invites = append(v.Invites, peopleNow.invites...)
 	v.TeamInvites = append(v.TeamInvites, peopleNow.teamInvites...)
 	v.Requests = append(v.Requests, peopleNow.requests...)
+	v.News = append(v.News, peopleNow.news...)
 	return v
 }
 
