@@ -26,13 +26,11 @@ type AppVersion struct {
 }
 
 const (
-	mvLatestAPI     = "https://api.multiviewer.app/api/v1/releases/latest"
-	mvDownloadPage  = "https://multiviewer.app/download"
-	pluginRepo      = "StanvanDaalen/streamdeck-plugins"
-	pluginManifest  = "F1/sdPlugin/manifest.json"
-	uf1Repo         = "MRAJEKO/UF1-Viewer-with-F1MV"
-	uf1ReleasesPage = "https://github.com/" + uf1Repo + "/releases/latest"
-	appCheckEvery   = 6 * time.Hour
+	mvLatestAPI    = "https://api.multiviewer.app/api/v1/releases/latest"
+	pluginRepo     = "StanvanDaalen/streamdeck-plugins"
+	pluginManifest = "F1/sdPlugin/manifest.json"
+	uf1Repo        = "MRAJEKO/UF1-Viewer-with-F1MV"
+	appCheckEvery  = 6 * time.Hour
 )
 
 var appVers struct {
@@ -48,7 +46,7 @@ var appVers struct {
 func appUpdates() map[string]AppVersion {
 	appVers.checker.Do(func() { go watchAppVersions() })
 	inst := map[string]string{"mv": mvInstalledVersion(), "sd": pluginInstalledVersion(), "uf1": uf1InstalledVersion()}
-	urls := map[string]string{"mv": mvDownloadPage, "sd": pluginDownload, "uf1": uf1ReleasesPage}
+	urls := map[string]string{"mv": mvDownload, "sd": pluginDownload, "uf1": uf1Download}
 	appVers.Lock()
 	defer appVers.Unlock()
 	out := map[string]AppVersion{}

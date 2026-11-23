@@ -220,6 +220,7 @@ type SeasonRace struct {
 	Location string    `json:"location"`
 	Start    time.Time `json:"start"`
 	End      time.Time `json:"end"`
+	Info     string    `json:"info,omitempty"` // its page on formula1.com (see f1info.go)
 }
 
 // Season: the weekends of one year, for jumping straight to any race.

@@ -577,6 +577,9 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 			http.Error(w, err.Error(), 503)
 			return
 		}
+		for i, x := range s.Races {
+			s.Races[i].Info = f1PageFor(s.Year, x.End.UTC())
+		}
 		writeJSON(w, s)
 	})
 	mux.HandleFunc("POST /api/calendar/watch", func(w http.ResponseWriter, r *http.Request) {

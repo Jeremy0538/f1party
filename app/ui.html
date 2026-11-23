@@ -246,6 +246,10 @@
 	.seasonpanel .races button.later b { color:var(--dim); }
 	.seasonpanel .races b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 	.seasonpanel .races span { font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; }
+	.seasonpanel .races button { position:relative; padding-right:28px; }
+	.seasonpanel .races .rinfo { position:absolute; top:50%; right:6px; transform:translateY(-50%); display:grid; place-items:center; width:20px; height:20px; border-radius:50%; color:var(--faint, #6b7280); }
+	.seasonpanel .races .rinfo:hover, .seasonpanel .races .rinfo:focus-visible { color:var(--text); background:#2a2f37; outline:none; }
+	.seasonpanel .races .rinfo svg { width:15px; height:15px; }
 	.seasonpanel .msg { font-size:12px; color:var(--dim); padding:6px 2px; }
 	/* the sessions by day: the time first, the next one marked */
 	.sessions { list-style:none; margin:0; padding:0; }
@@ -2241,6 +2245,14 @@ async function loadSeason(year) {
 		const nm = document.createElement("b"); nm.textContent = x.name;
 		const sub = document.createElement("span"); sub.textContent = "R" + x.round + " · " + raceDay.format(new Date(x.start));
 		b.append(nm, sub);
+		if (x.info) { // the weekend's page on formula1.com: the circuit, the schedule, results
+			const i = el("span", { className: "rinfo", role: "link", tabIndex: 0, title: "About the " + x.name + " and its circuit, on formula1.com" });
+			i.setAttribute("aria-label", i.title);
+			i.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6M12 7.5v.5"/></svg>';
+			const go = (e) => { e.stopPropagation(); e.preventDefault(); openURL(x.info); };
+			i.onclick = go; i.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") go(e); };
+			b.append(i);
+		}
 		b.onclick = (e) => { e.stopPropagation(); calMeeting = x.key; showSeason(false); refreshCal(); };
 		races.append(b);
 	}
