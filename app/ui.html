@@ -400,8 +400,18 @@
 	.flist .mate button.ib svg { width:14px; height:14px; }
 	.role { font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:1px 6px; border-radius:999px; border:1px solid var(--line-2); color:var(--faint); flex:none; }
 	.role.mod { color:var(--warn); border-color:rgba(245,165,36,.45); }
-	#inbox:empty, #tinbox:empty { display:none; }
-	#inbox, #tinbox { display:flex; flex-direction:column; gap:8px; margin:0 0 18px; }
+	#inbox, #tinbox { display:flex; flex-direction:column; gap:8px; margin:0 0 14px; padding:10px; border:1px solid var(--line-2); border-radius:12px; background:var(--panel); }
+	#inbox.hidden, #tinbox.hidden { display:none; }
+	.inbox .ihead { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:2px 2px 0; }
+	.inbox .iempty { font-size:12.5px; color:var(--dim); margin:2px; }
+	.fhead h1 { margin-right:auto !important; }
+	.inboxbtn { position:relative; display:inline-grid; place-items:center; width:30px; height:30px !important; padding:0; color:var(--dim); background:none; border-color:var(--line-2); }
+	.inboxbtn:hover, .inboxbtn[aria-expanded="true"] { color:var(--text); background:#1c1f25; }
+	.inboxbtn svg { width:16px; height:16px; }
+	.inboxbtn .n { position:absolute; top:-5px; right:-5px; min-width:16px; height:16px; padding:0 4px; border-radius:999px; background:var(--red); color:#fff; font-size:10px; font-weight:700; line-height:16px; text-align:center; box-shadow:0 0 0 2px var(--bg); }
+	.toasts { position:fixed; right:16px; bottom:16px; z-index:60; display:flex; flex-direction:column; gap:8px; width:min(360px, calc(100vw - 32px)); }
+	.toasts .invite-card { background:#1a0f10; box-shadow:0 10px 30px rgba(0,0,0,.45); animation:toastin .28s cubic-bezier(.2,.8,.2,1); }
+	@keyframes toastin { from { opacity:0; transform:translateY(12px) scale(.98); } }
 	.invite-card { display:flex; align-items:center; gap:10px; border:1px solid rgba(225,6,0,.45); background:rgba(225,6,0,.07); border-radius:10px; padding:10px 12px; }
 	.invite-card .t { flex:1; min-width:0; }
 	.invite-card .t span { display:block; font-size:12px; color:var(--dim); }
@@ -577,6 +587,7 @@
 	<div class="n" id="cdn">5</div>
 	<div class="t">Lights out together</div>
 </div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 <div class="app">
 	<header>
 		<img src="/logo.png" alt="F1 Party">
@@ -642,11 +653,12 @@
 				</section>
 			</div>
 			<div id="friends" class="hidden" role="tabpanel">
-				<div id="inbox"></div>
 				<div class="fhead">
 					<h1>Friends</h1>
+					<button class="inboxbtn" id="finboxbtn" title="Invites and friend requests" aria-label="Invites and friend requests" aria-expanded="false" aria-controls="inbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg><span class="n hidden"></span></button>
 					<button class="ib green" id="friendinv" title="Invite people: copies a link to send anyone (in Discord, for example). It gets them F1 Party and makes you friends" aria-label="Invite people"></button>
 				</div>
+				<div id="inbox" class="inbox hidden"></div>
 				<p class="hint" style="margin:0 0 10px">Friends see what you watch and can invite you to their party, right in F1 Party.</p>
 				<p class="hint" id="friendmsg"></p>
 				<div class="card">
@@ -655,11 +667,12 @@
 				</div>
 			</div>
 			<div id="teams" class="hidden" role="tabpanel">
-				<div id="tinbox" class="inbox"></div>
 				<div class="fhead">
 					<h1>Teams</h1>
+					<button class="inboxbtn" id="tinboxbtn" title="Team invites" aria-label="Team invites" aria-expanded="false" aria-controls="tinbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg><span class="n hidden"></span></button>
 					<button class="ib" id="teamstart" title="Start a team" aria-label="Start a team" aria-expanded="false"></button>
 				</div>
+				<div id="tinbox" class="inbox hidden"></div>
 				<p class="hint" style="margin:0 0 10px">A team is a group of friends with one Discord channel: anyone in it can post party invites there. A party is one session you watch together, with a 5-letter code.</p>
 				<div class="row" style="margin-bottom:12px"><input id="dchook" class="grow" placeholder="Paste a team link" autocomplete="off" spellcheck="false"><button id="dcsave">Join</button></div>
 				<div id="teamform" class="team hidden">
@@ -998,24 +1011,64 @@ function chooseImage() {
 	});
 }
 
+// ---- Inbox: party invites, friend requests (from people in your party who asked) and team invites
+let members = [];
+const friendRequests = () => members.filter((m) => m.asked && !m.me);
+function partyInviteCard(i, after) {
+	return el("div", { className: "invite-card" },
+		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to their party" }), el("span", { textContent: i.title || "Code " + i.code })),
+		btn("Join", "Join " + i.name + "'s party", () => { after?.(); joinParty(i.code, i.from); }, "primary"),
+		btn("Not now", "", async () => { after?.(); await post("/api/partyinvite/dismiss", { from: i.from }); refreshDiscord(); }));
+}
+function friendRequestCard(m, after) {
+	return el("div", { className: "invite-card" },
+		el("div", { className: "t" }, el("b", { textContent: m.name + " wants to be friends" }), el("span", { textContent: "Friends see what you watch and can invite you to their party" })),
+		btn("Accept", "", async () => { after?.(); try { await post("/api/friend/ask", { id: m.id }); } catch (e) { peopleErr(e.message); } refresh(); refreshDiscord(); }, "primary"),
+		btn("Decline", "", async () => { after?.(); await post("/api/friend/decline", { id: m.id }); refresh(); refreshDiscord(); }));
+}
+function inboxCount(id, n) {
+	const c = $(id).querySelector(".n"); c.textContent = n > 9 ? "9+" : String(n); c.classList.toggle("hidden", !n);
+}
+for (const [b, box] of [["finboxbtn", "inbox"], ["tinboxbtn", "tinbox"]]) $(b).onclick = () => {
+	const open = $(box).classList.toggle("hidden") === false; $(b).setAttribute("aria-expanded", String(open)); renderPeople();
+};
+// A pop-up at the bottom right, once, for a new party invite or friend request (also on other tabs).
+const toasted = new Set();
+function popCard(key, card) {
+	if (toasted.has(key)) return; toasted.add(key);
+	const close = () => { card.remove(); };
+	$("toasts").append(card);
+	setTimeout(close, 20000);
+	return close;
+}
+function toastNew(d, reqs) {
+	for (const i of d.invites) { const k = "p" + i.from + i.at; if (!toasted.has(k)) { let c; c = partyInviteCard(i, () => c.remove()); popCard(k, c); } }
+	for (const m of reqs) { const k = "f" + m.id; if (!toasted.has(k)) { let c; c = friendRequestCard(m, () => c.remove()); popCard(k, c); } }
+}
+
 function renderPeople() {
 	const d = people;
 	// a red dot on the tab when something is waiting there
 	const dot = (id, on) => { const t = $(id); t.querySelector(".badge")?.remove(); if (on) t.append(el("span", { className: "badge" })); };
-	dot("tabfriends", d.invites.length > 0); dot("tabteams", d.teamInvites.length > 0);
+	const reqs = friendRequests();
+	dot("tabfriends", d.invites.length + reqs.length > 0); dot("tabteams", d.teamInvites.length > 0);
+	inboxCount("finboxbtn", d.invites.length + reqs.length); inboxCount("tinboxbtn", d.teamInvites.length);
+	toastNew(d, reqs);
 	if (tab !== "friends" && tab !== "teams") return;
 
-	// waiting invites: party invites on Friends, team invites on Teams
+	// waiting things, behind the inbox button: party invites and friend requests on Friends, team invites on Teams
 	const inbox = $("inbox"); inbox.innerHTML = "";
-	for (const i of d.invites) inbox.append(el("div", { className: "invite-card" },
-		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to their party" }), el("span", { textContent: i.title || "Code " + i.code })),
-		btn("Join", "Join " + i.name + "'s party", () => joinParty(i.code, i.from), "primary"),
-		btn("Not now", "", async () => { await post("/api/partyinvite/dismiss", { from: i.from }); refreshDiscord(); })));
+	if (d.invites.length) inbox.append(el("div", { className: "ihead", textContent: "Party invites" }));
+	for (const i of d.invites) inbox.append(partyInviteCard(i));
+	if (reqs.length) inbox.append(el("div", { className: "ihead", textContent: "Friend requests" }));
+	for (const m of reqs) inbox.append(friendRequestCard(m));
+	if (!inbox.childNodes.length) inbox.append(el("p", { className: "iempty", textContent: "Nothing waiting. Party invites from friends and friend requests from people in your party show up here." }));
 	const tinbox = $("tinbox"); tinbox.innerHTML = "";
 	for (const i of d.teamInvites) tinbox.append(el("div", { className: "invite-card" },
 		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to team " + i.team }), el("span", { textContent: "Party invites can then go to the team's Discord channel" })),
 		btn("Accept", "", async () => { try { await post("/api/teaminvite/accept", { token: i.token }); } catch (e) { $("dcerr").textContent = e.message; } refreshDiscord(); }, "primary"),
-		btn("Not now", "", async () => { await post("/api/teaminvite/dismiss", { token: i.token }); refreshDiscord(); })));
+		btn("Decline", "", async () => { await post("/api/teaminvite/dismiss", { token: i.token }); refreshDiscord(); })));
+	if (!tinbox.childNodes.length) tinbox.append(el("p", { className: "iempty", textContent: "No team invites. When a friend invites you to their team, it shows up here." }));
 
 	// friends: watching now first, then online, then by last seen together
 	const fl = $("flist"); fl.innerHTML = "";
@@ -1336,6 +1389,8 @@ async function refresh() {
 	let s;
 	try { s = await (await fetch("/api/status")).json(); }
 	catch { $("status").textContent = "F1 Party isn't running anymore"; return; }
+	const hadReqs = friendRequests().length; members = s.mode !== "idle" ? s.members || [] : [];
+	if (hadReqs || friendRequests().length) renderPeople();
 	savedName = s.name || ""; $("asname").textContent = savedName || "Guest"; myPicV = s.pic || "";
 	if ($("asav").dataset.for !== (savedName || "Guest") + "|" + myPicV) {
 		const a = avatar(savedName || "Guest", null, false, picOf("me"));

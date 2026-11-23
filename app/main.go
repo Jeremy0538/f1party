@@ -640,6 +640,16 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		party.AskFriend(in.ID)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	mux.HandleFunc("POST /api/friend/decline", func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		json.NewDecoder(r.Body).Decode(&in)
+		if in.ID == "" {
+			http.Error(w, "unknown member", 400)
+			return
+		}
+		party.DeclineFriend(in.ID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("GET /api/friends", func(w http.ResponseWriter, r *http.Request) {
 		fs := loadFriends()
 		if fs == nil {

@@ -135,6 +135,7 @@ type Party struct {
 	jumping       string            // a jump to a moment of the session in progress ("" = none)
 	offers        map[string]bool   // friend requests we sent (member ids)
 	askedSeen     map[string]bool   // friend requests to us we notified about
+	declined      map[string]bool   // friend requests to us we turned down (this party)
 	friendsSeenAt time.Time
 	rejoinHost    bool // guest: rejoined a party we hosted; host again if nobody hosts it
 }
@@ -337,7 +338,7 @@ func (p *Party) Start(mode, code, name string) {
 	p.hold, p.askHoldTo, p.req, p.seenReq = false, time.Time{}, "", map[string]string{}
 	p.hostSince = time.Time{}
 	p.rejoinHost = false
-	p.offers, p.askedSeen = map[string]bool{}, map[string]bool{}
+	p.offers, p.askedSeen, p.declined = map[string]bool{}, map[string]bool{}, map[string]bool{}
 	if mode == "host" {
 		p.hostSince = time.Now()
 	}

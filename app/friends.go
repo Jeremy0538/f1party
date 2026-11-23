@@ -84,6 +84,16 @@ func (p *Party) AskFriend(id string) {
 	p.checkFriends()
 }
 
+// DeclineFriend: turn down someone's friend request (for this party; they can't ask again until the next one).
+func (p *Party) DeclineFriend(id string) {
+	p.mu.Lock()
+	if p.declined == nil {
+		p.declined = map[string]bool{}
+	}
+	p.declined[id] = true
+	p.mu.Unlock()
+}
+
 // offerWire: the requests this app has out, for the party messages ("ab12cd34,ef56…"; a guest sends at most 3).
 func (p *Party) offerWire(max int) string {
 	p.mu.Lock()
@@ -157,7 +167,7 @@ func (p *Party) markFriends(s *Status) {
 		}
 		m.Friend = isFriend(fs, m.ID)
 		m.Sent = p.offers[m.ID] && !m.Friend
-		m.Asked = !m.Friend && !m.Sent && slices.Contains(p.offersOf(*m), me)
+		m.Asked = !m.Friend && !m.Sent && !p.declined[m.ID] && slices.Contains(p.offersOf(*m), me)
 		if m.Friend {
 			seen = true
 		}
