@@ -326,7 +326,7 @@
 	.fricon { display:inline-grid; place-items:center; width:24px; height:24px; color:var(--red-hi); }
 	button.accept { height:24px; padding:0 9px; font-size:11px; background:var(--red); border-color:var(--red); color:#fff; }
 	button.accept:hover { background:var(--red-hi); }
-	.members .sent { font-size:11px; color:var(--faint); }
+	.members .sent, .mgrid .sent { font-size:11px; color:var(--faint); white-space:nowrap; }
 	/* friends tab */
 	#friends, #teams { display:flex; flex-direction:column; }
 	/* boxes: all friends in one, every team its own; people rows with a round initial */
@@ -1053,11 +1053,13 @@ function partyInviteCard(i, after) {
 		btn("Join", "Join " + i.name + "'s party", () => { after?.(); joinParty(i.code, i.from); }, "primary"),
 		btn("Not now", "", async () => { after?.(); await post("/api/partyinvite/dismiss", { from: i.from }); refreshDiscord(); }));
 }
+// m.remote: a teammate's request (kept by the relay); otherwise someone in your party
 function friendRequestCard(m, after) {
+	const [ok, no] = m.remote ? ["/api/friendreq/accept", "/api/friendreq/decline"] : ["/api/friend/ask", "/api/friend/decline"];
 	return el("div", { className: "invite-card" },
-		el("div", { className: "t" }, el("b", { textContent: m.name + " wants to be friends" }), el("span", { textContent: "Friends see what you watch and can invite you to their party" })),
-		btn("Accept", "", async () => { after?.(); try { await post("/api/friend/ask", { id: m.id }); } catch (e) { peopleErr(e.message); } refresh(); refreshDiscord(); }, "primary"),
-		btn("Decline", "", async () => { after?.(); await post("/api/friend/decline", { id: m.id }); refresh(); refreshDiscord(); }));
+		el("div", { className: "t" }, el("b", { textContent: m.name + " wants to be friends" }), el("span", { textContent: m.remote ? "From your team. Friends see what you watch and can invite you to their party" : "Friends see what you watch and can invite you to their party" })),
+		btn("Accept", "", async () => { after?.(); try { await post(ok, { id: m.id }); } catch (e) { peopleErr(e.message); } refresh(); refreshDiscord(); }, "primary"),
+		btn("Decline", "", async () => { after?.(); try { await post(no, { id: m.id }); } catch (e) { peopleErr(e.message); } refresh(); refreshDiscord(); }));
 }
 function inboxCount(id, n) {
 	const c = $(id).querySelector(".n"); c.textContent = n > 9 ? "9+" : String(n); c.classList.toggle("hidden", !n);
@@ -1083,7 +1085,8 @@ function renderPeople() {
 	const d = people;
 	// a red dot on the tab when something is waiting there
 	const dot = (id, on) => { const t = $(id); t.querySelector(".badge")?.remove(); if (on) t.append(el("span", { className: "badge" })); };
-	const reqs = friendRequests();
+	d.requests = d.requests || [];
+	const reqs = [...friendRequests(), ...d.requests.filter((q) => !friendRequests().some((m) => m.id === q.id)).map((q) => ({ ...q, remote: true }))];
 	dot("tabfriends", d.invites.length + reqs.length > 0); dot("tabteams", d.teamInvites.length > 0);
 	inboxCount("finboxbtn", d.invites.length + reqs.length); inboxCount("tinboxbtn", d.teamInvites.length);
 	toastNew(d, reqs);
@@ -1095,7 +1098,7 @@ function renderPeople() {
 	for (const i of d.invites) inbox.append(partyInviteCard(i));
 	if (reqs.length) inbox.append(el("div", { className: "ihead", textContent: "Friend requests" }));
 	for (const m of reqs) inbox.append(friendRequestCard(m));
-	if (!inbox.childNodes.length) inbox.append(el("p", { className: "iempty", textContent: "Nothing waiting. Party invites from friends and friend requests from people in your party show up here." }));
+	if (!inbox.childNodes.length) inbox.append(el("p", { className: "iempty", textContent: "Nothing waiting. Party invites from friends, and friend requests from your party or your teams, show up here." }));
 	const tinbox = $("tinbox"); tinbox.innerHTML = "";
 	for (const i of d.teamInvites) tinbox.append(el("div", { className: "invite-card" },
 		el("div", { className: "t" }, el("b", { textContent: i.name + " invites you to team " + i.team }), el("span", { textContent: "Party invites can then go to the team's Discord channel" })),
@@ -1141,6 +1144,7 @@ function renderPeople() {
 				el("div", {}, el("span", { className: "role" + (mod ? " mod" : ""), textContent: mod ? "Moderator" : "Member" })),
 				el("div", { className: "end" },
 					m.status && m.status.code ? joinOrIn(m.name, m.status.code) : null,
+					teammateFriend(m),
 					t.owner && m.id !== "me" ? iconBtn("userMinus", "Remove " + m.name + " from " + t.name, async () => {
 						if (!(await ask("Remove from team?", "Remove " + m.name + " from team " + t.name + "? They can only come back with a new team link.", "Remove"))) return;
 						try { await post("/api/team/kick", { id: t.id, to: m.id }); } catch (e) { $("dcerr").textContent = e.message; }
@@ -1158,6 +1162,25 @@ function renderPeople() {
 						: iconBtn("leave", "Leave team " + t.name, () => leaveTeamAsk(t)))),
 			grid));
 	}
+}
+
+// Friend control next to a teammate who isn't a friend: their request (Accept), ours (Request sent), or ask.
+function teammateFriend(m) {
+	if (m.id === "me" || m.friend || people.friends.some((f) => f.id === m.id && f.mutual)) return null;
+	if ((people.requests || []).some((q) => q.id === m.id)) return btn("Accept", m.name + " sent you a friend request", async () => {
+		try { await post("/api/friendreq/accept", { id: m.id }); } catch (e) { $("dcerr").textContent = e.message; }
+		refreshDiscord();
+	}, "accept");
+	if (m.asked) return el("span", { className: "sent", textContent: "Request sent" });
+	const b = btn("", "Send " + m.name + " a friend request", async () => {
+		b.disabled = true;
+		try { const r = await post("/api/friendreq/send", { id: m.id }); if (r && r.friends) toast("You and " + m.name + " are friends now"); else toast("Friend request sent", m.name + " sees it in their inbox"); }
+		catch (e) { $("dcerr").textContent = e.message; b.disabled = false; }
+		refreshDiscord();
+	}, "ib fr");
+	b.setAttribute("aria-label", b.title);
+	b.innerHTML = personSVG('<path d="M19 8v6M22 11h-6"/>');
+	return b;
 }
 
 // A team's logo (or its first letter); the one who started the team clicks it to choose another.

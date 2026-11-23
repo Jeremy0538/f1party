@@ -9,6 +9,7 @@
 //   POST /f1party/team/create {name, webhook} -> {key, name}   POST /f1party/team/info {key} -> {name}
 //   POST /f1party/group/invite {key} -> {url}   GET /f1party/group/TOKEN (page)   POST /f1party/group/redeem {token, id} -> {key}
 //   POST /f1party/team/rename|leave|invitefriend|kick {id, secret, key, ...}  (kick: the owner removes {member})
+//   POST /f1party/friend/ask|accept|decline {id, secret, name, to}   friend requests between teammates
 //   POST /f1party/me/pic {id, secret, pic}   POST /f1party/team/logo {id, secret, key, logo}   (a small image as a
 //        data URL, "" removes it)   GET /f1party/pic/u/UID  GET /f1party/pic/t/TEAMID   (the image; ?v= for caching)
 //
@@ -48,6 +49,9 @@ export default {
 				case "/me/pic": return setPic(req, env);
 				case "/friend/link": return friendLink(req, env, url.origin);
 				case "/friend/redeem": return friendRedeem(req, env);
+				case "/friend/ask": return friendOp(req, env, "friendAsk");
+				case "/friend/accept": return friendOp(req, env, "friendAccept");
+				case "/friend/decline": return friendOp(req, env, "friendDecline");
 				case "/invite/send": return sendInvites(req, env);
 			}
 		}
@@ -165,6 +169,7 @@ export class Room extends DurableObject<Env> {
 	//   team:<id>   {name, webhook, key, created, owner, members{uid: seen}, banned{uid: when}}
 	//   t:<token>   team link {team, exp, uses}      fl:<token> friend link {from, exp, uses}
 	//   inbox:<uid> [events]  friend made, party invite, team invite; handed over on the next presence call
+	//   fq:<to>:<from> <when>  a friend request to a teammate, until it's accepted or declined (30 days)
 	//   pic:u:<uid>, pic:t:<team>  {data} a profile picture / team logo (data URL); u.pic / team.logo hold its version
 	// Caps keep keys and links from being guessed or farmed.
 	private async people(cmd: any): Promise<Response> {
@@ -307,9 +312,18 @@ export class Room extends DurableObject<Env> {
 					}
 					teamsOut.push({ id: tid, name: t.name, logo: t.logo, owner: t.owner === cmd.uid, ownerId: t.owner, members: members.length + 1 });
 				}
+				// friend requests: the ones to you (with who sent them), and which teammates you asked
+				const requests = [];
+				for (const [k, at] of await st.list<number>({ prefix: "fq:" + cmd.uid + ":" })) {
+					const from = k.split(":")[2];
+					const u = await user(from);
+					if (!u || now - at > 30 * 86400_000 || (m.friends.includes(from) && u.friends.includes(cmd.uid))) { await st.delete(k); continue; }
+					requests.push({ id: from, name: u.name, pic: u.pic, at });
+				}
+				for (const p of people.values()) if (!p.friend && (await st.get("fq:" + p.id + ":" + cmd.uid)) !== undefined) p.asked = true;
 				const events = (await st.get<object[]>("inbox:" + cmd.uid)) || [];
 				if (events.length) await st.delete("inbox:" + cmd.uid);
-				return Response.json({ people: [...people.values()], teams: teamsOut, inbox: events, removed, me: { pic: m.pic } });
+				return Response.json({ people: [...people.values()], teams: teamsOut, inbox: events, removed, requests, me: { pic: m.pic } });
 			}
 			case "setPic": { // your own profile picture ("" removes it)
 				if (!(await cap("pic:" + cmd.uid, 30, 86400_000))) return err("Too many picture changes today", 429);
@@ -383,6 +397,30 @@ export class Room extends DurableObject<Env> {
 				await saveMe();
 				await inbox(l.from, { type: "friend", id: cmd.uid, name: m.name });
 				return Response.json({ id: l.from, name: other.name });
+			}
+			case "friendAsk": { // a friend request to a teammate (they asked you already: friends now)
+				if (cmd.to === cmd.uid || !/^[0-9a-f]{12}$/.test(cmd.to || "")) return err("Bad request");
+				if (await mutual(m, cmd.uid, cmd.to)) return Response.json({ friends: true });
+				if (!(await sharesTeam(m, cmd.to))) return err("You can send a friend request to people in your teams", 403);
+				if ((await st.get("fq:" + cmd.uid + ":" + cmd.to)) !== undefined) return this.people({ ...cmd, op: "friendAccept" });
+				if (!(await cap("fq:" + cmd.uid, 30, 86400_000))) return err("Too many friend requests today", 429);
+				await st.put("fq:" + cmd.to + ":" + cmd.uid, now);
+				return Response.json({ sent: true });
+			}
+			case "friendAccept": { // only a request that was really sent makes friends
+				const k = "fq:" + cmd.uid + ":" + cmd.to;
+				const other = await user(cmd.to);
+				if ((await st.get(k)) === undefined || !other) return err("That friend request isn't there anymore", 410);
+				await st.delete(k);
+				if (!m.friends.includes(cmd.to)) m.friends.push(cmd.to);
+				if (!other.friends.includes(cmd.uid)) { other.friends.push(cmd.uid); await st.put("u:" + cmd.to, other); }
+				await saveMe();
+				await inbox(cmd.to, { type: "friend", id: cmd.uid, name: m.name, accepted: true });
+				return Response.json({ friends: true, id: cmd.to, name: other.name });
+			}
+			case "friendDecline": {
+				await st.delete("fq:" + cmd.uid + ":" + cmd.to);
+				return new Response("ok");
 			}
 			case "send": { // party invite to friends / teammates, in their app
 				if (!(await cap("send:" + cmd.uid, 60, 3600_000))) return err("Too many invites this hour", 429);
@@ -580,6 +618,14 @@ async function friendRedeem(req: Request, env: Env): Promise<Response> {
 	const token = String(body?.token || "");
 	if (!/^[A-Za-z0-9]{12,32}$/.test(token)) return new Response("Bad request", { status: 400 });
 	return forward(await groupCmd(env, { op: "friendRedeem", ...who(body), token }));
+}
+
+// Friend requests between teammates: ask, accept, decline (body: id, secret, name, to).
+async function friendOp(req: Request, env: Env, op: string): Promise<Response> {
+	const body = await readJSON(req);
+	const to = String(body?.to || "");
+	if (!/^[0-9a-f]{12}$/.test(to)) return new Response("Bad request", { status: 400 });
+	return forward(await groupCmd(env, { op, ...who(body), to }));
 }
 
 async function sendInvites(req: Request, env: Env): Promise<Response> {

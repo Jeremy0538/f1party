@@ -470,6 +470,17 @@ func newHandler(party *Party, quit func(), openURL func(string), copyText func(s
 		dropTeamInvite(in.Token)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	// Friend requests to and from teammates (in a party: /api/friend/ask and /api/friend/decline).
+	handle("/api/friendreq/send", func(w http.ResponseWriter, in *peopleReq) {
+		friends, err := askTeammate(in.ID)
+		if err != nil {
+			replyErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"friends": friends})
+	})
+	handle("/api/friendreq/accept", func(w http.ResponseWriter, in *peopleReq) { replyErr(w, answerFriendRequest(in.ID, true)) })
+	handle("/api/friendreq/decline", func(w http.ResponseWriter, in *peopleReq) { replyErr(w, answerFriendRequest(in.ID, false)) })
 	handle("/api/partyinvite/dismiss", func(w http.ResponseWriter, in *peopleReq) {
 		dismissInvite(in.From)
 		writeJSON(w, map[string]bool{"ok": true})

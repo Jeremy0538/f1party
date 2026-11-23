@@ -53,7 +53,16 @@ type Person struct {
 	Status *PersonStatus `json:"status"`
 	Friend bool          `json:"friend"`
 	Teams  []string      `json:"teams"`
-	Pic    string        `json:"pic,omitempty"` // version of their profile picture (none: the letter)
+	Pic    string        `json:"pic,omitempty"`   // version of their profile picture (none: the letter)
+	Asked  bool          `json:"asked,omitempty"` // we sent them a friend request (a teammate, not answered yet)
+}
+
+// FriendRequest: a teammate asked to be friends (kept by the relay until accepted or declined).
+type FriendRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Pic  string `json:"pic,omitempty"`
+	At   int64  `json:"at"`
 }
 
 type TeamInfo struct {
@@ -88,8 +97,10 @@ type peopleState struct {
 	teams       []TeamInfo
 	invites     []PartyInvite
 	teamInvites []TeamInvite
-	online      bool  // the last check-in worked
-	checked     int64 // unix ms of the last answer
+	requests    []FriendRequest
+	requestSeen map[string]bool // requests already shown as a notification
+	online      bool            // the last check-in worked
+	checked     int64           // unix ms of the last answer
 	poke        chan struct{}
 }
 
@@ -214,19 +225,36 @@ func (p *Party) checkPeople() {
 		teams = append(teams, t.Key)
 	}
 	var r struct {
-		People []Person
-		Teams  []TeamInfo
-		Inbox  []map[string]any
-		Lost   []string
-		Me     *struct{ Pic string } // a relay with pictures: which one it has of you
+		People   []Person
+		Teams    []TeamInfo
+		Inbox    []map[string]any
+		Requests []FriendRequest
+		Lost     []string
+		Me       *struct{ Pic string } // a relay with pictures: which one it has of you
 	}
 	err := relayJSON("/people", with(me(), "status", myStatus(p), "friends", friends, "teams", teams), &r)
 	peopleNow.mu.Lock()
 	peopleNow.online = err == nil
+	var newReqs []FriendRequest
 	if err == nil {
 		peopleNow.people, peopleNow.teams, peopleNow.checked = r.People, r.Teams, time.Now().UnixMilli()
+		peopleNow.requests = slices.DeleteFunc(r.Requests, func(q FriendRequest) bool { return isFriend(c.Friends, q.ID) })
+		if peopleNow.requestSeen == nil {
+			peopleNow.requestSeen = map[string]bool{}
+		}
+		for _, q := range peopleNow.requests {
+			if !peopleNow.requestSeen[q.ID] {
+				peopleNow.requestSeen[q.ID] = true
+				newReqs = append(newReqs, q)
+			}
+		}
 	}
 	peopleNow.mu.Unlock()
+	for _, q := range newReqs {
+		if sendNotification != nil {
+			_ = sendNotification(q.Name+" wants to be friends", "Open F1 Party: Friends, the inbox button, Accept.")
+		}
+	}
 	if err != nil {
 		return
 	}
@@ -266,7 +294,11 @@ func (p *Party) handleInbox(ev map[string]any) {
 			addFriend(id, name)
 			p.SetNote("You and " + name + " are friends now")
 			if sendNotification != nil {
-				_ = sendNotification(name+" is your friend now", "They used your friend link in F1 Party.")
+				how := "They used your friend link in F1 Party."
+				if ev["accepted"] == true {
+					how = "They accepted your friend request."
+				}
+				_ = sendNotification(name+" is your friend now", how)
 			}
 		}
 	case "party":
@@ -298,18 +330,19 @@ func (p *Party) handleInbox(ev map[string]any) {
 // peopleReq: the fields the Friends and Teams tabs' actions send (each uses a few).
 type peopleReq struct {
 	ID, Name, Webhook, To, Token, From, Link, Pic string
-	Teams, Friends                           []string
-	Own                                      bool
+	Teams, Friends                                []string
+	Own                                           bool
 }
 
 // PeopleView: what the Friends and Teams tabs show.
 type PeopleView struct {
-	Online      bool          `json:"online"`
-	Friends     []FriendView  `json:"friends"`
-	Teams       []TeamView    `json:"teams"`
-	Invites     []PartyInvite `json:"invites"`
-	TeamInvites []TeamInvite  `json:"teamInvites"`
-	OwnWebhook  bool          `json:"ownWebhook"`
+	Online      bool            `json:"online"`
+	Friends     []FriendView    `json:"friends"`
+	Teams       []TeamView      `json:"teams"`
+	Invites     []PartyInvite   `json:"invites"`
+	TeamInvites []TeamInvite    `json:"teamInvites"`
+	Requests    []FriendRequest `json:"requests"` // teammates who asked to be friends
+	OwnWebhook  bool            `json:"ownWebhook"`
 }
 
 type FriendView struct {
@@ -336,7 +369,7 @@ func peopleView() PeopleView {
 	}
 	// empty lists, never null: the window walks them
 	v := PeopleView{Online: peopleNow.online, OwnWebhook: validWebhook(c.Webhook), Friends: []FriendView{}, Teams: []TeamView{},
-		Invites: []PartyInvite{}, TeamInvites: []TeamInvite{}}
+		Invites: []PartyInvite{}, TeamInvites: []TeamInvite{}, Requests: []FriendRequest{}}
 	for _, f := range c.Friends {
 		fv := FriendView{Friend: f}
 		if x, ok := byID[f.ID]; ok {
@@ -362,7 +395,75 @@ func peopleView() PeopleView {
 	peopleNow.invites = slices.DeleteFunc(peopleNow.invites, func(i PartyInvite) bool { return now-i.At > 2*3600_000 })
 	v.Invites = append(v.Invites, peopleNow.invites...)
 	v.TeamInvites = append(v.TeamInvites, peopleNow.teamInvites...)
+	v.Requests = append(v.Requests, peopleNow.requests...)
 	return v
+}
+
+// Friend requests between teammates (outside a party; in a party the party messages carry them, friends.go).
+func friendRelay(path, to string, out any) error {
+	err := relayJSON(path, with(me(), "to", to), out)
+	if err != nil && (strings.Contains(err.Error(), "Not found") || strings.Contains(err.Error(), "404")) {
+		return errors.New("friend requests work once the F1 Party relay has been updated")
+	}
+	return err
+}
+
+// askTeammate: send a teammate a friend request (or accept theirs, when they asked first).
+func askTeammate(id string) (friends bool, err error) {
+	var out struct {
+		Friends bool
+		Name    string
+	}
+	if err = friendRelay("/friend/ask", id, &out); err != nil {
+		return false, err
+	}
+	if out.Friends {
+		addFriend(id, personName(id))
+	}
+	pokePeople()
+	return out.Friends, nil
+}
+
+// answerFriendRequest: accept (friends on both sides) or decline a teammate's request.
+func answerFriendRequest(id string, accept bool) error {
+	name := personName(id)
+	peopleNow.mu.Lock()
+	peopleNow.requests = slices.DeleteFunc(peopleNow.requests, func(q FriendRequest) bool { return q.ID == id })
+	peopleNow.mu.Unlock()
+	if !accept {
+		var out any
+		err := friendRelay("/friend/decline", id, &out)
+		pokePeople()
+		return err
+	}
+	var out struct{ Name string }
+	if err := friendRelay("/friend/accept", id, &out); err != nil {
+		pokePeople()
+		return err
+	}
+	if out.Name != "" {
+		name = out.Name
+	}
+	addFriend(id, name)
+	pokePeople()
+	return nil
+}
+
+// personName: the name the relay last gave for someone (requests, teammates).
+func personName(id string) string {
+	peopleNow.mu.Lock()
+	defer peopleNow.mu.Unlock()
+	for _, q := range peopleNow.requests {
+		if q.ID == id {
+			return q.Name
+		}
+	}
+	for _, x := range peopleNow.people {
+		if x.ID == id {
+			return x.Name
+		}
+	}
+	return "A friend"
 }
 
 func dismissInvite(from string) {
