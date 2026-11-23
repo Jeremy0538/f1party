@@ -53,6 +53,7 @@ type Person struct {
 	Status *PersonStatus `json:"status"`
 	Friend bool          `json:"friend"`
 	Teams  []string      `json:"teams"`
+	Pic    string        `json:"pic,omitempty"` // version of their profile picture (none: the letter)
 }
 
 type TeamInfo struct {
@@ -61,6 +62,7 @@ type TeamInfo struct {
 	Owner   bool   `json:"owner"`             // this app is the team's moderator (started it)
 	OwnerID string `json:"ownerId,omitempty"` // who the moderator is
 	Members int    `json:"members"`
+	Logo    string `json:"logo,omitempty"` // version of the team's logo
 }
 
 // PartyInvite: someone invited this app to their party (in the app, not through Discord).
@@ -216,6 +218,7 @@ func (p *Party) checkPeople() {
 		Teams  []TeamInfo
 		Inbox  []map[string]any
 		Lost   []string
+		Me     *struct{ Pic string } // a relay with pictures: which one it has of you
 	}
 	err := relayJSON("/people", with(me(), "status", myStatus(p), "friends", friends, "teams", teams), &r)
 	peopleNow.mu.Lock()
@@ -240,6 +243,9 @@ func (p *Party) checkPeople() {
 	})
 	for _, ev := range r.Inbox {
 		p.handleInbox(ev)
+	}
+	if r.Me != nil {
+		syncMyPic(&r.Me.Pic)
 	}
 }
 
@@ -291,7 +297,7 @@ func (p *Party) handleInbox(ev map[string]any) {
 
 // peopleReq: the fields the Friends and Teams tabs' actions send (each uses a few).
 type peopleReq struct {
-	ID, Name, Webhook, To, Token, From, Link string
+	ID, Name, Webhook, To, Token, From, Link, Pic string
 	Teams, Friends                           []string
 	Own                                      bool
 }
@@ -309,6 +315,7 @@ type PeopleView struct {
 type FriendView struct {
 	Friend
 	Mutual bool          `json:"mutual"` // the relay knows them as a friend both ways
+	Pic    string        `json:"pic,omitempty"`
 	Status *PersonStatus `json:"status"`
 	Online bool          `json:"online"`
 }
@@ -333,7 +340,7 @@ func peopleView() PeopleView {
 	for _, f := range c.Friends {
 		fv := FriendView{Friend: f}
 		if x, ok := byID[f.ID]; ok {
-			fv.Mutual, fv.Status, fv.Online = x.Friend, x.Status, now-x.Seen < 90_000
+			fv.Mutual, fv.Status, fv.Online, fv.Pic = x.Friend, x.Status, now-x.Seen < 90_000, x.Pic
 		}
 		v.Friends = append(v.Friends, fv)
 	}

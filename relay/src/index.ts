@@ -9,6 +9,8 @@
 //   POST /f1party/team/create {name, webhook} -> {key, name}   POST /f1party/team/info {key} -> {name}
 //   POST /f1party/group/invite {key} -> {url}   GET /f1party/group/TOKEN (page)   POST /f1party/group/redeem {token, id} -> {key}
 //   POST /f1party/team/rename|leave|invitefriend|kick {id, secret, key, ...}  (kick: the owner removes {member})
+//   POST /f1party/me/pic {id, secret, pic}   POST /f1party/team/logo {id, secret, key, logo}   (a small image as a
+//        data URL, "" removes it)   GET /f1party/pic/u/UID  GET /f1party/pic/t/TEAMID   (the image; ?v= for caching)
 //
 // Messages (JSON):
 //   any   -> relay  {t:"ping", c}                        relay -> same  {t:"pong", c, s}
@@ -42,6 +44,8 @@ export default {
 				case "/team/leave": return teamAction(req, env, "teamLeave");
 				case "/team/invitefriend": return teamAction(req, env, "teamInviteFriend");
 				case "/team/kick": return teamAction(req, env, "teamKick");
+				case "/team/logo": return teamAction(req, env, "teamLogo");
+				case "/me/pic": return setPic(req, env);
 				case "/friend/link": return friendLink(req, env, url.origin);
 				case "/friend/redeem": return friendRedeem(req, env);
 				case "/invite/send": return sendInvites(req, env);
@@ -51,6 +55,8 @@ export default {
 		if (path === "/group/redeem" && req.method === "POST") return groupRedeem(req, env);
 		const groupLink = path.match(/^\/group\/([A-Za-z0-9]{12,32})$/);
 		if (groupLink) return groupPage(groupLink[1]);
+		const pic = path.match(/^\/pic\/(u|t)\/([A-Za-z0-9]{8,12})$/);
+		if (pic && req.method === "GET") return getPic(env, pic[1], pic[2], url.searchParams.has("v"));
 		const friendLinkPath = path.match(/^\/friend\/([A-Za-z0-9]{12,32})$/);
 		if (friendLinkPath) return friendPage(friendLinkPath[1]);
 		if (path !== "/ws") return new Response("Not found", { status: 404 });
@@ -159,6 +165,7 @@ export class Room extends DurableObject<Env> {
 	//   team:<id>   {name, webhook, key, created, owner, members{uid: seen}, banned{uid: when}}
 	//   t:<token>   team link {team, exp, uses}      fl:<token> friend link {from, exp, uses}
 	//   inbox:<uid> [events]  friend made, party invite, team invite; handed over on the next presence call
+	//   pic:u:<uid>, pic:t:<team>  {data} a profile picture / team logo (data URL); u.pic / team.logo hold its version
 	// Caps keep keys and links from being guessed or farmed.
 	private async people(cmd: any): Promise<Response> {
 		const now = Date.now();
@@ -207,6 +214,10 @@ export class Room extends DurableObject<Env> {
 		};
 
 		switch (cmd.op) {
+			case "picGet": { // public: a picture by owner, for the apps that show it
+				const p = await st.get<{ data: string }>(`pic:${cmd.kind}:${cmd.id}`);
+				return p ? Response.json(p) : err("No picture", 404);
+			}
 			case "teamGet": {
 				const t = await st.get("team:" + cmd.team);
 				return t ? Response.json(t) : err("No such team", 404);
@@ -276,7 +287,7 @@ export class Room extends DurableObject<Env> {
 				const person = (id: string, u: User) => {
 					let p = people.get(id);
 					if (!p) {
-						p = { id, name: u.name, seen: u.seen, status: now - u.seen < 90_000 ? u.status || null : null, friend: false, teams: [] };
+						p = { id, name: u.name, pic: u.pic, seen: u.seen, status: now - u.seen < 90_000 ? u.status || null : null, friend: false, teams: [] };
 						people.set(id, p);
 					}
 					return p;
@@ -294,11 +305,28 @@ export class Room extends DurableObject<Env> {
 						const u = await user(id);
 						if (u) person(id, u).teams.push(tid);
 					}
-					teamsOut.push({ id: tid, name: t.name, owner: t.owner === cmd.uid, ownerId: t.owner, members: members.length + 1 });
+					teamsOut.push({ id: tid, name: t.name, logo: t.logo, owner: t.owner === cmd.uid, ownerId: t.owner, members: members.length + 1 });
 				}
 				const events = (await st.get<object[]>("inbox:" + cmd.uid)) || [];
 				if (events.length) await st.delete("inbox:" + cmd.uid);
-				return Response.json({ people: [...people.values()], teams: teamsOut, inbox: events, removed });
+				return Response.json({ people: [...people.values()], teams: teamsOut, inbox: events, removed, me: { pic: m.pic } });
+			}
+			case "setPic": { // your own profile picture ("" removes it)
+				if (!(await cap("pic:" + cmd.uid, 30, 86400_000))) return err("Too many picture changes today", 429);
+				if (cmd.pic) { await st.put("pic:u:" + cmd.uid, { data: cmd.pic }); m.pic = await picVersion(cmd.pic); }
+				else { await st.delete("pic:u:" + cmd.uid); delete m.pic; }
+				await saveMe();
+				return Response.json({ pic: m.pic || "" });
+			}
+			case "teamLogo": { // the team's logo, set by the one who started the team ("" removes it)
+				const t = await st.get<TeamRec>("team:" + cmd.team);
+				if (!t) return err("No such team", 404);
+				if (t.owner !== cmd.uid) return err("Only the one who started the team can change its logo", 403);
+				if (!(await cap("logo:" + cmd.team, 30, 86400_000))) return err("Too many logo changes today", 429);
+				if (cmd.logo) { await st.put("pic:t:" + cmd.team, { data: cmd.logo }); t.logo = await picVersion(cmd.logo); }
+				else { await st.delete("pic:t:" + cmd.team); delete t.logo; }
+				await st.put("team:" + cmd.team, t);
+				return Response.json({ logo: t.logo || "" });
 			}
 			case "teamRename": {
 				const t = await st.get<TeamRec>("team:" + cmd.team);
@@ -424,14 +452,36 @@ function sameKey(a: string, b: string): boolean {
 }
 
 type Team = { id: string; name: string; webhook: string; key: string };
-type TeamRec = { name: string; webhook: string; key: string; created: number; owner?: string; members?: Record<string, number>; banned?: Record<string, number> };
-type User = { secret: string; name: string; status?: any; seen: number; friends: string[]; teams: string[] };
+type TeamRec = { name: string; webhook: string; key: string; created: number; owner?: string; members?: Record<string, number>; banned?: Record<string, number>; logo?: string };
+type User = { secret: string; name: string; status?: any; seen: number; friends: string[]; teams: string[]; pic?: string };
 const groupRoom = (env: Env) => env.ROOMS.get(env.ROOMS.idFromName("__group"));
 const groupCmd = (env: Env, cmd: object) => groupRoom(env).fetch("https://room/internal/group", { method: "POST", body: JSON.stringify(cmd) });
 
 async function sha256(s: string): Promise<string> {
 	const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
 	return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Pictures: small square images the apps make themselves (128 px), as a data URL of at most ~48 KB. The
+// version is the start of its sha256: the apps fetch a picture again only when it changed.
+const PIC_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+const picOK = (v: unknown) => v === "" || (typeof v === "string" && v.length <= 64_000 && PIC_RE.test(v));
+const picVersion = async (data: string) => (await sha256(data)).slice(0, 10);
+
+async function setPic(req: Request, env: Env): Promise<Response> {
+	const body = await readJSON(req);
+	if (!body || !picOK(body.pic ?? "")) return new Response("That picture isn't a small PNG, JPEG or WebP", { status: 400 });
+	return forward(await groupCmd(env, { op: "setPic", ...who(body), pic: body.pic || "" }));
+}
+
+async function getPic(env: Env, kind: string, id: string, versioned: boolean): Promise<Response> {
+	const res = await groupCmd(env, { op: "picGet", kind, id });
+	if (!res.ok) return new Response("No picture", { status: 404, headers: { "cache-control": "public, max-age=300" } });
+	const { data } = (await res.json()) as { data: string };
+	const m = /^data:(image\/[a-z]+);base64,(.*)$/.exec(data);
+	if (!m) return new Response("No picture", { status: 404 });
+	const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+	return new Response(bytes, { headers: { "content-type": m[1], "cache-control": versioned ? "public, max-age=31536000, immutable" : "public, max-age=300" } });
 }
 
 async function teamById(env: Env, id: string): Promise<Team | null> {
@@ -510,6 +560,7 @@ async function teamAction(req: Request, env: Env, op: string): Promise<Response>
 	if (op === "teamRename") { extra.teamName = clean(body.teamName, 32); if (!extra.teamName) return new Response("Give your team a name", { status: 400 }); }
 	if (op === "teamInviteFriend") extra.to = String(body.to || "");
 	if (op === "teamKick") extra.member = String(body.member || "");
+	if (op === "teamLogo") { if (!picOK(body.logo ?? "")) return new Response("That logo isn't a small PNG, JPEG or WebP", { status: 400 }); extra.logo = body.logo || ""; }
 	return forward(await groupCmd(env, { op, ...who(body), team: team.id, ...extra }));
 }
 

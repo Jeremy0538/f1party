@@ -27,7 +27,7 @@ func settingsView() map[string]any {
 		"windows": runtime.GOOS == "windows",
 		"desktops": desktopsSupported(),
 		// General
-		"name": c.Name, "desktop": !c.DesktopOff, "desktopName": name, "taskbar": c.Taskbar, "autoSync": !c.AutoSyncOff,
+		"name": c.Name, "pic": picVersion(c.Pic), "desktop": !c.DesktopOff, "desktopName": name, "taskbar": c.Taskbar, "autoSync": !c.AutoSyncOff,
 		// Sessions
 		"openWith": openWithOf(c.Setup), "plugin": pluginInfo(),
 		"setups": setups, "setupRace": c.SetupRace, "setupQuali": c.SetupQuali, "setupPractice": c.SetupPractice,
